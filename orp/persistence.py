@@ -115,15 +115,11 @@ class Storage(object):
 
             cypher_rel_type = properties['__type__'].upper()
 
-            print '+++', obj.start, '-[%s]->' % cypher_rel_type, obj.end
-
             (relationship,) = self._conn.create(
                 (n1, cypher_rel_type, n2, properties))
 
             primitive = relationship
         else:
-            print '+++', obj
-
             # makes a node since properties is a dict
             # (a tuple makes relationships)
             (node,) = self._conn.create(properties)
@@ -162,19 +158,18 @@ class Storage(object):
             return obj
 
         elif isinstance(value, neo4j.Relationship):
-            rel = self._relationships.get(value.id)
+            '''rel = self._relationships.get(value.id)
             if rel:
                 return rel
-
+            '''
             properties = value.get_properties()
-            rel_type = value.type
 
-            RelClass = get_class(rel_type)
-            rel = RelClass.__new__(RelClass, **properties)
+            rel = dict_to_object(properties)
+
             rel.start = self._convert_value(value.start_node)
             rel.end = self._convert_value(value.end_node)
-            self._store_primitive(rel, value)
 
+            self._store_primitive(rel, value)
             return rel
 
         return value
@@ -182,15 +177,6 @@ class Storage(object):
     def _convert_row(self, row):
         for value in row:
             yield self._convert_value(value)
-
-    def _add(self, *objects):
-        for obj in objects:
-            if isinstance(obj, type) and issubclass(obj, PersistableType):
-                self._add_obj(obj)
-            elif isinstance(obj, (Persistable, PersistableType)):
-                self._add_obj(obj)
-            else:
-                raise TypeError('cannot add %s' % obj)
 
     def get(self, cls, **index_filter):
         index_filter = encode_query_values(index_filter)
@@ -213,6 +199,9 @@ class Storage(object):
             yield tuple(self._convert_row(row))
 
     def add(self, obj):
+        if not is_persistable(obj):
+            raise TypeError('cannot persist %s' % obj)
+
         self._add_obj(obj)
 
         if obj is PersistableType:
@@ -247,7 +236,7 @@ def is_persistable_not_rel(obj):
 def is_persistable(obj):
     return bool(
         isinstance(obj, (Persistable, PersistableType)) or
-        issubclass(type(obj), PersistableType)
+        (isinstance(obj, type) and issubclass(obj, PersistableType))
     )
 
 

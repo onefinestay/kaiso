@@ -27,6 +27,7 @@ class Thing(Persistable):
     dt_attr = DateTime()
     ch_attr = Choice('a', 'b')
 
+
 class Related(Relationship):
     str_attr = String()
 
