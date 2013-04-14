@@ -1,5 +1,7 @@
 from orp.descriptors import register_type, get_descriptor, is_attribute
 
+register_type(type)
+register_type(object)
 
 @register_type
 class PersistableType(type):

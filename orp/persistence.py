@@ -1,3 +1,4 @@
+from functools import wraps
 from weakref import WeakKeyDictionary, WeakValueDictionary
 
 from py2neo import cypher, neo4j
@@ -48,8 +49,9 @@ def object_to_dict(obj):
         properties['name'] = get_descriptor(obj).type_name
     else:
         for name, attr in descr.members.items():
-            properties[name] = attr.to_db(getattr(obj, name))
-
+            value = attr.to_db(getattr(obj, name))
+            if value is not None:
+                properties[name] = value
     return properties
 
 
@@ -75,6 +77,81 @@ def dict_to_object(properties):
             setattr(obj, attr_name, value)
 
     return obj
+
+
+def unique(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        items = set()
+        for item in fn(*args, **kwargs):
+            if item not in items:
+                items.add(item)
+                yield item
+    return wrapped
+
+@unique
+def get_type_relationships(obj):
+    obj_type = type(obj)
+
+    if obj_type is not type:
+        for item in get_type_relationships(obj_type):
+            yield item
+
+    if isinstance(obj, type):
+        for base in obj.__bases__:
+            for item in get_type_relationships(base):
+                yield item
+            yield obj, IsA, base
+
+    yield obj, InstanceOf, obj_type
+
+
+def types_to_query(obj):
+    lines = []
+    objects = {'PersistableType': PersistableType}
+
+    for obj1, rel_cls, obj2 in get_type_relationships(obj):
+        if is_persistable_not_rel(obj1) and is_persistable_not_rel(obj2):
+            if isinstance(obj1, type):
+                name1 = obj1.__name__
+            else:
+                name1 = 'new_obj'
+
+            name2 = obj2.__name__
+
+            if name1 in objects:
+                abstr1 = name1
+            else:
+                abstr1 = '(%s {%s_props})' % (name1, name1)
+
+            if name2 in objects:
+                abstr2 = name2
+            else:
+                abstr2 = '(%s {%s_props})' % (name2, name2)
+
+            objects[name1] = obj1
+            objects[name2] = obj2
+
+            rel_name = rel_cls.__name__
+            rel_type = rel_name.upper()
+
+            ln = '%s -[:%s {%s_props}]-> %s' % (
+                abstr1, rel_type, rel_name, abstr2)
+
+            lines.append(ln)
+
+    del objects['PersistableType']
+
+    keys, objects = zip(*objects.items())
+
+    query = (
+        'START PersistableType=node:persistabletype(name="PersistableType")',
+        'CREATE UNIQUE')
+    query += ('    ' + ',\n    '.join(lines),)
+    query += ('RETURN %s' % ', '.join(keys),)
+    query = '\n'.join(query)
+
+    return query, objects, keys
 
 
 class Storage(object):
@@ -202,26 +279,36 @@ class Storage(object):
         if not is_persistable(obj):
             raise TypeError('cannot persist %s' % obj)
 
-        self._add_obj(obj)
+        try:
+            assert self.get(PersistableType, name='PersistableType')
+        except:
+            self._add_obj(PersistableType)
 
         if obj is PersistableType:
-            obj_type = PersistableType
-        else:
-            obj_type = type(obj)
+            return
+        elif isinstance(obj, Relationship):
+            self._add_obj(obj)
+            return
 
-        if is_persistable_not_rel(obj):
-            if obj is not obj_type:
-                self.add(obj_type)
+        query, objects, keys = types_to_query(obj)
 
-            instance_rel = InstanceOf(obj, obj_type)
-            self._add_obj(instance_rel)
+        query_args = {
+            'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
+            'IsA_props': object_to_dict(IsA(None, None))
+        }
 
-            if isinstance(obj, type):
-                for base in obj.__bases__:
-                    if is_persistable(base):
-                        self.add(base)
-                        is_a_rel = IsA(obj, base)
-                        self._add_obj(is_a_rel)
+        for key, obj in zip(keys, objects):
+            query_args['%s_props' % key] = object_to_dict(obj)
+
+        nodes = list(self._execute(query, **query_args))[0]
+
+        for node, obj in zip(nodes, objects):
+            self._store_primitive(obj, node)
+
+            indexes = get_indexes(obj)
+            for index_name, key, value in indexes:
+                index = self._conn.get_or_create_index(neo4j.Node, index_name)
+                index.add(key, value, node)
 
 
 def is_persistable_not_rel(obj):
@@ -237,6 +324,7 @@ def is_persistable(obj):
     return bool(
         isinstance(obj, (Persistable, PersistableType)) or
         (isinstance(obj, type) and issubclass(obj, PersistableType))
+        or issubclass(type(type(obj)), PersistableType)
     )
 
 

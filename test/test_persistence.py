@@ -124,14 +124,13 @@ def test_type_hierarchy_meta():
     store.add(PersistableType)
 
     query_str = """
-        START base = node(*)
-        MATCH cls -[:INSTANCEOF]-> base
-        RETURN cls, base
+        START c = node(*)
+        RETURN c
     """
 
     rows = store.query(query_str)
     result = list(rows)
-    assert result == [(PersistableType, PersistableType)]
+    assert result == [(PersistableType,)]
 
 
 def test_type_hierarchy_class():
@@ -141,15 +140,14 @@ def test_type_hierarchy_class():
 
     query_str = """
         START base = node(*)
-        MATCH cls -[:INSTANCEOF]-> base
-        RETURN cls, base
+        MATCH cls -[r]-> base
+        RETURN cls, r.__type__, base
     """
 
     rows = store.query(query_str)
     result = set(rows)
     assert result == {
-        (PersistableType, PersistableType),
-        (Persistable, PersistableType)
+        (Persistable, 'InstanceOf', PersistableType)
     }
 
 
@@ -169,7 +167,6 @@ def test_type_hierarchy_object():
     result = set(rows)
 
     assert result == {
-        (PersistableType, 'InstanceOf', PersistableType),
         (Persistable, 'InstanceOf', PersistableType),
         (Thing, 'InstanceOf', PersistableType),
         (Thing, 'IsA', Persistable),
@@ -207,7 +204,6 @@ def test_type_hierarchy_diamond():
     result = set(rows)
 
     assert result == {
-        (PersistableType, 'InstanceOf', PersistableType),
         (Persistable, 'InstanceOf', PersistableType),
         (Thing, 'InstanceOf', PersistableType),
         (Thing, 'IsA', Persistable),
