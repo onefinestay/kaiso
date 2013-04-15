@@ -100,14 +100,9 @@ def get_indexes(obj):
 class Descriptor(object):
     ''' Provides information about the types of persistable objects.
 
-    If the type of the persistable object is a subclass of <type>,
-    i.e. a meta-class, there will be only on index
-    and that is the name of the class.
-
+    It's main purpose is to provide type names and attributes information of
+    persistable types(classes).
     '''
-    # MJB: This needs a docstring.
-    # MJB: It's slightly confusing that ``cls`` here (meaning Python class?)
-    # MJB: can be a Type or an Instance in the taxonomy.
     def __init__(self, cls):
         self.cls = cls
         self.type_name = cls.__name__
@@ -115,12 +110,24 @@ class Descriptor(object):
         members = getmembers(cls, is_attribute)
         self.members = dict(members)
 
-    def get_index_name_for_attribute(self, attr_name):
-        # MJB: Docstring required here too
-        # MJB: Is this conditional false when we're dealing with an Instance
-        # MJB: class? I think we should make it explicit in comments that
-        # MJB: isinstance(x, type) is only for for taxonomy Type classes
+    def get_index_name_for_attribute(self, attr_name=None):
+        ''' Returns the index name for the attribute declared on
+        the descriptor's class or it's bases.
+
+        If the descriptor's class is a subclass of <type>, i.e. a meta-class,
+        the attr_name arg is not required.
+
+        Otherwise, the index will be based on the class on which the attribute,
+        identified by attr_name was declared on.
+
+        Args:
+            attr_name: The name of the attribute for which to return an index.
+
+        Returns:
+            The index name, which can be used in index lookups in cypher.
+        '''
         if issubclass(self.cls, type):
+            # we are dealing with a meta-class
             return get_index_name(self.cls)
         else:
             attr = self.members[attr_name]
