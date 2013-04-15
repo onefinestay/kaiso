@@ -158,6 +158,22 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
+def get_index_query(obj, name):
+    ''' Returns a node lookup by index as used by the START clause.
+
+    Args:
+        obj: An object to create a index lookup.
+        name: name of the object in the query.
+
+    Returns:
+        A string with index lookup of a cypher START clause.
+    '''
+
+    index_name, key, value = get_indexes(obj)[0]
+
+    query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
+    return query
+
 def get_create_types_query(obj):
     ''' Returns a CREATE UNIQUE query for an entire type hierarchy.
 
