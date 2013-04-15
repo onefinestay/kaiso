@@ -51,12 +51,6 @@ def test_base_types():
     dct = object_to_dict(object())
     assert dct == {'__type__': 'object'}
 
-def p(result):
-    for a,b,c in result:
-        if isinstance(a, type):
-            a = a.__name__
-        print '(%s, %s, %s),' %(a, b.__name__, c.__name__)
-
 
 def test_type_relationships():
     result = list(get_type_relationships(Persistable))
