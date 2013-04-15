@@ -74,7 +74,6 @@ def test_attributes():
 
     store.add(thing)
 
-    store._init_caches()
     queried_thing = store.get(Thing, id=thing.id)
 
     assert queried_thing.id == thing.id

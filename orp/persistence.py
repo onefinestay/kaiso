@@ -11,6 +11,18 @@ from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship, InstanceOf, IsA
 
 
+def first(items):
+    ''' Returns the first item of an iterable object.
+
+    Args:
+        items: An iterable object
+
+    Returns:
+        The first item from items.
+    '''
+    return iter(items).next()
+
+
 def get_indexes(obj):
     ''' Returns indexes for a persistable object.
         See orp.types for a definition of persistable types.
@@ -158,21 +170,25 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
-def get_index_query(obj, name):
+def get_index_query(obj, name=None):
     ''' Returns a node lookup by index as used by the START clause.
 
     Args:
         obj: An object to create a index lookup.
-        name: name of the object in the query.
-
+        name: The name of the object in the query.
+                If name is None obj.__name__ will be used.
     Returns:
         A string with index lookup of a cypher START clause.
     '''
 
-    index_name, key, value = get_indexes(obj)[0]
+    if name is None:
+        name = obj.__name__
+
+    index_name, key, value = first(get_indexes(obj))
 
     query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
     return query
+
 
 def get_create_types_query(obj):
     ''' Returns a CREATE UNIQUE query for an entire type hierarchy.
@@ -224,7 +240,7 @@ def get_create_types_query(obj):
     keys, objects = zip(*objects.items())
 
     query = (
-        'START PersistableType=node:type(name="PersistableType")',
+        'START %s' % get_index_query(PersistableType),
         'CREATE UNIQUE')
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
@@ -250,61 +266,6 @@ class Storage(object):
             connection_uri: A URI used to connect to the graph database.
         '''
         self._conn = get_connection(connection_uri)
-        self._init_caches()
-
-    def _init_caches(self):
-        # keep track of this manager's objects so we can guarantee
-        # object identity [that is, if n1 and n2 are model instances
-        # that represent the same node, (n1 is n2) is True]
-        self._primitives = WeakKeyDictionary()
-        self._relationships = WeakValueDictionary()
-        self._nodes = WeakValueDictionary()
-
-    def _store_primitive(self, persistable, primitive):
-        self._primitives[persistable] = primitive
-
-        if isinstance(primitive, neo4j.Node):
-            id_map = self._nodes
-        elif isinstance(primitive, neo4j.Relationship):
-            id_map = self._relationships
-
-        id_map[primitive.id] = persistable
-
-    def _add_obj(self, obj):
-        # TODO: this method is going the way of the dodo.
-        properties = object_to_dict(obj)
-
-        if obj in self._primitives:
-            return
-
-        # TODO: enforce uniqueness?
-
-        if isinstance(obj, Relationship):
-            # TODO: ensure that start and end exist
-            # MJB: perhaps update this TODO to fail nicely if they don't exist
-            n1 = self._primitives[obj.start]
-            n2 = self._primitives[obj.end]
-
-            cypher_rel_type = properties['__type__'].upper()
-
-            (relationship,) = self._conn.create(
-                (n1, cypher_rel_type, n2, properties))
-
-            primitive = relationship
-        else:
-            # makes a node since properties is a dict
-            # (a tuple makes relationships)
-            # MJB: this comment is unclear
-            (node,) = self._conn.create(properties)
-
-            indexes = get_indexes(obj)
-            for index_name, key, value in indexes:
-                index = self._conn.get_or_create_index(neo4j.Node, index_name)
-                index.add(key, value, node)
-
-            primitive = node
-
-        self._store_primitive(obj, primitive)
 
     def _execute(self, query, **params):
         ''' Runs a cypher query returning only raw rows of data.
@@ -332,7 +293,6 @@ class Storage(object):
         Returns:
             The converted value.
         '''
-
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
             obj = dict_to_object(properties)
@@ -341,9 +301,7 @@ class Storage(object):
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
 
-            self._store_primitive(obj, value)
             return obj
-
         return value
 
     def _convert_row(self, row):
@@ -395,32 +353,46 @@ class Storage(object):
         if not is_persistable(obj):
             raise TypeError('cannot persist %s' % obj)
 
-        try:
-            assert self.get(PersistableType, name='PersistableType')
-        except:
-            self._add_obj(PersistableType)
+        if isinstance(obj, Relationship):
+            rel_props = object_to_dict(obj)
+            query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
+            query = query % (
+                get_index_query(obj.start, 'n1'),
+                get_index_query(obj.end, 'n2'),
+                rel_props['__type__'].upper(),
+            )
+            first(self._execute(query, rel_props=rel_props))
+            return
 
         if obj is PersistableType:
-            return
-        elif isinstance(obj, Relationship):
-            self._add_obj(obj)
-            return
+            # create the PersistableType node.
+            # if we had a standard start node, we would not need this
+            query = 'CREATE (n {props}) RETURN n'
+            query_args = {'props': object_to_dict(PersistableType)}
+            objects = [PersistableType]
+        else:
+            try:
+                # we have to make sure we have a starting point for
+                # the type hierarchy, for now that is PersistableType
+                assert self.get(PersistableType, name='PersistableType')
+            except:
+                self.add(PersistableType)
 
-        query, objects, keys = get_create_types_query(obj)
+            query, objects, keys = get_create_types_query(obj)
 
-        query_args = {
-            'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
-            'IsA_props': object_to_dict(IsA(None, None))
-        }
+            query_args = {
+                'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
+                'IsA_props': object_to_dict(IsA(None, None))
+            }
 
-        for key, obj in zip(keys, objects):
-            query_args['%s_props' % key] = object_to_dict(obj)
+            for key, obj in zip(keys, objects):
+                query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = list(self._execute(query, **query_args))[0]
+        nodes = first(self._execute(query, **query_args))
 
+        # index all the created nodes
+        # infact, we are indexing all nodes, created or not ;-(
         for node, obj in zip(nodes, objects):
-            self._store_primitive(obj, node)
-
             indexes = get_indexes(obj)
             for index_name, key, value in indexes:
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
