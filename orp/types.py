@@ -5,6 +5,7 @@ register_type(object)
 
 @register_type
 class PersistableType(type):
+    # MJB: Docstring please
     def __new__(meta, name, bases, dct):
         register_type(meta)
         cls = super(PersistableType, meta).__new__(meta, name, bases, dct)
@@ -19,6 +20,7 @@ class PersistableType(type):
 
 
 class Persistable(object):
+    # MJB: Docstring please
     __metaclass__ = PersistableType
 
     def __new__(cls, *args, **kwargs):

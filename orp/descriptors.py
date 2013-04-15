@@ -28,7 +28,9 @@ def get_index_name(cls):
 
 
 class Descriptor(object):
-
+    # MJB: This needs a docstring.
+    # MJB: It's slightly confusing that ``cls`` here (meaning Python class?)
+    # MJB: can be a Type or an Instance in the taxonomy.
     def __init__(self, cls):
         self.cls = cls
         self.type_name = cls.__name__
@@ -37,6 +39,10 @@ class Descriptor(object):
         self.members = dict(members)
 
     def get_index_name_for_attribute(self, attr_name):
+        # MJB: Docstring required here too
+        # MJB: Is this conditional false when we're dealing with an Instance
+        # MJB: class? I think we should make it explicit in comments that
+        # MJB: isinstance(x, type) is only for for taxonomy Type classes
         if isinstance(self.cls, type):
             return get_index_name(self.cls)
         else:

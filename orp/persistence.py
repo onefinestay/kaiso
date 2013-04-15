@@ -12,7 +12,8 @@ from orp.relationships import Relationship, InstanceOf, IsA
 
 
 def get_indexes(obj):
-
+    # MJB: Needs a docstring.
+    # MJB: Which Types have an index?
     if isinstance(obj, type):
         if issubclass(obj, PersistableType):
             obj_type = obj
@@ -33,7 +34,9 @@ def get_indexes(obj):
 
 
 def object_to_dict(obj):
-
+    # MJB: This needs a docstring.
+    # MJB: Should probably clarify the format that we are serializing to
+    # MJB: (e.g. significance of the ``name`` and ``__type__`` keys)
     if isinstance(obj, type) and issubclass(obj, PersistableType):
         obj_type = obj
     else:
@@ -80,6 +83,7 @@ def dict_to_object(properties):
 
 
 def unique(fn):
+    # MJB: Docstring reqd
     @wraps(fn)
     def wrapped(*args, **kwargs):
         items = set()
@@ -91,6 +95,7 @@ def unique(fn):
 
 @unique
 def get_type_relationships(obj):
+    # MJB: Docstring reqd
     obj_type = type(obj)
 
     if obj_type is not type:
@@ -188,6 +193,7 @@ class Storage(object):
 
         if isinstance(obj, Relationship):
             # TODO: ensure that start and end exist
+            # MJB: perhaps update this TODO to fail nicely if they don't exist
             n1 = self._primitives[obj.start]
             n2 = self._primitives[obj.end]
 
@@ -200,6 +206,7 @@ class Storage(object):
         else:
             # makes a node since properties is a dict
             # (a tuple makes relationships)
+            # MJB: this comment is unclear
             (node,) = self._conn.create(properties)
 
             indexes = get_indexes(obj)
@@ -223,6 +230,7 @@ class Storage(object):
            given value is not a a Node or Relationship, return it unchanged
         """
         if isinstance(value, neo4j.Node):
+            # MJB: what's this random string here for?
             '''obj = self._nodes.get(value.id)
             if obj:
                 return obj
@@ -260,6 +268,9 @@ class Storage(object):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
 
+        # MJB: can we consider a different signature that avoids this assert?
+        # MJB: something like:
+        # MJB: def get(self, cls, (key, value)):
         assert len(index_filter) == 1, "only one index allowed at a time"
         key, value = index_filter.items()[0]
 
@@ -280,6 +291,7 @@ class Storage(object):
         if not is_persistable(obj):
             raise TypeError('cannot persist %s' % obj)
 
+        # MJB: presumably this will disappear when we get migrations in place?
         try:
             assert self.get(PersistableType, name='PersistableType')
         except:
@@ -322,6 +334,7 @@ def is_persistable_not_rel(obj):
 
 
 def is_persistable(obj):
+    # MJB: Needs doctring. Objects are persistable iff..
     return bool(
         isinstance(obj, (Persistable, PersistableType)) or
         (isinstance(obj, type) and issubclass(obj, PersistableType))
