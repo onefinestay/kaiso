@@ -1,5 +1,4 @@
 from functools import wraps
-from weakref import WeakKeyDictionary, WeakValueDictionary
 
 from py2neo import cypher, neo4j
 
