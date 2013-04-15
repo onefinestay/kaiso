@@ -4,7 +4,7 @@ from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
-    get_descriptor, get_named_descriptor, get_index_name)
+    get_descriptor, get_named_descriptor, get_indexes)
 from orp.query import encode_query_values
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship, InstanceOf, IsA
@@ -22,32 +22,26 @@ def first(items):
     return iter(items).next()
 
 
-def get_indexes(obj):
-    ''' Returns indexes for a persistable object.
-        See orp.types for a definition of persistable types.
+def unique(fn):
+    ''' Wraps a function to return only unique items.
+    The wrapped function must return an iterable object.
+    When the wrapped function is called, each item from the iterable
+    will be yielded only once and duplicates will be ignored.
 
     Args:
-        obj: A persistable object.
+        fn: The function to be wrapped.
 
     Returns:
-        Tuples (index_name, key, value) which can be used to index an object.
+        A wrapper function for fn.
     '''
-
-    obj_type = type(obj)
-
-    if isinstance(obj, type):
-        index_name = get_index_name(obj_type)
-        value = get_descriptor(obj).type_name
-        yield (index_name, 'name', value)
-    else:
-        descr = get_descriptor(obj_type)
-
-        for name, attr in descr.members.items():
-            if attr.unique:
-                index_name = get_index_name(attr.declared_on)
-                key = name
-                value = attr.to_db(getattr(obj, name))
-                yield (index_name, key, value)
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        items = set()
+        for item in fn(*args, **kwargs):
+            if item not in items:
+                items.add(item)
+                yield item
+    return wrapped
 
 
 def object_to_dict(obj):
@@ -136,28 +130,6 @@ def dict_to_object(properties):
             setattr(obj, attr_name, value)
 
     return obj
-
-
-def unique(fn):
-    ''' Wraps a function to return only unique items.
-    The wrapped function must return an iterable object.
-    When the wrapped function is called, each item from the iterable
-    will be yielded only once and duplicates will be ignored.
-
-    Args:
-        fn: The function to be wrapped.
-
-    Returns:
-        A wrapper function for fn.
-    '''
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        items = set()
-        for item in fn(*args, **kwargs):
-            if item not in items:
-                items.add(item)
-                yield item
-    return wrapped
 
 
 @unique
@@ -376,7 +348,6 @@ class Storage(object):
         Args:
             obj: The object to store.
         '''
-
         if not is_persistable(obj):
             raise TypeError('cannot persist %s' % obj)
 
