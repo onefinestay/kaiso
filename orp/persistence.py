@@ -107,6 +107,7 @@ def get_type_relationships(obj):
 
 
 def types_to_query(obj):
+    # used for creation
     lines = []
     objects = {'PersistableType': PersistableType}
 
