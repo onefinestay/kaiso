@@ -427,6 +427,16 @@ class Storage(object):
 
 
 def is_persistable_not_rel(obj):
+    ''' Returns wether or not an the provided object is persistable as long
+    as it is not a relationship.
+
+    Args:
+        obj: The object to test for persistablility.
+
+    Returns:
+        True if the object is persistable and not a Relationship,
+        False otherwise.
+    '''
     if isinstance(obj, Relationship):
         return False
     elif isinstance(obj, type) and issubclass(obj, Relationship):
@@ -436,7 +446,15 @@ def is_persistable_not_rel(obj):
 
 
 def is_persistable(obj):
-    # MJB: Needs doctring. Objects are persistable iff..
+    ''' Returns wether or not an the provided object is persistable.
+
+    Args:
+        obj: The object to test for persistablility.
+
+    Returns:
+        True if the object is persistable,
+        False otherwise.
+    '''
     return (
         isinstance(obj, (Persistable, PersistableType)) or
         (isinstance(obj, type) and issubclass(obj, PersistableType))
