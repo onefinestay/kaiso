@@ -52,8 +52,17 @@ def get_indexes(obj):
 
 
 def object_to_dict(obj):
-    ''' Returns a basic dictionary containing all properties
-    necessary to persist the object passed in.
+    ''' Converts a persistable object to a dict.
+
+    The generated dict will contain a __type__ key, for which the value will
+    be the type_name as given by the descriptor for type(obj).
+
+    If the object is a class a name key-value pair will be
+    added to the generated dict, with the value being the type_name given
+    by the descriptor for the object.
+
+    For any other object all the attributes as given by the object's
+    type descriptpr will be added to the dict and encoded as required.
 
     Args:
         obj: A persistable  object.
@@ -86,7 +95,26 @@ def object_to_dict(obj):
 
 
 def dict_to_object(properties):
-    # TODO: doc
+    ''' Converts a dict into a persistable object.
+
+    The properties dict needs at least a __type__ key containing the name of
+    any registered class.
+    The type key defines the type of the object to return.
+
+    If the registered class for the __type__ is a meta-class,
+    i.e. a subclass of <type>, a name key is assumed to be present and
+    the registered class idendified by it's value is returned.
+
+    If the registered class for the __type__ is standard class,
+    i.e. an instance of <type>, and object of that class will be created
+    with attributes as defined by the remaining key-value pairs.
+
+    Args:
+        properties: A dict like object.
+
+    Returns:
+        A persistable object.
+    '''
 
     type_name = properties['__type__']
     descriptor = get_named_descriptor(type_name)
