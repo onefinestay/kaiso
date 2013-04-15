@@ -36,7 +36,7 @@ def test_simple_add_and_get_meta_type():
     store = Storage(conn_uri)
 
     store.add(PersistableType)
-    result = store.get(PersistableType, name='PersistableType')
+    result = store.get(type, name='PersistableType')
     assert result is PersistableType
 
 
