@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import atexit
 import logging
 import tempfile
@@ -10,6 +11,8 @@ from py2neo import neo4j
 logger = logging.getLogger(__name__)
 
 _temporary_databases = {}
+
+TIMEOUT = 30  # seconds
 
 
 def get_neo4j_info():
@@ -26,7 +29,7 @@ def get_neo4j_info():
 
     for lne in output.splitlines():
         for key in keys:
-            sep = key+':'
+            sep = key + ':'
             if lne.startswith(sep):
                 _, value = lne.split(sep)
                 value = value.strip()
@@ -42,12 +45,15 @@ def temp_neo4j_instance(uri):
     """
 
     # split the uri
-    match = re.match("temp://?(?P<port>\d*)(?P<data_dir>.*)", uri)
+    match = re.match("temp://?(?P<port>\d*)(?P<temp_dir>.*)", uri)
 
     neo4j_info = get_neo4j_info()
 
     port = match.group("port") or '7475'
-    temp_data_dir = match.group("data_dir") or tempfile.mkdtemp()
+    temp_dir = match.group("temp_dir") or tempfile.mkdtemp()
+    temp_data_dir = os.path.join(temp_dir, 'data')
+    if not os.path.exists(temp_data_dir):
+        os.makedirs(temp_data_dir)
 
     # return http uri if this temporary database already exists,
     # using the port as the unique identifer
@@ -65,9 +71,11 @@ def temp_neo4j_instance(uri):
         'org.neo4j.server.webserver.port': port,
         'org.neo4j.server.database.location': temp_data_dir
     }
-    with tempfile.NamedTemporaryFile(delete=False) as tf:
+
+    props_filepath = os.path.join(temp_dir, 'server.properties')
+    with open(props_filepath, 'w') as props_file:
         for key, value in config_options.iteritems():
-            tf.write("{}={}\n".format(key, value))
+            props_file.write("{}={}\n".format(key, value))
 
     # required startup args
     args = [
@@ -78,7 +86,7 @@ def temp_neo4j_instance(uri):
     startup_options = {
         'neo4j.home': neo4j_info['NEO4J_HOME'],
         'neo4j.instance': neo4j_info['NEO4J_INSTANCE'],
-        'org.neo4j.server.properties': tf.name,
+        'org.neo4j.server.properties': props_filepath,
         'file.encoding': 'UTF-8',
     }
     for key, value in startup_options.iteritems():
@@ -89,31 +97,33 @@ def temp_neo4j_instance(uri):
     cmd.extend(args)
 
     # start the subprocess
-    neo4j_process = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    neo4j_process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT)
 
     _temporary_databases[port] = neo4j_process
 
     # terminate subprocess at exit
     atexit.register(neo4j_process.terminate)
 
-    # the startup process is async so we monitor stdout to know when to allow
-    # the test runner to continue
-    for line in neo4j_process.stdout:
-        if "Server started" in line:
-            break
-        elif "SEVERE" in line:
-            logger.warning(line)
-    else:
-        # if the pipe is exhausted, we've failed to start
-        logger.critical('Unable to start Neo4j')
-        os.exit()
-
-    # clear up & return REST API url
-    os.unlink(tf.name)
-    url = "http://localhost:{}/db/data/".format(port)
-    logger.debug('neo4j server started on {}'.format(url))
-    return url
+    # the startup process is async so we monitor the logs to know when to allow
+    # the test runner to continue. wait a couple of seconds before we look for
+    # its logfile to make sure it's been created.
+    time.sleep(2)
+    started = time.time()
+    with open(os.path.join(temp_data_dir, 'messages.log')) as logfile:
+        while time.time() < started + TIMEOUT:
+            line = logfile.readline()
+            if line:
+                if "Server started" in line:
+                    url = "http://localhost:{}/db/data/".format(port)
+                    logger.debug('neo4j server started on {}'.format(url))
+                    return url  # return REST API url
+                elif "SEVERE" in line:
+                    logger.critical('Unable to start Neo4j: {}'.line)
+            else:
+                time.sleep(0.2)
+        logger.critical('Unable to start Neo4j: timeout after {} '
+                        'seconds'.format(TIMEOUT))
 
 
 def get_connection(uri):
