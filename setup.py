@@ -18,13 +18,13 @@ class PyTest(TestCommand):
         self.test_suite = True
 
     def run_tests(self):
-        #import here, cause outside the eggs aren't loaded
+        # import here, cause outside the eggs aren't loaded
         import pytest
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
 
-def parse_requirments(fn, dependency_links):
+def parse_requirements(fn, dependency_links):
     requirements = []
     with open(fn, 'rb') as f:
         for dep in f:
@@ -41,10 +41,10 @@ def parse_requirments(fn, dependency_links):
 
     return requirements, dependency_links
 
-requirements, dependency_links = parse_requirments(
+requirements, dependency_links = parse_requirements(
     join(setup_dir, 'requirements.txt'), [])
 
-test_requirements, dependency_links = parse_requirments(
+test_requirements, dependency_links = parse_requirements(
     join(setup_dir, 'test_requirements.txt'),
     dependency_links)
 
@@ -71,5 +71,6 @@ setup(
         "Programming Language :: Python :: 2.7",
         "Topic :: Internet",
         "Topic :: Software Development :: Libraries :: Python Modules",
-        "Intended Audience :: Developers"]
-
+        "Intended Audience :: Developers"
+    ]
+)
