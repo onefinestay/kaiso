@@ -10,6 +10,12 @@ class RelationshipReference(object):
         self.min = min
         self.max = max
 
+    def get(self, instance):
+        if self.max <= 1:
+            return instance
+        else:
+            return [instance]
+
 
 class Outgoing(RelationshipReference):
     pass
