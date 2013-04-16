@@ -207,7 +207,7 @@ def get_create_types_query(obj):
 
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
         # this filters out the types, which we don't want to persist
-        if is_persistable_not_rel(obj1) and is_persistable_not_rel(obj2):
+        if is_persistable(obj2):
             if isinstance(obj1, type):
                 name1 = obj1.__name__
             else:
@@ -223,6 +223,7 @@ def get_create_types_query(obj):
             if name2 in objects:
                 abstr2 = name2
             else:
+                # TODO: this code never gets executed
                 abstr2 = '(%s {%s_props})' % (name2, name2)
 
             objects[name1] = obj1
@@ -395,25 +396,6 @@ class Storage(object):
             for index_name, key, value in indexes:
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
                 index.add(key, value, node)
-
-
-def is_persistable_not_rel(obj):
-    ''' Returns wether or not an the provided object is persistable as long
-    as it is not a relationship.
-
-    Args:
-        obj: The object to test for persistablility.
-
-    Returns:
-        True if the object is persistable and not a Relationship,
-        False otherwise.
-    '''
-    if isinstance(obj, Relationship):
-        return False
-    elif isinstance(obj, type) and issubclass(obj, Relationship):
-        return False
-    else:
-        return is_persistable(obj)
 
 
 def is_persistable(obj):
