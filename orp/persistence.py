@@ -1,43 +1,75 @@
 from functools import wraps
-from weakref import WeakKeyDictionary, WeakValueDictionary
 
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
-    get_descriptor, get_named_descriptor, get_index_name)
+    get_descriptor, get_named_descriptor, get_indexes)
 from orp.query import encode_query_values
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship, InstanceOf, IsA
 
 
-def get_indexes(obj):
+def first(items):
+    ''' Returns the first item of an iterable object.
 
-    if isinstance(obj, type):
-        if issubclass(obj, PersistableType):
-            obj_type = obj
-        else:
-            obj_type = type(obj)
-        index_name = get_index_name(obj_type)
-        value = get_descriptor(obj).type_name
-        yield (index_name, 'name', value)
-    else:
-        descr = get_descriptor(type(obj))
+    Args:
+        items: An iterable object
 
-        for name, attr in descr.members.items():
-            if attr.unique:
-                index_name = get_index_name(attr.declared_on)
-                key = name
-                value = attr.to_db(getattr(obj, name))
-                yield (index_name, key, value)
+    Returns:
+        The first item from items.
+    '''
+    return iter(items).next()
+
+
+def unique(fn):
+    ''' Wraps a function to return only unique items.
+    The wrapped function must return an iterable object.
+    When the wrapped function is called, each item from the iterable
+    will be yielded only once and duplicates will be ignored.
+
+    Args:
+        fn: The function to be wrapped.
+
+    Returns:
+        A wrapper function for fn.
+    '''
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        items = set()
+        for item in fn(*args, **kwargs):
+            if item not in items:
+                items.add(item)
+                yield item
+    return wrapped
 
 
 def object_to_dict(obj):
+    ''' Converts a persistable object to a dict.
 
-    if isinstance(obj, type) and issubclass(obj, PersistableType):
-        obj_type = obj
-    else:
-        obj_type = type(obj)
+    The generated dict will contain a __type__ key, for which the value will
+    be the type_name as given by the descriptor for type(obj).
+
+    If the object is a class a name key-value pair will be
+    added to the generated dict, with the value being the type_name given
+    by the descriptor for the object.
+
+    For any other object all the attributes as given by the object's
+    type descriptpr will be added to the dict and encoded as required.
+
+    Args:
+        obj: A persistable  object.
+
+    Returns:
+        Dictionary with attributes encoded in basic types
+        and type information for deserialization.
+        e.g.
+        {
+            '__type__': 'Persistable',
+            'attr1' : 1234
+        }
+    '''
+    obj_type = type(obj)
 
     descr = get_descriptor(obj_type)
 
@@ -56,12 +88,33 @@ def object_to_dict(obj):
 
 
 def dict_to_object(properties):
+    ''' Converts a dict into a persistable object.
+
+    The properties dict needs at least a __type__ key containing the name of
+    any registered class.
+    The type key defines the type of the object to return.
+
+    If the registered class for the __type__ is a meta-class,
+    i.e. a subclass of <type>, a name key is assumed to be present and
+    the registered class idendified by it's value is returned.
+
+    If the registered class for the __type__ is standard class,
+    i.e. an instance of <type>, and object of that class will be created
+    with attributes as defined by the remaining key-value pairs.
+
+    Args:
+        properties: A dict like object.
+
+    Returns:
+        A persistable object.
+    '''
+
     type_name = properties['__type__']
     descriptor = get_named_descriptor(type_name)
 
     cls = descriptor.cls
 
-    if issubclass(cls, PersistableType):
+    if issubclass(cls, type):
         obj = get_named_descriptor(properties['name']).cls
     else:
         obj = cls.__new__(cls)
@@ -79,18 +132,28 @@ def dict_to_object(properties):
     return obj
 
 
-def unique(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        items = set()
-        for item in fn(*args, **kwargs):
-            if item not in items:
-                items.add(item)
-                yield item
-    return wrapped
-
 @unique
 def get_type_relationships(obj):
+    ''' Generates a list of the type relationships of an object.
+    e.g.
+        get_type_relationships(Persistable())
+
+        (object, InstanceOf, type),
+        (type, IsA, object),
+        (type, InstanceOf, type),
+        (PersistableType, IsA, type),
+        (PersistableType, InstanceOf, type),
+        (Persistable, IsA, object),
+        (Persistable, InstanceOf, PersistableType),
+        (<Persistable object>, InstanceOf, Persistable)
+
+    Args:
+        obj:    An object to generate the type relationships for.
+
+    Returns:
+        A generator, generating tuples
+            (object, relatsionship type, related obj)
+    '''
     obj_type = type(obj)
 
     if obj_type is not type:
@@ -106,13 +169,45 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
-def types_to_query(obj):
-    # used for creation
+def get_index_query(obj, name=None):
+    ''' Returns a node lookup by index as used by the START clause.
+
+    Args:
+        obj: An object to create a index lookup.
+        name: The name of the object in the query.
+                If name is None obj.__name__ will be used.
+    Returns:
+        A string with index lookup of a cypher START clause.
+    '''
+
+    if name is None:
+        name = obj.__name__
+
+    index_name, key, value = first(get_indexes(obj))
+
+    query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
+    return query
+
+
+def get_create_types_query(obj):
+    ''' Returns a CREATE UNIQUE query for an entire type hierarchy.
+
+    Args:
+        obj: An object to create a type hierarchy for.
+
+    Returns:
+        A tuple containing:
+        (cypher query, objects to create nodes for, the object names).
+    '''
+
     lines = []
+    # we don't have a good starting node, so we just use PersistableType
+    # see the add() method, which ensures it exists.
     objects = {'PersistableType': PersistableType}
 
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
-        if is_persistable_not_rel(obj1) and is_persistable_not_rel(obj2):
+        # this filters out the types, which we don't want to persist
+        if is_persistable(obj2):
             if isinstance(obj1, type):
                 name1 = obj1.__name__
             else:
@@ -128,6 +223,7 @@ def types_to_query(obj):
             if name2 in objects:
                 abstr2 = name2
             else:
+                # TODO: this code never gets executed
                 abstr2 = '(%s {%s_props})' % (name2, name2)
 
             objects[name1] = obj1
@@ -141,12 +237,10 @@ def types_to_query(obj):
 
             lines.append(ln)
 
-    del objects['PersistableType']
-
     keys, objects = zip(*objects.items())
 
     query = (
-        'START PersistableType=node:persistabletype(name="PersistableType")',
+        'START %s' % get_index_query(PersistableType),
         'CREATE UNIQUE')
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
@@ -156,100 +250,58 @@ def types_to_query(obj):
 
 
 class Storage(object):
-    def __init__(self, conn_uri):
-        self._conn = get_connection(conn_uri)
-        self._init_caches()
+    ''' Provides a queryable object store.
 
-    def _init_caches(self):
-        # keep track of this manager's objects so we can guarantee
-        # object identity [that is, if n1 and n2 are model instances
-        # that represent the same node, (n1 is n2) is True]
-        self._primitives = WeakKeyDictionary()
-        self._relationships = WeakValueDictionary()
-        self._nodes = WeakValueDictionary()
+    The object store can store any object as long as it's type is registered.
+    This includes instances of Persistable, PersistableType
+    and subclasses of either.
 
-    def _store_primitive(self, persistable, primitive):
-        self._primitives[persistable] = primitive
+    InstanceOf and IsA relationships are automatically generated,
+    when persisting an object.
+    '''
+    def __init__(self, connection_uri):
+        ''' Initializes a Storage object.
 
-        if isinstance(primitive, neo4j.Node):
-            id_map = self._nodes
-        elif isinstance(primitive, neo4j.Relationship):
-            id_map = self._relationships
-
-        id_map[primitive.id] = persistable
-
-    def _add_obj(self, obj):
-        properties = object_to_dict(obj)
-
-        if obj in self._primitives:
-            return
-
-        # TODO: enforce uniqueness?
-
-        if isinstance(obj, Relationship):
-            # TODO: ensure that start and end exist
-            n1 = self._primitives[obj.start]
-            n2 = self._primitives[obj.end]
-
-            cypher_rel_type = properties['__type__'].upper()
-
-            (relationship,) = self._conn.create(
-                (n1, cypher_rel_type, n2, properties))
-
-            primitive = relationship
-        else:
-            # makes a node since properties is a dict
-            # (a tuple makes relationships)
-            (node,) = self._conn.create(properties)
-
-            indexes = get_indexes(obj)
-            for index_name, key, value in indexes:
-                index = self._conn.get_or_create_index(neo4j.Node, index_name)
-                index.add(key, value, node)
-
-            primitive = node
-
-        self._store_primitive(obj, primitive)
+        Args:
+            connection_uri: A URI used to connect to the graph database.
+        '''
+        self._conn = get_connection(connection_uri)
 
     def _execute(self, query, **params):
-        """Run a query on this graph connection. Query and params are passed
-           straight though to cypher.execute"""
+        ''' Runs a cypher query returning only raw rows of data.
+
+        Args:
+            query: A parameterized cypher query.
+            params: The parameters used by the query.
+
+        Returns:
+            A generator with the raw rows returned by the connection.
+        '''
+
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
             yield row
 
     def _convert_value(self, value):
-        """Take a py2neo primitive value and return an OGM instance. If the
-           given value is not a a Node or Relationship, return it unchanged
-        """
-        if isinstance(value, neo4j.Node):
-            '''obj = self._nodes.get(value.id)
-            if obj:
-                return obj
-            '''
+        ''' Converts a py2neo primitive(Node, Relationship, basic object)
+        to an equvalent python object.
+        Any value which cannot be converted, will be returned as is.
 
+        Args:
+            value: The value to convert.
+
+        Returns:
+            The converted value.
+        '''
+        if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
             obj = dict_to_object(properties)
 
-            self._store_primitive(obj, value)
+            if isinstance(value, neo4j.Relationship):
+                obj.start = self._convert_value(value.start_node)
+                obj.end = self._convert_value(value.end_node)
 
             return obj
-
-        elif isinstance(value, neo4j.Relationship):
-            '''rel = self._relationships.get(value.id)
-            if rel:
-                return rel
-            '''
-            properties = value.get_properties()
-
-            rel = dict_to_object(properties)
-
-            rel.start = self._convert_value(value.start_node)
-            rel.end = self._convert_value(value.end_node)
-
-            self._store_primitive(rel, value)
-            return rel
-
         return value
 
     def _convert_row(self, row):
@@ -260,6 +312,9 @@ class Storage(object):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
 
+        # MJB: can we consider a different signature that avoids this assert?
+        # MJB: something like:
+        # MJB: def get(self, cls, (key, value)):
         assert len(index_filter) == 1, "only one index allowed at a time"
         key, value = index_filter.items()[0]
 
@@ -272,61 +327,90 @@ class Storage(object):
         return obj
 
     def query(self, query, **params):
+        ''' Queries the store given a parameterized cypher query.
+
+        Args:
+            query: A parameterized cypher query.
+            params: query: A parameterized cypher query.
+
+        Returns:
+            A generator with tuples containing stored objects or values.
+        '''
         params = encode_query_values(params)
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
     def add(self, obj):
+        ''' Adds an object to the data store.
+
+        It will automatically generate the type relationships
+        for the the object as required and store the object itself.
+
+        Args:
+            obj: The object to store.
+        '''
         if not is_persistable(obj):
             raise TypeError('cannot persist %s' % obj)
 
-        try:
-            assert self.get(PersistableType, name='PersistableType')
-        except:
-            self._add_obj(PersistableType)
+        if isinstance(obj, Relationship):
+            rel_props = object_to_dict(obj)
+            query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
+            query = query % (
+                get_index_query(obj.start, 'n1'),
+                get_index_query(obj.end, 'n2'),
+                rel_props['__type__'].upper(),
+            )
+            first(self._execute(query, rel_props=rel_props))
+            return
 
         if obj is PersistableType:
-            return
-        elif isinstance(obj, Relationship):
-            self._add_obj(obj)
-            return
+            # create the PersistableType node.
+            # if we had a standard start node, we would not need this
+            query = 'CREATE (n {props}) RETURN n'
+            query_args = {'props': object_to_dict(PersistableType)}
+            objects = [PersistableType]
+        else:
+            try:
+                # we have to make sure we have a starting point for
+                # the type hierarchy, for now that is PersistableType
+                assert self.get(PersistableType, name='PersistableType')
+            except:
+                self.add(PersistableType)
 
-        query, objects, keys = types_to_query(obj)
+            query, objects, keys = get_create_types_query(obj)
 
-        query_args = {
-            'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
-            'IsA_props': object_to_dict(IsA(None, None))
-        }
+            query_args = {
+                'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
+                'IsA_props': object_to_dict(IsA(None, None))
+            }
 
-        for key, obj in zip(keys, objects):
-            query_args['%s_props' % key] = object_to_dict(obj)
+            for key, obj in zip(keys, objects):
+                query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = list(self._execute(query, **query_args))[0]
+        nodes = first(self._execute(query, **query_args))
 
+        # index all the created nodes
+        # infact, we are indexing all nodes, created or not ;-(
         for node, obj in zip(nodes, objects):
-            self._store_primitive(obj, node)
-
             indexes = get_indexes(obj)
             for index_name, key, value in indexes:
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
                 index.add(key, value, node)
 
 
-def is_persistable_not_rel(obj):
-    if isinstance(obj, Relationship):
-        return False
-    elif isinstance(obj, type) and issubclass(obj, Relationship):
-        return False
-    else:
-        return is_persistable(obj)
-
-
 def is_persistable(obj):
-    return bool(
+    ''' Returns wether or not an the provided object is persistable.
+
+    Args:
+        obj: The object to test for persistablility.
+
+    Returns:
+        True if the object is persistable,
+        False otherwise.
+    '''
+    return (
         isinstance(obj, (Persistable, PersistableType)) or
         (isinstance(obj, type) and issubclass(obj, PersistableType))
         or issubclass(type(type(obj)), PersistableType)
     )
-
-
 

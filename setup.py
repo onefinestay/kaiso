@@ -1,32 +1,75 @@
-import os
-from setuptools import setup, find_packages
+from setuptools import setup
+from setuptools.command.test import test as TestCommand
+from os.path import dirname, join
+import sys
 
-here = os.path.abspath(os.path.dirname(__file__))
-make_abs = lambda fn: os.path.join(here, fn)
 
+setup_dir = dirname(__file__) or '.'
+
+
+class PyTest(TestCommand):
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = [
+            '--cov', 'nameko',
+            '--junitxml=test-results.xml',
+            join(setup_dir, 'test'),
+        ]
+        self.test_suite = True
+
+    def run_tests(self):
+        #import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(self.test_args)
+        sys.exit(errno)
+
+
+def parse_requirments(fn, dependency_links):
+    requirements = []
+    with open(fn, 'rb') as f:
+        for dep in f:
+            dep = dep.strip()
+            # need to make test_requirements.txt work with
+            # setuptools like it would work with `pip -r`
+            # URLs will not work, so we transform them to
+            # dependency_links and requirements
+            if dep.startswith('git+'):
+                dependency_links.append(dep)
+                _, dep = dep.rsplit('#egg=', 1)
+                dep = dep.replace('-', '==', 1)
+            requirements.append(dep)
+
+    return requirements, dependency_links
+
+requirements, dependency_links = parse_requirments(
+    join(setup_dir, 'requirements.txt'), [])
+
+test_requirements, dependency_links = parse_requirments(
+    join(setup_dir, 'test_requirements.txt'),
+    dependency_links)
 
 setup(
     name='orp',
-    packages=find_packages(exclude=['test', 'test.*']),
-    version='0.0.1',
+    version='0.1-dev',
+    description='A queryable object persistence and relationship framework'
+                ' based on the Neo4j graph database.',
     author='onefinestay',
     author_email='engineering@onefinestay.com',
-    url='https://github.com/onefinestay/',  # TODO
-    install_requires=[
-        'py2neo==1.5',
-    ],
-    tests_require=[],
+    url='http://github.com/onefinestay/orp',
+    packages=['orp', ],
+    package_dir={'': setup_dir},
+    install_requires=requirements,
+    tests_require=test_requirements,
+    dependency_links=dependency_links,
+    zip_safe=True,
+    cmdclass={'test': PyTest},
+    license='Apache License, Version 2.0',
     classifiers=[
-        "Development Status :: 3 - Alpha",
         "Programming Language :: Python",
-        "Intended Audience :: Developers",
-        "Natural Language :: English",
-        "Topic :: Software Development",
-        "Topic :: Utilities",
-        "Environment :: Console",
-    ],
-    description='Instance and release management made easy',
-    # long_description=open(make_abs('README.rst')).read(),  # TODO
-    include_package_data=True,
-    zip_safe=False,
-)
+        "Operating System :: MacOS :: MacOS X",
+        "Operating System :: POSIX",
+        "Programming Language :: Python :: 2.7",
+        "Topic :: Internet",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "Intended Audience :: Developers"]
+

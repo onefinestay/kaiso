@@ -12,28 +12,27 @@ logger = logging.getLogger(__name__)
 _temporary_databases = {}
 
 
-def build_neo4j_classpath(neo4j_home):
-    """
-    Collects paths to jar files required by neo4j
-    """
-    logger.debug('building neo4j classpath from {}'.format(neo4j_home))
+def get_neo4j_info():
+    ''' Gets runtime information from the neo4j command.
 
-    # collect our classpaths
-    classpaths = []
+    Returns:
+        A dict.
+    '''
+    output = subprocess.check_output(['neo4j', 'info'])
 
-    rel_paths = ['lib', 'system/lib']
-    for path in rel_paths:
-        class_path = os.path.join(neo4j_home, path)
-        if not os.path.exists(class_path):
-            raise IOError('Neo4j is incorrectly configured {} directory not '
-                          'found in neo4j_home ({}).'.format(path, class_path))
+    keys = ['NEO4J_HOME', 'NEO4J_INSTANCE', 'JAVA_OPTS', 'CLASSPATH']
 
-        for root, _, files in os.walk(class_path):
-            jars = [f for f in files if f.endswith('.jar')]
-            for jar in jars:
-                classpaths.append(os.path.join(root, jar))
+    result = {}
 
-    return ':'.join(classpaths)
+    for lne in output.splitlines():
+        for key in keys:
+            sep = key+':'
+            if lne.startswith(sep):
+                _, value = lne.split(sep)
+                value = value.strip()
+                result[key] = value
+
+    return result
 
 
 def temp_neo4j_instance(uri):
@@ -41,10 +40,12 @@ def temp_neo4j_instance(uri):
     Start or return an existing instance of the neo4j graph database server
     using the given URI
     """
+
     # split the uri
-    match = re.match("temp://(?P<path>[^:]+):?(?P<port>\d*)(?P<data_dir>.*)",
-                     uri)
-    neo4j_home = match.group("path")
+    match = re.match("temp://?(?P<port>\d*)(?P<data_dir>.*)", uri)
+
+    neo4j_info = get_neo4j_info()
+
     port = match.group("port") or '7475'
     temp_data_dir = match.group("data_dir") or tempfile.mkdtemp()
 
@@ -56,7 +57,7 @@ def temp_neo4j_instance(uri):
     # otherwise, start a new neo4j process.
     # define the subprocess command and the required classpath
     cmd = ['java', '-cp']
-    cmd.append(build_neo4j_classpath(neo4j_home))
+    cmd.append(neo4j_info['CLASSPATH'])
 
     # neo requires a physical config file which we temporarily create to
     # specify config overrides
@@ -75,8 +76,8 @@ def temp_neo4j_instance(uri):
 
     # additional startup options for the command line
     startup_options = {
-        'neo4j.home': neo4j_home,
-        'neo4j.instance': neo4j_home,
+        'neo4j.home': neo4j_info['NEO4J_HOME'],
+        'neo4j.instance': neo4j_info['NEO4J_INSTANCE'],
         'org.neo4j.server.properties': tf.name,
         'file.encoding': 'UTF-8',
     }

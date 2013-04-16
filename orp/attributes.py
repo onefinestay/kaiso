@@ -19,6 +19,7 @@ class Attribute(object):
 
 class DefaultableAttribute(Attribute):
     def __init__(self, default=None, unique=False):
+        # do we have a preference for using super() over <BaseClass>.<method> ?
         super(DefaultableAttribute, self).__init__(unique)
         self.default = default
 
@@ -79,6 +80,7 @@ class DateTime(DefaultableAttribute):
 
 class Choice(String):
     def __init__(self, *choices, **kwargs):
+        # again, super(Choice) vs Choice.__init__
         super(Choice, self).__init__(**kwargs)
         self.choices = choices
 
