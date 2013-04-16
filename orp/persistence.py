@@ -303,7 +303,7 @@ class Storage(object):
     def _root_exists(self):
         try:
             # we have to make sure we have a starting point for
-            # the type hierarchy, for now that is PersistableType
+            # the type hierarchy, for now that is Persistable
             obj = self.get(PersistableType, name='Persistable')
             if obj is not Persistable:
                 raise Exception("Db is broken")  # TODO: raise DbIsBroken()
@@ -402,7 +402,7 @@ class Storage(object):
 
 
 def can_add(obj):
-    ''' Returns if an object can be added to the db.
+    ''' Returns whether or not an object can be added to the db.
 
         We can add instances of Persistable or Relationship.
         In addition it is also possible to add sub-classes of
