@@ -49,7 +49,7 @@ test_requirements, dependency_links = parse_requirments(
     dependency_links)
 
 setup(
-    name='nameko',
+    name='orp',
     version='0.1-dev',
     description='A queryable object persistence and relationship framework'
                 ' based on the Neo4j graph database.',
