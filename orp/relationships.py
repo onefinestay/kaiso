@@ -1,5 +1,7 @@
 from orp.types import Persistable
 
+many = "*"
+
 
 class Relationship(Persistable):
     def __init__(self, start, end, **kwargs):

@@ -1,6 +1,7 @@
 from inspect import getmembers
 
-from orp.attributes import Attribute
+from orp.attributes import Attribute, RelationshipReference
+
 
 _descriptors = {}
 
@@ -58,6 +59,10 @@ def is_attribute(obj):
     return isinstance(obj, Attribute)
 
 
+def is_relationship_reference(obj):
+    return isinstance(obj, RelationshipReference)
+
+
 def get_index_name(cls):
     ''' Returns a cypher index name for a class.
 
@@ -108,7 +113,10 @@ class Descriptor(object):
         self.type_name = cls.__name__
 
         members = getmembers(cls, is_attribute)
+        relationships = getmembers(cls, is_relationship_reference)
+
         self.members = dict(members)
+        self.relationships = dict(relationships)
 
     def get_index_name_for_attribute(self, attr_name=None):
         ''' Returns the index name for the attribute declared on

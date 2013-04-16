@@ -4,6 +4,21 @@ import uuid
 import iso8601
 
 
+class RelationshipReference(object):
+    def __init__(self, relationship_class, min, max):
+        self.relationship_class = relationship_class
+        self.min = min
+        self.max = max
+
+
+class Outgoing(RelationshipReference):
+    pass
+
+
+class Incoming(RelationshipReference):
+    pass
+
+
 class Attribute(object):
     def __init__(self, unique=False):
         self.unique = unique

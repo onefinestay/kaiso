@@ -20,6 +20,14 @@ class PersistableType(type):
                 attr.declared_on = cls
 
 
+def get_rel_attr(attr_type):
+
+    def p(self):
+        return 'spam'
+
+    return property(p)
+
+
 class Persistable(object):
     # MJB: Docstring please
     __metaclass__ = PersistableType
@@ -28,8 +36,13 @@ class Persistable(object):
         # setup default values for attributes
         obj = super(Persistable, cls).__new__(cls)
         descriptor = get_descriptor(cls)
+
+        # TODO: rename members->attributes?
         for name, attr in descriptor.members.items():
             setattr(obj, name, attr.default)
+
+        for name, attr in descriptor.relationships.items():
+            setattr(obj, name, get_rel_attr(attr))
         return obj
 
     def __init__(self, **kwargs):

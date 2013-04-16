@@ -373,7 +373,7 @@ class Storage(object):
             try:
                 # we have to make sure we have a starting point for
                 # the type hierarchy, for now that is PersistableType
-                assert self.get(PersistableType, name='PersistableType')
+                assert self.get(type, name='PersistableType')
             except:
                 self.add(PersistableType)
 
