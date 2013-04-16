@@ -1,6 +1,8 @@
 import decimal
 from datetime import datetime
 
+import pytest
+
 from orp.connection import get_connection
 from orp.persistence import Storage
 from orp.types import PersistableType, Persistable
@@ -32,11 +34,18 @@ class Related(Relationship):
     str_attr = String()
 
 
+def test_add_fails_on_no_persistable():
+    store = Storage(conn_uri)
+
+    with pytest.raises(TypeError):
+        store.add(object())
+
+
 def test_simple_add_and_get_meta_type():
     store = Storage(conn_uri)
 
     store.add(PersistableType)
-    result = store.get(PersistableType, name='PersistableType')
+    result = store.get(type, name='PersistableType')
     assert result is PersistableType
 
 
@@ -74,7 +83,6 @@ def test_attributes():
 
     store.add(thing)
 
-    store._init_caches()
     queried_thing = store.get(Thing, id=thing.id)
 
     assert queried_thing.id == thing.id

@@ -1,0 +1,4 @@
+flake8==2.0
+pylint==0.27.0
+pytest==2.3.4
+pytest-cov==1.6
