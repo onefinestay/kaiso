@@ -201,13 +201,11 @@ def get_create_types_query(obj):
     '''
 
     lines = []
-    # we don't have a good starting node, so we just use PersistableType
-    # see the add() method, which ensures it exists.
-    objects = {'PersistableType': PersistableType}
+    objects = {'Persistable': Persistable}
 
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
         # this filters out the types, which we don't want to persist
-        if is_persistable(obj2):
+        if issubclass(obj2, Persistable):
             if isinstance(obj1, type):
                 name1 = obj1.__name__
             else:
@@ -240,12 +238,12 @@ def get_create_types_query(obj):
     keys, objects = zip(*objects.items())
 
     query = (
-        'START %s' % get_index_query(PersistableType),
+        'START %s' % get_index_query(Persistable),
         'CREATE UNIQUE')
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
     query = '\n'.join(query)
-
+    print query
     return query, objects, keys
 
 
@@ -308,6 +306,18 @@ class Storage(object):
         for value in row:
             yield self._convert_value(value)
 
+    def _root_exists(self):
+        try:
+            # we have to make sure we have a starting point for
+            # the type hierarchy, for now that is PersistableType
+            obj = self.get(PersistableType, name='Persistable')
+            if obj is not Persistable:
+                raise Exception("Db is broken")  # TODO: raise DbIsBroken()
+
+            return True
+        except:  # (IndexDoesn'texistYet or None returned)
+            return False
+
     def get(self, cls, **index_filter):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
@@ -363,19 +373,18 @@ class Storage(object):
             first(self._execute(query, rel_props=rel_props))
             return
 
-        if obj is PersistableType:
-            # create the PersistableType node.
-            # if we had a standard start node, we would not need this
-            query = 'CREATE (n {props}) RETURN n'
-            query_args = {'props': object_to_dict(PersistableType)}
-            objects = [PersistableType]
+        if obj is Persistable:
+            if self._root_exists():
+                return
+            else:
+                # create the PersistableType node.
+                # if we had a standard start node, we would not need this
+                query = 'CREATE (n {props}) RETURN n'
+                query_args = {'props': object_to_dict(Persistable)}
+                objects = [Persistable]
         else:
-            try:
-                # we have to make sure we have a starting point for
-                # the type hierarchy, for now that is PersistableType
-                assert self.get(PersistableType, name='PersistableType')
-            except:
-                self.add(PersistableType)
+            if not self._root_exists():
+                self.add(Persistable)
 
             query, objects, keys = get_create_types_query(obj)
 
@@ -398,6 +407,14 @@ class Storage(object):
                 index.add(key, value, node)
 
 
+def is_persistable_class(cls):
+    return issubclass(type(cls), PersistableType)
+
+
+def is_persistable_object(obj):
+    return issubclass(type(type(obj)), PersistableType)
+
+
 def is_persistable(obj):
     ''' Returns wether or not an the provided object is persistable.
 
@@ -409,8 +426,7 @@ def is_persistable(obj):
         False otherwise.
     '''
     return (
-        isinstance(obj, (Persistable, PersistableType)) or
-        (isinstance(obj, type) and issubclass(obj, PersistableType))
-        or issubclass(type(type(obj)), PersistableType)
+        is_persistable_class(obj) or
+        is_persistable_object(obj)
     )
 

@@ -34,19 +34,33 @@ class Related(Relationship):
     str_attr = String()
 
 
-def test_add_fails_on_no_persistable():
+def test_add_fails_on_non_persistable():
     store = Storage(conn_uri)
 
     with pytest.raises(TypeError):
         store.add(object())
 
+    with pytest.raises(TypeError):
+        store.add(PersistableType)
 
-def test_simple_add_and_get_meta_type():
+
+def test_add_persistable_only_adds_single_node():
     store = Storage(conn_uri)
 
-    store.add(PersistableType)
-    result = store.get(type, name='PersistableType')
-    assert result is PersistableType
+    store.add(Persistable)
+
+    result = list(store.query('START n=node(*) RETURN n'))
+    assert result == [(Persistable,)]
+
+
+def test_only_adds_persistable_once():
+    store = Storage(conn_uri)
+
+    store.add(Persistable)
+    store.add(Persistable)
+
+    result = list(store.query('START n=node(*) RETURN n'))
+    assert result == [(Persistable,)]
 
 
 def test_simple_add_and_get_type():
@@ -126,39 +140,6 @@ def test_relationship():
     assert queried_rel.end.id == thing2.id
 
 
-def test_type_hierarchy_meta():
-    store = Storage(conn_uri)
-
-    store.add(PersistableType)
-
-    query_str = """
-        START c = node(*)
-        RETURN c
-    """
-
-    rows = store.query(query_str)
-    result = list(rows)
-    assert result == [(PersistableType,)]
-
-
-def test_type_hierarchy_class():
-    store = Storage(conn_uri)
-
-    store.add(Persistable)
-
-    query_str = """
-        START base = node(*)
-        MATCH cls -[r]-> base
-        RETURN cls, r.__type__, base
-    """
-
-    rows = store.query(query_str)
-    result = set(rows)
-    assert result == {
-        (Persistable, 'InstanceOf', PersistableType)
-    }
-
-
 def test_type_hierarchy_object():
     store = Storage(conn_uri)
 
@@ -175,8 +156,6 @@ def test_type_hierarchy_object():
     result = set(rows)
 
     assert result == {
-        (Persistable, 'InstanceOf', PersistableType),
-        (Thing, 'InstanceOf', PersistableType),
         (Thing, 'IsA', Persistable),
         (str(obj.id), 'InstanceOf', Thing)
     }
@@ -212,16 +191,10 @@ def test_type_hierarchy_diamond():
     result = set(rows)
 
     assert result == {
-        (Persistable, 'InstanceOf', PersistableType),
-        (Thing, 'InstanceOf', PersistableType),
         (Thing, 'IsA', Persistable),
-        (Flavouring, 'InstanceOf', PersistableType),
         (Flavouring, 'IsA', Thing),
-        (Colouring, 'InstanceOf', PersistableType),
         (Colouring, 'IsA', Thing),
-        (Carmine, 'InstanceOf', PersistableType),
         (Carmine, 'IsA', Colouring),
-        (Beetroot, 'InstanceOf', PersistableType),
         (Beetroot, 'IsA', Flavouring),
         (Beetroot, 'IsA', Colouring),
         (str(beetroot.id), 'InstanceOf', Beetroot),
