@@ -1,7 +1,7 @@
 from orp.persistence import(
     object_to_dict, dict_to_object, get_type_relationships)
 from orp.relationships import Relationship, InstanceOf, IsA
-from orp.types import PersistableType, Persistable
+from orp.types import PersistableType, Persistable, AttributedBase
 
 
 class FooType(PersistableType):
@@ -91,7 +91,9 @@ def test_type_relationships():
         (type, InstanceOf, type),
         (PersistableType, IsA, type),
         (PersistableType, InstanceOf, type),
-        (Persistable, IsA, object),
+        (AttributedBase, IsA, object),
+        (AttributedBase, InstanceOf, PersistableType),
+        (Persistable, IsA, AttributedBase),
         (Persistable, InstanceOf, PersistableType),
     ]
 
@@ -104,7 +106,9 @@ def test_type_relationships():
         (type, InstanceOf, type),
         (PersistableType, IsA, type),
         (PersistableType, InstanceOf, type),
-        (Persistable, IsA, object),
+        (AttributedBase, IsA, object),
+        (AttributedBase, InstanceOf, PersistableType),
+        (Persistable, IsA, AttributedBase),
         (Persistable, InstanceOf, PersistableType),
         (pers, InstanceOf, Persistable),
     ]

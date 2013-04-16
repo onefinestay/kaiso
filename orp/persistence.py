@@ -201,30 +201,22 @@ def get_create_types_query(obj):
     '''
 
     lines = []
-    # we don't have a good starting node, so we just use PersistableType
-    # see the add() method, which ensures it exists.
-    objects = {'PersistableType': PersistableType}
+    objects = {'Persistable': Persistable}
 
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
         # this filters out the types, which we don't want to persist
-        if is_persistable(obj2):
+        if issubclass(obj2, Persistable):
             if isinstance(obj1, type):
                 name1 = obj1.__name__
             else:
                 name1 = 'new_obj'
-
-            name2 = obj2.__name__
 
             if name1 in objects:
                 abstr1 = name1
             else:
                 abstr1 = '(%s {%s_props})' % (name1, name1)
 
-            if name2 in objects:
-                abstr2 = name2
-            else:
-                # TODO: this code never gets executed
-                abstr2 = '(%s {%s_props})' % (name2, name2)
+            name2 = obj2.__name__
 
             objects[name1] = obj1
             objects[name2] = obj2
@@ -233,14 +225,14 @@ def get_create_types_query(obj):
             rel_type = rel_name.upper()
 
             ln = '%s -[:%s {%s_props}]-> %s' % (
-                abstr1, rel_type, rel_name, abstr2)
+                abstr1, rel_type, rel_name, name2)
 
             lines.append(ln)
 
     keys, objects = zip(*objects.items())
 
     query = (
-        'START %s' % get_index_query(PersistableType),
+        'START %s' % get_index_query(Persistable),
         'CREATE UNIQUE')
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
@@ -308,6 +300,18 @@ class Storage(object):
         for value in row:
             yield self._convert_value(value)
 
+    def _root_exists(self):
+        try:
+            # we have to make sure we have a starting point for
+            # the type hierarchy, for now that is PersistableType
+            obj = self.get(PersistableType, name='Persistable')
+            if obj is not Persistable:
+                raise Exception("Db is broken")  # TODO: raise DbIsBroken()
+
+            return True
+        except:  # (IndexDoesn'texistYet or None returned)
+            return False
+
     def get(self, cls, **index_filter):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
@@ -349,7 +353,7 @@ class Storage(object):
         Args:
             obj: The object to store.
         '''
-        if not is_persistable(obj):
+        if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
 
         if isinstance(obj, Relationship):
@@ -363,19 +367,18 @@ class Storage(object):
             first(self._execute(query, rel_props=rel_props))
             return
 
-        if obj is PersistableType:
-            # create the PersistableType node.
-            # if we had a standard start node, we would not need this
-            query = 'CREATE (n {props}) RETURN n'
-            query_args = {'props': object_to_dict(PersistableType)}
-            objects = [PersistableType]
+        if obj is Persistable:
+            if self._root_exists():
+                return
+            else:
+                # create the PersistableType node.
+                # if we had a standard start node, we would not need this
+                query = 'CREATE (n {props}) RETURN n'
+                query_args = {'props': object_to_dict(Persistable)}
+                objects = [Persistable]
         else:
-            try:
-                # we have to make sure we have a starting point for
-                # the type hierarchy, for now that is PersistableType
-                assert self.get(type, name='PersistableType')
-            except:
-                self.add(PersistableType)
+            if not self._root_exists():
+                self.add(Persistable)
 
             query, objects, keys = get_create_types_query(obj)
 
@@ -398,19 +401,16 @@ class Storage(object):
                 index.add(key, value, node)
 
 
-def is_persistable(obj):
-    ''' Returns wether or not an the provided object is persistable.
+def can_add(obj):
+    ''' Returns if an object can be added to the db.
 
-    Args:
-        obj: The object to test for persistablility.
-
-    Returns:
-        True if the object is persistable,
-        False otherwise.
+        We can add instances of Persistable or Relationship.
+        In addition it is also possible to add sub-classes of
+        Persistable.
     '''
     return (
-        isinstance(obj, (Persistable, PersistableType)) or
-        (isinstance(obj, type) and issubclass(obj, PersistableType))
-        or issubclass(type(type(obj)), PersistableType)
+        (isinstance(obj, type) and issubclass(obj, Persistable)) or
+        isinstance(obj, Persistable) or
+        isinstance(obj, Relationship)
     )
 
