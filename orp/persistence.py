@@ -211,18 +211,12 @@ def get_create_types_query(obj):
             else:
                 name1 = 'new_obj'
 
-            name2 = obj2.__name__
-
             if name1 in objects:
                 abstr1 = name1
             else:
                 abstr1 = '(%s {%s_props})' % (name1, name1)
 
-            if name2 in objects:
-                abstr2 = name2
-            else:
-                # TODO: this code never gets executed
-                abstr2 = '(%s {%s_props})' % (name2, name2)
+            name2 = obj2.__name__
 
             objects[name1] = obj1
             objects[name2] = obj2
@@ -231,7 +225,7 @@ def get_create_types_query(obj):
             rel_type = rel_name.upper()
 
             ln = '%s -[:%s {%s_props}]-> %s' % (
-                abstr1, rel_type, rel_name, abstr2)
+                abstr1, rel_type, rel_name, name2)
 
             lines.append(ln)
 
@@ -359,7 +353,7 @@ class Storage(object):
         Args:
             obj: The object to store.
         '''
-        if not is_persistable(obj):
+        if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
 
         if isinstance(obj, Relationship):
@@ -407,26 +401,16 @@ class Storage(object):
                 index.add(key, value, node)
 
 
-def is_persistable_class(cls):
-    return issubclass(type(cls), PersistableType)
+def can_add(obj):
+    ''' Returns if an object can be added to the db.
 
-
-def is_persistable_object(obj):
-    return issubclass(type(type(obj)), PersistableType)
-
-
-def is_persistable(obj):
-    ''' Returns wether or not an the provided object is persistable.
-
-    Args:
-        obj: The object to test for persistablility.
-
-    Returns:
-        True if the object is persistable,
-        False otherwise.
+        We can add instances of Persistable or Relationship.
+        In addition it is also possible to add sub-classes of
+        Persistable.
     '''
     return (
-        is_persistable_class(obj) or
-        is_persistable_object(obj)
+        (isinstance(obj, type) and issubclass(obj, Persistable)) or
+        isinstance(obj, Persistable) or
+        isinstance(obj, Relationship)
     )
 

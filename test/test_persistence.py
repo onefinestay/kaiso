@@ -43,6 +43,12 @@ def test_add_fails_on_non_persistable():
     with pytest.raises(TypeError):
         store.add(PersistableType)
 
+    with pytest.raises(TypeError):
+        store.add(Relationship)
+
+    with pytest.raises(TypeError):
+        store.add(Related)
+
 
 def test_add_persistable_only_adds_single_node():
     store = Storage(conn_uri)
