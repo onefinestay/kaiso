@@ -243,7 +243,7 @@ def get_create_types_query(obj):
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
     query = '\n'.join(query)
-    print query
+
     return query, objects, keys
 
 
