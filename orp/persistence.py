@@ -316,7 +316,7 @@ class Storage(object):
         )
 
         rows = self.query(query)
-        related_objects = (related_obj for (related_obj, ) in rows)
+        related_objects = (related_obj for (related_obj,) in rows)
 
         return related_objects
 
@@ -392,6 +392,13 @@ class Storage(object):
 
             set_store_for_object(obj, self)
 
+    def clear(self):
+        """ Removes all nodes, relationships and indexes in the store. """
+        self._conn.clear()
+        for index_name in self._conn.get_indexes(neo4j.Node).keys():
+            self._conn.delete_index(neo4j.Node, index_name)
+        for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
+            self._conn.delete_index(neo4j.Relationship, index_name)
 
 def can_add(obj):
     """ Returns True if obj can be added to the db.
