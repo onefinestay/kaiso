@@ -1,4 +1,4 @@
-"""Provides functions and classes to get information about persistable
+""" Provides functions and classes to get information about persistable
 objects and their types.
 
 
@@ -57,20 +57,11 @@ def register_type(cls):
     return cls
 
 
-def is_attribute(obj):
-    """ Returns if an obj is an Attribute.
-
-    Args:
-        obj: The object to test if it is an isinstance of Attribute.
-
-    Returns:
-        True if it is an Attribute instance,
-        False otherwise.
-    """
+def _is_attribute(obj):
     return isinstance(obj, Attribute)
 
 
-def is_relationship_reference(obj):
+def _is_relationship_reference(obj):
     return isinstance(obj, RelationshipReference)
 
 
@@ -123,8 +114,8 @@ class Descriptor(object):
         self.cls = cls
         self.type_name = cls.__name__
 
-        members = getmembers(cls, is_attribute)
-        relationships = getmembers(cls, is_relationship_reference)
+        members = getmembers(cls, _is_attribute)
+        relationships = getmembers(cls, _is_relationship_reference)
 
         self.members = dict(members)
         self.relationships = dict(relationships)

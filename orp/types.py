@@ -1,4 +1,4 @@
-from orp.descriptors import register_type, get_descriptor, is_attribute
+from orp.descriptors import register_type, get_descriptor
 
 register_type(type)
 register_type(object)
@@ -16,8 +16,9 @@ class PersistableType(type):
     def __init__(cls, name, bases, dct):
         super(PersistableType, cls).__init__(name, bases, dct)
 
+        descriptor = get_descriptor(cls)
         for name, attr in dct.items():
-            if is_attribute(attr):
+            if name in descriptor.members:
                 # TODO: assert not hasattr(attr._declared_on) ?
                 attr.declared_on = cls
 
