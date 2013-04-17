@@ -2,7 +2,7 @@ from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
-    get_descriptor, get_named_descriptor, get_indexes)
+    get_descriptor, get_descriptor_by_name, get_indexes)
 from orp.iter_helpers import unique
 from orp.query import encode_query_values
 from orp.references import set_store_for_object
@@ -77,12 +77,12 @@ def dict_to_object(properties):
     """
 
     type_name = properties['__type__']
-    descriptor = get_named_descriptor(type_name)
+    descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
 
     if issubclass(cls, type):
-        obj = get_named_descriptor(properties['name']).cls
+        obj = get_descriptor_by_name(properties['name']).cls
     else:
         obj = cls.__new__(cls)
 
@@ -284,9 +284,9 @@ class Storage(object):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
 
-        # MJB: can we consider a different signature that avoids this assert?
-        # MJB: something like:
-        # MJB: def get(self, cls, (key, value)):
+        # TODO: can we consider a different signature that avoids this assert?
+        # TODO: something like:
+        # TODO: def get(self, cls, (key, value)):
         assert len(index_filter) == 1, "only one index allowed at a time"
         key, value = index_filter.items()[0]
 
@@ -394,7 +394,7 @@ class Storage(object):
 
 
 def can_add(obj):
-    """ Returns whether or not an object can be added to the db.
+    """ Returns True if obj can be added to the db.
 
         We can add instances of Persistable or Relationship.
         In addition it is also possible to add sub-classes of
@@ -402,7 +402,6 @@ def can_add(obj):
     """
     return (
         (isinstance(obj, type) and issubclass(obj, Persistable)) or
-        # we could also just use isinstanceof(AttributedBase) for the rest
         isinstance(obj, Persistable) or
         isinstance(obj, Relationship)
     )

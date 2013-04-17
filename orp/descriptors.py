@@ -29,7 +29,7 @@ def get_descriptor(cls):
     return _descriptors[cls.__name__]
 
 
-def get_named_descriptor(name):
+def get_descriptor_by_name(name):
     """ Returns a descriptor given it's registered name.
 
     Args:
@@ -42,7 +42,7 @@ def get_named_descriptor(name):
 
 
 def register_type(cls):
-    """ Registers a class for wich one can get a descriptor.
+    """ Registers a class for type introspection.
 
     This function can be used as a class decorator to register a class.
 
@@ -55,14 +55,6 @@ def register_type(cls):
     descriptor = Descriptor(cls)
     _descriptors[cls.__name__] = descriptor
     return cls
-
-
-def _is_attribute(obj):
-    return isinstance(obj, Attribute)
-
-
-def _is_relationship_reference(obj):
-    return isinstance(obj, RelationshipReference)
 
 
 def get_index_name(cls):
@@ -84,7 +76,7 @@ def get_indexes(obj):
         obj: A persistable object.
 
     Returns:
-        Tuples (index_name, key, value) which can be used to index an object.
+        Generator yielding tuples (index_name, key, value)
     """
 
     obj_type = type(obj)
@@ -102,6 +94,14 @@ def get_indexes(obj):
                 key = name
                 value = attr.to_db(getattr(obj, name))
                 yield (index_name, key, value)
+
+
+def _is_attribute(obj):
+    return isinstance(obj, Attribute)
+
+
+def _is_relationship_reference(obj):
+    return isinstance(obj, RelationshipReference)
 
 
 class Descriptor(object):

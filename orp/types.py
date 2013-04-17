@@ -24,7 +24,11 @@ class PersistableType(type):
 
 
 class AttributedBase(object):
-    # MJB: Docstring please
+    """ The base class for objects that can have Attributes.
+
+    Sets default values during instance creation and applies kwargs
+    passed to __init__.
+    """
     __metaclass__ = PersistableType
 
     def __new__(cls, *args, **kwargs):
