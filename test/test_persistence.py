@@ -1,22 +1,13 @@
 import decimal
 from datetime import datetime
 
+import iso8601
 import pytest
 
-from orp.connection import get_connection
-from orp.persistence import Storage
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship
 from orp.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
-
-
-conn_uri = 'http://localhost:7474/db/data'
-
-
-def setup_function(fn):
-    conn = get_connection(conn_uri)
-    conn.clear()
 
 
 class Thing(Persistable):
@@ -34,76 +25,144 @@ class Related(Relationship):
     str_attr = String()
 
 
-def test_add_fails_on_non_persistable():
-    store = Storage(conn_uri)
+@pytest.mark.usefixtures('storage')
+def test_add_fails_on_non_persistable(storage):
 
     with pytest.raises(TypeError):
-        store.add(object())
+        storage.add(object())
 
     with pytest.raises(TypeError):
-        store.add(PersistableType)
+        storage.add(PersistableType)
 
     with pytest.raises(TypeError):
-        store.add(Relationship)
+        storage.add(Relationship)
 
     with pytest.raises(TypeError):
-        store.add(Related)
+        storage.add(Related)
 
 
-def test_add_persistable_only_adds_single_node():
-    store = Storage(conn_uri)
+@pytest.mark.usefixtures('storage')
+def test_add_persistable_only_adds_single_node(storage):
 
-    store.add(Persistable)
+    storage.add(Persistable)
 
-    result = list(store.query('START n=node(*) RETURN n'))
+    result = list(storage.query('START n=node(*) RETURN n'))
     assert result == [(Persistable,)]
 
 
-def test_only_adds_persistable_once():
-    store = Storage(conn_uri)
+@pytest.mark.usefixtures('storage')
+def test_only_adds_persistable_once(storage):
 
-    store.add(Persistable)
-    store.add(Persistable)
+    storage.add(Persistable)
+    storage.add(Persistable)
 
-    result = list(store.query('START n=node(*) RETURN n'))
+    result = list(storage.query('START n=node(*) RETURN n'))
     assert result == [(Persistable,)]
 
 
-def test_simple_add_and_get_type():
-    store = Storage(conn_uri)
+@pytest.mark.usefixtures('storage')
+def test_only_adds_types_once(storage):
+    thing1 = Thing()
+    thing2 = Thing()
 
-    store.add(Thing)
+    storage.add(thing1)
+    storage.add(thing2)
 
-    result = store.get(PersistableType, name='Thing')
+    rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+
+    result = set(item for (item,) in rows)
+
+    assert result == {Persistable, Thing, str(thing1.id), str(thing2.id)}
+
+
+@pytest.mark.usefixtures('storage')
+def test_simple_add_and_get_type(storage):
+
+    storage.add(Thing)
+
+    result = storage.get(PersistableType, name='Thing')
 
     assert result is Thing
 
 
-def test_simple_add_and_get_instance():
-    store = Storage(conn_uri)
-
+@pytest.mark.usefixtures('storage')
+def test_simple_add_and_get_instance(storage):
     thing = Thing()
-    store.add(thing)
+    storage.add(thing)
 
-    queried_thing = store.get(Thing, id=thing.id)
+    queried_thing = storage.get(Thing, id=thing.id)
 
     assert type(queried_thing) == Thing
     assert queried_thing.id == thing.id
 
 
-def test_attributes():
-    store = Storage(conn_uri)
+@pytest.mark.usefixtures('storage')
+def test_delete_instance(storage):
+    thing = Thing()
+    storage.add(thing)
+
+    storage.delete(thing)
+
+    # we are expecting the types to stay in place
+    rows = storage.query('START n=node(*) RETURN n')
+    result = set(item for (item,) in rows)
+    assert result == {Persistable, Thing}
+
+
+@pytest.mark.usefixtures('storage')
+def test_delete_relationship(storage):
+    thing1 = Thing()
+    thing2 = Thing()
+    rel = Related(thing1, thing2)
+
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(rel)
+
+    storage.delete(rel)
+
+    rows = storage.query('''
+        START n1 = node(*)
+        MATCH n1 -[r]-> n2
+        RETURN COALESCE(n1.id?, n1), r.__type__, n2
+    ''')
+
+    result = set(rows)
+
+    assert result == {
+        (Thing, 'IsA', Persistable),
+        (str(thing1.id), 'InstanceOf', Thing),
+        (str(thing2.id), 'InstanceOf', Thing),
+    }
+
+
+@pytest.mark.usefixtures('storage')
+def test_delete_class(storage):
+    thing = Thing()
+    storage.add(thing)
+
+    storage.delete(Thing)
+
+    # we are expecting the instances to stay in place
+    rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    result = set(item for (item,) in rows)
+
+    assert result == {Persistable, str(thing.id)}
+
+
+@pytest.mark.usefixtures('storage')
+def test_attributes(storage):
 
     thing = Thing(bool_attr=True, init_attr=7)
     thing.float_attr = 3.14
     thing.str_attr = 'spam'
     thing.dec_attr = decimal.Decimal('99.55')
-    thing.dt_attr = datetime(2001, 2, 3, 16, 17)
+    thing.dt_attr = iso8601.parse_date("2001-02-03 16:17:00")
     thing.ch_attr = 'b'
 
-    store.add(thing)
+    storage.add(thing)
 
-    queried_thing = store.get(Thing, id=thing.id)
+    queried_thing = storage.get(Thing, id=thing.id)
 
     assert queried_thing.id == thing.id
     assert queried_thing.bool_attr == thing.bool_attr
@@ -111,23 +170,22 @@ def test_attributes():
     assert queried_thing.float_attr == thing.float_attr
     assert queried_thing.str_attr == thing.str_attr
     assert queried_thing.dec_attr == thing.dec_attr
-    # assert queried_thing.dt_attr == thing.dt_attr
+    assert queried_thing.dt_attr == thing.dt_attr
     assert queried_thing.ch_attr == thing.ch_attr
 
 
-def test_relationship():
-    store = Storage(conn_uri)
-
+@pytest.mark.usefixtures('storage')
+def test_relationship(storage):
     thing1 = Thing()
     thing2 = Thing()
 
     rel = Related(thing1, thing2, str_attr='5cal')
 
-    store.add(thing1)
-    store.add(thing2)
-    store.add(rel)
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(rel)
 
-    rows = store.query('''
+    rows = storage.query('''
         START n1 = node:thing(id={id})
         MATCH n1 -[r:RELATED]-> n2
         RETURN n1, r, n2
@@ -146,11 +204,10 @@ def test_relationship():
     assert queried_rel.end.id == thing2.id
 
 
-def test_type_hierarchy_object():
-    store = Storage(conn_uri)
-
+@pytest.mark.usefixtures('storage')
+def test_type_hierarchy_object(storage):
     obj = Thing()
-    store.add(obj)
+    storage.add(obj)
 
     query_str = """
         START base = node(*)
@@ -158,7 +215,7 @@ def test_type_hierarchy_object():
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
 
-    rows = store.query(query_str)
+    rows = storage.query(query_str)
     result = set(rows)
 
     assert result == {
@@ -167,7 +224,8 @@ def test_type_hierarchy_object():
     }
 
 
-def test_type_hierarchy_diamond():
+@pytest.mark.usefixtures('storage')
+def test_type_hierarchy_diamond(storage):
     class Flavouring(Thing):
         pass
 
@@ -180,20 +238,18 @@ def test_type_hierarchy_diamond():
     class Beetroot(Flavouring, Colouring):
         pass
 
-    store = Storage(conn_uri)
-
     beetroot = Beetroot()
-    store.add(beetroot)
+    storage.add(beetroot)
 
     carmine = Carmine()
-    store.add(carmine)
+    storage.add(carmine)
 
     query_str = """
         START base = node(*)
         MATCH obj -[r]-> base
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
-    rows = store.query(query_str)
+    rows = storage.query(query_str)
     result = set(rows)
 
     assert result == {
@@ -206,26 +262,3 @@ def test_type_hierarchy_diamond():
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
-
-
-def _test_identity():
-    store = Storage(conn_uri)
-    thing = Thing()
-    store.add(thing)
-
-    thing_id = thing.id
-
-    getted_thing = store.get(Thing, id=thing_id)
-
-    rows = store.query('''
-        START n = node:thing(id={id})
-        RETURN n
-    ''', id=thing_id)
-
-    rows = list(rows)
-
-    queried_thing = rows[0][0]
-
-    assert thing is getted_thing
-    assert thing is queried_thing
-

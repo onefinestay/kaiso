@@ -19,7 +19,6 @@ def encode_value(value):
 
     return value
 
-# MJB: I'd prefer to call argument ``data`` or ``data_dict`` to avoid the
-# MJB: railing underscore (and the likelihood of forgetting it)
-def encode_query_values(dict_):
-    return {k: encode_value(v) for k, v in dict_.items()}
+
+def encode_query_values(data):
+    return {k: encode_value(v) for k, v in data.items()}
