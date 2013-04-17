@@ -1,14 +1,18 @@
 from functools import wraps
+import logging
 
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
+from orp.exceptions import UniqueConstraintError
 from orp.query import encode_query_values
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship, InstanceOf, IsA
 
+
+_log = logging.getLogger(__name__)
 
 def first(items):
     ''' Returns the first item of an iterable object.
@@ -241,6 +245,25 @@ def get_create_types_query(obj):
     return query, objects, keys
 
 
+def _get_changes(old, new):
+    """Return a changes dictionary containing the key/values in new that are
+       different from old. Any key in old that is not in new will have a None
+       value in the None dictionary"""
+    changes = {}
+
+    # check for any keys that have changed, put their new value in
+    for key, value in new.items():
+        if old.get(key) != value:
+            changes[key] = value
+
+    # if a key has dissappeared in new, put a None in changes, which
+    # will remove it in neo
+    for key in old.keys():
+        if key not in new:
+            changes[key] = None
+
+    return changes
+
 class Storage(object):
     ''' Provides a queryable object store.
 
@@ -330,6 +353,102 @@ class Storage(object):
         obj = self._convert_value(node)
         return obj
 
+    def _get_by_unique(self, obj):
+        """Return a list of any existing data from the database that
+           matches any of the given objects' unique indexes. """
+
+        found = []
+        indexes = get_indexes(obj)
+
+        if isinstance(obj, Relationship):
+            start_func = 'rel'
+        else:
+            start_func = 'node'
+
+        for index in indexes:
+            index_name, index_key, index_val = index
+            start_clause = 'x={}:{}({}="{}")'.format(
+                start_func, index_name, index_key, index_val
+            )
+
+            query = '''START {}
+                       RETURN x'''.format(start_clause)
+
+            try:
+                result = self._execute(query, node_props=object_to_dict(obj))
+                result = list(result)
+            except cypher.CypherError as exc:
+                if exc.exception != 'MissingIndexException':
+                    raise
+                # MissingIndexException is ok, treat as no result
+            else:
+                if result:
+                    found.append(first(first(result)))
+
+        return found
+
+    def replace(self, persistable):
+        """Store the given persistable in the graph database. If a matching
+           object (by unique keys) already exists, replace it with the
+           given one"""
+        props = object_to_dict(persistable)
+
+        if isinstance(persistable, Relationship):
+            pass
+
+        elif isinstance(persistable, Persistable):
+            # but not a relationship
+            start_clauses = []
+            return_clauses = []
+
+            # check for any existing nodes
+            indexes = get_indexes(persistable)
+            if not indexes:
+                raise NoIndexesError("Can't replace an object with no indexes")
+
+            existing = self._get_by_unique(persistable)
+
+            print 'existing', existing
+            if existing:
+                # all the nodes returned should be the same
+                for node in existing:
+                    if node.id != existing[0].id:
+                        raise UniqueConstraintError("Can't create {} as"
+                            "existing data contain values "
+                            "that must be unique: {} vs {}".format(
+                                persistable, node, existing[0]))
+
+                # we have one existing node and all the unique indexes match
+
+                # if the rest of the properties are the same,
+                # we have nothing to do
+                existing_node = self._convert_value(existing[0])
+                existing_props = object_to_dict(existing_node)
+                if existing_props == props:
+                    _log.debug('replace returning existing value %s',
+                        existing_node)
+                    return existing_node
+
+                # otherwise update with new properties
+
+                start_clause = get_index_query(existing_node, 'n')
+                changes = _get_changes(old=existing_props, new=props)
+
+                set_clauses = ['n.%s={%s}' % (key, key)
+                    for key in changes]
+                set_clause = ','.join(set_clauses)
+
+                query = '''START %s
+                           SET %s
+                           RETURN n''' % (start_clause, set_clause)
+
+                result = self._execute(query, **changes)
+                return first(first(result))
+
+            # if we get this far, there's no existing node, and
+            # we should create a new one
+            return self.add(persistable)
+
     def query(self, query, **params):
         ''' Queries the store given a parameterized cypher query.
 
@@ -355,6 +474,13 @@ class Storage(object):
         '''
         if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
+
+        existing = self._get_by_unique(obj)
+
+        if (not obj is Persistable) and existing:
+            raise UniqueConstraintError(
+                'Can not add {}s as {} exist'.format(obj, existing)
+            )
 
         if isinstance(obj, Relationship):
             rel_props = object_to_dict(obj)
