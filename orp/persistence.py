@@ -392,8 +392,11 @@ class Storage(object):
 
             set_store_for_object(obj, self)
 
-    def clear(self):
-        """ Removes all nodes, relationships and indexes in the store. """
+    def delete_all_data(self):
+        """ Removes all nodes, relationships and indexes in the store.
+        
+            WARNING: This will destroy everything in your Neo4j database.
+        """
         self._conn.clear()
         for index_name in self._conn.get_indexes(neo4j.Node).keys():
             self._conn.delete_index(neo4j.Node, index_name)
