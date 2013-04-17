@@ -393,7 +393,7 @@ class Storage(object):
             set_store_for_object(obj, self)
 
     def delete(self, obj):
-        """ Deletes and object from the store.
+        """ Deletes an object from the store.
 
         Args:
             obj: The object to store.
