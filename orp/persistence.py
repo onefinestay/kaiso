@@ -414,11 +414,8 @@ class Storage(object):
 
             query = self._make_create_relationship_query(persistable,
                 unique=True)
-            _log.warning(query)
-            print query
             result = self._execute(query, rel_props=props)
             result = list(result)
-            import pytest; pytest.set_trace()
 
         elif isinstance(persistable, Persistable):
             if not has_indexes:
