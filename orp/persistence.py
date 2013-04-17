@@ -392,9 +392,27 @@ class Storage(object):
 
             set_store_for_object(obj, self)
 
+    def delete(self, obj):
+        """ Deletes an object from the store.
+
+        Args:
+            obj: The object to store.
+        """
+
+        if isinstance(obj, Relationship):
+            query = 'START {}, {} MATCH n1 -[rel]-> n2 DELETE rel'.format(
+                get_index_query(obj.start, 'n1'),
+                get_index_query(obj.end, 'n2'),
+            )
+        else:
+            query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
+                get_index_query(obj, 'obj'))
+
+        cypher.execute(self._conn, query)
+
     def delete_all_data(self):
         """ Removes all nodes, relationships and indexes in the store.
-        
+
             WARNING: This will destroy everything in your Neo4j database.
         """
         self._conn.clear()
@@ -402,6 +420,7 @@ class Storage(object):
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
+
 
 def can_add(obj):
     """ Returns True if obj can be added to the db.
