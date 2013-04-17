@@ -3,6 +3,7 @@ import os
 from mock import patch
 import pytest
 
+import orp.connection
 from orp.connection import get_connection, TempConnectionError
 
 
@@ -35,7 +36,7 @@ def test_temp_connection_custom():
 
 
 def test_temp_connection_timeout():
-    with patch('orp.connection.TIMEOUT', new_callable=lambda: 0):
+    with patch.object(orp.connection, 'TIMEOUT', 0):
         with pytest.raises(TempConnectionError):
             get_connection('temp://8888')
 
