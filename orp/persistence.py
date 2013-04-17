@@ -316,7 +316,7 @@ class Storage(object):
         )
 
         rows = self.query(query)
-        related_objects = (related_obj for (related_obj, ) in rows)
+        related_objects = (related_obj for (related_obj,) in rows)
 
         return related_objects
 
@@ -409,6 +409,17 @@ class Storage(object):
                 get_index_query(obj, 'obj'))
 
         cypher.execute(self._conn, query)
+
+    def delete_all_data(self):
+        """ Removes all nodes, relationships and indexes in the store.
+
+            WARNING: This will destroy everything in your Neo4j database.
+        """
+        self._conn.clear()
+        for index_name in self._conn.get_indexes(neo4j.Node).keys():
+            self._conn.delete_index(neo4j.Node, index_name)
+        for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
+            self._conn.delete_index(neo4j.Relationship, index_name)
 
 
 def can_add(obj):
