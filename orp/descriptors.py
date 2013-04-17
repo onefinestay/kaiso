@@ -1,7 +1,6 @@
 from inspect import getmembers
 
-from orp.attributes import Attribute
-from orp.references import RelationshipReference
+from orp.attributes import Attribute, RelationshipReference
 
 
 _descriptors = {}

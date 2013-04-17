@@ -1,7 +1,6 @@
 import pytest
 
-from orp.attributes import Uuid
-from orp.references import Incoming, Outgoing, many
+from orp.attributes import Uuid, Incoming, Outgoing, many
 from orp.relationships import Relationship
 from orp.types import Persistable
 

@@ -1,7 +1,48 @@
 import decimal
 import uuid
+from weakref import WeakKeyDictionary
 
 import iso8601
+
+
+_object_storage_map = WeakKeyDictionary()
+many = '*'
+
+
+def set_store_for_object(obj, store):
+    _object_storage_map[obj] = store
+
+
+def get_store_for_object(obj):
+    return _object_storage_map[obj]
+
+
+class RelationshipReference(object):
+    def __init__(self, relationship_class, min, max):
+        self.relationship_class = relationship_class
+        self.min = min
+        self.max = max
+
+    def get(self, instance):
+        store = get_store_for_object(instance)
+
+        objects = store.get_related_objects(
+            self.relationship_class, type(self), instance)
+
+        objects = (obj for (obj, ) in objects)
+
+        if self.max <= 1:
+            return next(objects, None)
+        else:
+            return objects
+
+
+class Outgoing(RelationshipReference):
+    pass
+
+
+class Incoming(RelationshipReference):
+    pass
 
 
 class Attribute(object):
@@ -83,4 +124,3 @@ class Choice(String):
         # again, super(Choice) vs Choice.__init__
         super(Choice, self).__init__(**kwargs)
         self.choices = choices
-

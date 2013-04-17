@@ -5,7 +5,7 @@ from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
 from orp.iter_helpers import unique
 from orp.query import encode_query_values
-from orp.references import set_store_for_object, Outgoing, Incoming
+from orp.attributes import set_store_for_object, Outgoing, Incoming
 from orp.relationships import InstanceOf, IsA
 from orp.types import PersistableType, Persistable, Relationship
 
