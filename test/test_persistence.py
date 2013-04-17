@@ -1,6 +1,7 @@
 import decimal
 from datetime import datetime
 
+import iso8601
 import pytest
 
 from orp.types import PersistableType, Persistable
@@ -103,7 +104,7 @@ def test_delete_instance(storage):
     storage.delete(thing)
 
     # we are expecting the types to stay in place
-    rows = storage.query('START n=node(*) RETURN n)')
+    rows = storage.query('START n=node(*) RETURN n')
     result = set(item for (item,) in rows)
     assert result == {Persistable, Thing}
 
@@ -115,7 +116,7 @@ def test_delete_relationship(storage):
     rel = Related(thing1, thing2)
 
     storage.add(thing1)
-    storage.add(thing1)
+    storage.add(thing2)
     storage.add(rel)
 
     storage.delete(rel)
@@ -140,7 +141,7 @@ def test_delete_class(storage):
     thing = Thing()
     storage.add(thing)
 
-    storage.delete(thing)
+    storage.delete(Thing)
 
     # we are expecting the instances to stay in place
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
@@ -156,7 +157,7 @@ def test_attributes(storage):
     thing.float_attr = 3.14
     thing.str_attr = 'spam'
     thing.dec_attr = decimal.Decimal('99.55')
-    thing.dt_attr = datetime(2001, 2, 3, 16, 17)
+    thing.dt_attr = iso8601.parse_date("2001-02-03 16:17:00")
     thing.ch_attr = 'b'
 
     storage.add(thing)
@@ -169,7 +170,7 @@ def test_attributes(storage):
     assert queried_thing.float_attr == thing.float_attr
     assert queried_thing.str_attr == thing.str_attr
     assert queried_thing.dec_attr == thing.dec_attr
-    # assert queried_thing.dt_attr == thing.dt_attr
+    assert queried_thing.dt_attr == thing.dt_attr
     assert queried_thing.ch_attr == thing.ch_attr
 
 

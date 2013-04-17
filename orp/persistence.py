@@ -399,8 +399,17 @@ class Storage(object):
             obj: The object to store.
         """
 
-        query = 'START {} DELETE obj'.format(get_index_query(obj, 'obj'))
-        self.execute
+        if isinstance(obj, Relationship):
+            query = 'START {}, {} MATCH n1 -[rel]-> n2 DELETE rel'.format(
+                get_index_query(obj.start, 'n1'),
+                get_index_query(obj.end, 'n2'),
+            )
+        else:
+            query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
+                get_index_query(obj, 'obj'))
+
+        cypher.execute(self._conn, query)
+
 
 def can_add(obj):
     """ Returns True if obj can be added to the db.
