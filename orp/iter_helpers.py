@@ -21,4 +21,3 @@ def unique(fn):
                 items.add(item)
                 yield item
     return wrapped
-

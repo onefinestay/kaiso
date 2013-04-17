@@ -406,4 +406,3 @@ def can_add(obj):
         isinstance(obj, Persistable) or
         isinstance(obj, Relationship)
     )
-

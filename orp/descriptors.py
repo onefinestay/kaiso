@@ -140,4 +140,3 @@ class Descriptor(object):
         else:
             attr = self.members[attr_name]
             return get_index_name(attr.declared_on)
-
