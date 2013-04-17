@@ -4,12 +4,8 @@ from orp.relationships import Relationship, InstanceOf, IsA
 from orp.types import PersistableType, Persistable, AttributedBase
 
 
-class FooType(PersistableType):
+class Foo(Persistable):
     pass
-
-
-class Foo(object):
-    __metaclass__ = FooType
 
 
 def test_types_to_dict():
@@ -18,12 +14,6 @@ def test_types_to_dict():
 
     obj = dict_to_object(dct)
     assert obj is PersistableType
-
-    dct = object_to_dict(FooType)
-    assert dct == {'__type__': 'type', 'name': 'FooType'}
-
-    obj = dict_to_object(dct)
-    assert obj is FooType
 
 
 def test_classes_to_dict():
@@ -34,7 +24,7 @@ def test_classes_to_dict():
     assert obj is Persistable
 
     dct = object_to_dict(Foo)
-    assert dct == {'__type__': 'FooType', 'name': 'Foo'}
+    assert dct == {'__type__': 'PersistableType', 'name': 'Foo'}
 
     obj = dict_to_object(dct)
     assert obj is Foo
@@ -122,11 +112,11 @@ def test_type_relationships():
         (type, InstanceOf, type),
         (PersistableType, IsA, type),
         (PersistableType, InstanceOf, type),
-        (FooType, IsA, PersistableType),
-        (FooType, InstanceOf, type),
-        (Foo, IsA, object),
-        (Foo, InstanceOf, FooType),
+        (AttributedBase, IsA, object),
+        (AttributedBase, InstanceOf, PersistableType),
+        (Persistable, IsA, AttributedBase),
+        (Persistable, InstanceOf, PersistableType),
+        (Foo, IsA, Persistable),
+        (Foo, InstanceOf, PersistableType),
         (foo, InstanceOf, Foo),
     ]
-
-

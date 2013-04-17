@@ -1,51 +1,18 @@
-from functools import wraps
-
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
-    get_descriptor, get_named_descriptor, get_indexes)
+    get_descriptor, get_descriptor_by_name, get_indexes)
+from orp.iter_helpers import unique
 from orp.query import encode_query_values
-from orp.types import PersistableType, Persistable
-from orp.relationships import Relationship, InstanceOf, IsA
-
-
-def first(items):
-    ''' Returns the first item of an iterable object.
-
-    Args:
-        items: An iterable object
-
-    Returns:
-        The first item from items.
-    '''
-    return iter(items).next()
-
-
-def unique(fn):
-    ''' Wraps a function to return only unique items.
-    The wrapped function must return an iterable object.
-    When the wrapped function is called, each item from the iterable
-    will be yielded only once and duplicates will be ignored.
-
-    Args:
-        fn: The function to be wrapped.
-
-    Returns:
-        A wrapper function for fn.
-    '''
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        items = set()
-        for item in fn(*args, **kwargs):
-            if item not in items:
-                items.add(item)
-                yield item
-    return wrapped
+from orp.references import set_store_for_object
+from orp.attributes import Outgoing, Incoming
+from orp.relationships import InstanceOf, IsA
+from orp.types import PersistableType, Persistable, Relationship
 
 
 def object_to_dict(obj):
-    ''' Converts a persistable object to a dict.
+    """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value will
     be the type_name as given by the descriptor for type(obj).
@@ -68,7 +35,7 @@ def object_to_dict(obj):
             '__type__': 'Persistable',
             'attr1' : 1234
         }
-    '''
+    """
     obj_type = type(obj)
 
     descr = get_descriptor(obj_type)
@@ -88,7 +55,7 @@ def object_to_dict(obj):
 
 
 def dict_to_object(properties):
-    ''' Converts a dict into a persistable object.
+    """ Converts a dict into a persistable object.
 
     The properties dict needs at least a __type__ key containing the name of
     any registered class.
@@ -107,15 +74,15 @@ def dict_to_object(properties):
 
     Returns:
         A persistable object.
-    '''
+    """
 
     type_name = properties['__type__']
-    descriptor = get_named_descriptor(type_name)
+    descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
 
     if issubclass(cls, type):
-        obj = get_named_descriptor(properties['name']).cls
+        obj = get_descriptor_by_name(properties['name']).cls
     else:
         obj = cls.__new__(cls)
 
@@ -134,7 +101,7 @@ def dict_to_object(properties):
 
 @unique
 def get_type_relationships(obj):
-    ''' Generates a list of the type relationships of an object.
+    """ Generates a list of the type relationships of an object.
     e.g.
         get_type_relationships(Persistable())
 
@@ -153,7 +120,7 @@ def get_type_relationships(obj):
     Returns:
         A generator, generating tuples
             (object, relatsionship type, related obj)
-    '''
+    """
     obj_type = type(obj)
 
     if obj_type is not type:
@@ -170,7 +137,7 @@ def get_type_relationships(obj):
 
 
 def get_index_query(obj, name=None):
-    ''' Returns a node lookup by index as used by the START clause.
+    """ Returns a node lookup by index as used by the START clause.
 
     Args:
         obj: An object to create a index lookup.
@@ -178,19 +145,19 @@ def get_index_query(obj, name=None):
                 If name is None obj.__name__ will be used.
     Returns:
         A string with index lookup of a cypher START clause.
-    '''
+    """
 
     if name is None:
         name = obj.__name__
 
-    index_name, key, value = first(get_indexes(obj))
+    index_name, key, value = next(get_indexes(obj))
 
     query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
     return query
 
 
 def get_create_types_query(obj):
-    ''' Returns a CREATE UNIQUE query for an entire type hierarchy.
+    """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Args:
         obj: An object to create a type hierarchy for.
@@ -198,7 +165,7 @@ def get_create_types_query(obj):
     Returns:
         A tuple containing:
         (cypher query, objects to create nodes for, the object names).
-    '''
+    """
 
     lines = []
     objects = {'Persistable': Persistable}
@@ -242,7 +209,7 @@ def get_create_types_query(obj):
 
 
 class Storage(object):
-    ''' Provides a queryable object store.
+    """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
     This includes instances of Persistable, PersistableType
@@ -250,17 +217,17 @@ class Storage(object):
 
     InstanceOf and IsA relationships are automatically generated,
     when persisting an object.
-    '''
+    """
     def __init__(self, connection_uri):
-        ''' Initializes a Storage object.
+        """ Initializes a Storage object.
 
         Args:
             connection_uri: A URI used to connect to the graph database.
-        '''
+        """
         self._conn = get_connection(connection_uri)
 
     def _execute(self, query, **params):
-        ''' Runs a cypher query returning only raw rows of data.
+        """ Runs a cypher query returning only raw rows of data.
 
         Args:
             query: A parameterized cypher query.
@@ -268,14 +235,14 @@ class Storage(object):
 
         Returns:
             A generator with the raw rows returned by the connection.
-        '''
+        """
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
             yield row
 
     def _convert_value(self, value):
-        ''' Converts a py2neo primitive(Node, Relationship, basic object)
+        """ Converts a py2neo primitive(Node, Relationship, basic object)
         to an equvalent python object.
         Any value which cannot be converted, will be returned as is.
 
@@ -284,7 +251,7 @@ class Storage(object):
 
         Returns:
             The converted value.
-        '''
+        """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
             obj = dict_to_object(properties)
@@ -292,7 +259,8 @@ class Storage(object):
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
-
+            else:
+                set_store_for_object(obj, self)
             return obj
         return value
 
@@ -316,9 +284,9 @@ class Storage(object):
         index_filter = encode_query_values(index_filter)
         descriptor = get_descriptor(cls)
 
-        # MJB: can we consider a different signature that avoids this assert?
-        # MJB: something like:
-        # MJB: def get(self, cls, (key, value)):
+        # TODO: can we consider a different signature that avoids this assert?
+        # TODO: something like:
+        # TODO: def get(self, cls, (key, value)):
         assert len(index_filter) == 1, "only one index allowed at a time"
         key, value = index_filter.items()[0]
 
@@ -330,8 +298,30 @@ class Storage(object):
         obj = self._convert_value(node)
         return obj
 
+    def get_related_objects(self, rel_cls, ref_cls, obj):
+
+        if ref_cls is Outgoing:
+            rel_query = 'n -[:{}]-> related'
+        elif ref_cls is Incoming:
+            rel_query = 'n <-[:{}]- related'
+
+        # TODO: should get the rel name from descriptor?
+        rel_query = rel_query.format(rel_cls.__name__.upper())
+
+        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
+
+        query = query.format(
+            idx_lookup=get_index_query(obj, 'n'),
+            rel_query=rel_query
+        )
+
+        rows = self.query(query)
+        related_objects = (related_obj for (related_obj, ) in rows)
+
+        return related_objects
+
     def query(self, query, **params):
-        ''' Queries the store given a parameterized cypher query.
+        """ Queries the store given a parameterized cypher query.
 
         Args:
             query: A parameterized cypher query.
@@ -339,20 +329,20 @@ class Storage(object):
 
         Returns:
             A generator with tuples containing stored objects or values.
-        '''
+        """
         params = encode_query_values(params)
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
     def add(self, obj):
-        ''' Adds an object to the data store.
+        """ Adds an object to the data store.
 
         It will automatically generate the type relationships
         for the the object as required and store the object itself.
 
         Args:
             obj: The object to store.
-        '''
+        """
         if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
 
@@ -364,7 +354,7 @@ class Storage(object):
                 get_index_query(obj.end, 'n2'),
                 rel_props['__type__'].upper(),
             )
-            first(self._execute(query, rel_props=rel_props))
+            next(self._execute(query, rel_props=rel_props))
             return
 
         if obj is Persistable:
@@ -390,7 +380,7 @@ class Storage(object):
             for key, obj in zip(keys, objects):
                 query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = first(self._execute(query, **query_args))
+        nodes = next(self._execute(query, **query_args))
 
         # index all the created nodes
         # infact, we are indexing all nodes, created or not ;-(
@@ -400,17 +390,18 @@ class Storage(object):
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
                 index.add(key, value, node)
 
+            set_store_for_object(obj, self)
+
 
 def can_add(obj):
-    ''' Returns whether or not an object can be added to the db.
+    """ Returns True if obj can be added to the db.
 
         We can add instances of Persistable or Relationship.
         In addition it is also possible to add sub-classes of
         Persistable.
-    '''
+    """
     return (
         (isinstance(obj, type) and issubclass(obj, Persistable)) or
         isinstance(obj, Persistable) or
         isinstance(obj, Relationship)
     )
-

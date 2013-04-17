@@ -3,25 +3,19 @@ import uuid
 
 import iso8601
 
-
-class Attribute(object):
-    def __init__(self, unique=False):
-        self.unique = unique
-
-    @staticmethod
-    def to_python(value):
-        return value
-
-    @staticmethod
-    def to_db(value):
-        return value
+from orp.attributes.bases import (
+    Attribute, DefaultableAttribute, RelationshipReference, )
 
 
-class DefaultableAttribute(Attribute):
-    def __init__(self, default=None, unique=False):
-        # do we have a preference for using super() over <BaseClass>.<method> ?
-        super(DefaultableAttribute, self).__init__(unique)
-        self.default = default
+many = '*'
+
+
+class Outgoing(RelationshipReference):
+    pass
+
+
+class Incoming(RelationshipReference):
+    pass
 
 
 class Uuid(Attribute):
@@ -83,4 +77,3 @@ class Choice(String):
         # again, super(Choice) vs Choice.__init__
         super(Choice, self).__init__(**kwargs)
         self.choices = choices
-

@@ -69,6 +69,22 @@ def test_only_adds_persistable_once():
     assert result == [(Persistable,)]
 
 
+def test_only_adds_types_once():
+    store = Storage(conn_uri)
+
+    thing1 = Thing()
+    thing2 = Thing()
+
+    store.add(thing1)
+    store.add(thing2)
+
+    rows = store.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+
+    result = set(item for (item,) in rows)
+
+    assert result == {Persistable, Thing, str(thing1.id), str(thing2.id)}
+
+
 def test_simple_add_and_get_type():
     store = Storage(conn_uri)
 
