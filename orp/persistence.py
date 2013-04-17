@@ -373,7 +373,6 @@ class Storage(object):
 
             query = '''START {}
                        RETURN x'''.format(start_clause)
-
             try:
                 result = self._execute(query, node_props=object_to_dict(obj))
                 result = list(result)
@@ -387,19 +386,42 @@ class Storage(object):
 
         return found
 
+    def _make_create_relationship_query(self, rel, unique=False):
+        rel_props = object_to_dict(rel)
+        maybe_unique =  'UNIQUE' if unique else ''
+        query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
+        query = query % (
+            get_index_query(rel.start, 'n1'),
+            get_index_query(rel.end, 'n2'),
+            maybe_unique,
+            rel_props['__type__'].upper(),
+        )
+
+        return query
+
     def replace(self, persistable):
         """Store the given persistable in the graph database. If a matching
            object (by unique keys) already exists, replace it with the
            given one"""
         props = object_to_dict(persistable)
+        indexes = get_indexes(persistable)
+        has_indexes = bool(next(indexes, False))
 
         if isinstance(persistable, Relationship):
-            pass
+            if has_indexes:
+                raise NotImplementedError('Relationships are not yet '
+                    'being indexed')
+
+            query = self._make_create_relationship_query(persistable,
+                unique=True)
+            _log.warning(query)
+            print query
+            result = self._execute(query, rel_props=props)
+            result = list(result)
+            import pytest; pytest.set_trace()
 
         elif isinstance(persistable, Persistable):
-            # check for any existing nodes
-            indexes = get_indexes(persistable)
-            if not next(indexes, None):
+            if not has_indexes:
                 raise NoIndexesError("Can't replace an object with no indexes")
 
             existing = self._get_by_unique(persistable)
@@ -420,8 +442,6 @@ class Storage(object):
                 existing_node = self._convert_value(existing[0])
                 existing_props = object_to_dict(existing_node)
                 if existing_props == props:
-                    _log.debug('replace returning existing value %s',
-                        existing_node)
                     return existing_node
 
                 # otherwise update with new properties
@@ -478,14 +498,8 @@ class Storage(object):
             )
 
         if isinstance(obj, Relationship):
-            rel_props = object_to_dict(obj)
-            query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
-            query = query % (
-                get_index_query(obj.start, 'n1'),
-                get_index_query(obj.end, 'n2'),
-                rel_props['__type__'].upper(),
-            )
-            first(self._execute(query, rel_props=rel_props))
+            query = self._make_create_relationship_query(obj)
+            first(self._execute(query, rel_props=object_to_dict(obj)))
             return
 
         if obj is Persistable:

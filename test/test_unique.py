@@ -6,20 +6,24 @@ import pytest
 from orp.connection import get_connection
 from orp.exceptions import UniqueConstraintError, NoIndexesError
 from orp.persistence import Storage
-from orp.types import PersistableType, Persistable
+from orp.types import PersistableType, Persistable, Relationship
 from orp.attributes import Integer, String
 
 conn_uri = 'http://localhost:7474/db/data'
 
 
-
 class NoIndexThing(Persistable):
     field_a = String()
+
 
 class UniqueThing(Persistable):
     id = Integer(unique=True)
     code = String(unique=True)
     extra = String()
+
+
+class Follows(Relationship):
+    pass
 
 
 class TestReplace(object):
@@ -119,5 +123,24 @@ class TestReplace(object):
             {'code': String(unique=True)})
 
         obj = RandomThing(code='a')
-
         self.store.add(obj)
+
+    def test_rel_uniqueness(self):
+        obj1 = UniqueThing(id=1, code='A', extra='lunch')
+        obj2 = UniqueThing(id=2, code='B', extra='snacks')
+        self.store.replace(obj1)
+        self.store.replace(obj2)
+
+        follow_rel1 = Follows(obj1, obj2)
+        self.store.replace(follow_rel1)
+
+        follow_rel2 = Follows(obj1, obj2)
+        self.store.replace(follow_rel2)
+
+        result = self.store.query('''
+            START n = node:uniquething(id="1")
+            MATCH n-[r:FOLLOWS]->()
+            RETURN r''')
+
+        result = list(result)
+        assert len(result) == 1
