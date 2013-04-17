@@ -1,6 +1,10 @@
 import os
 
-from orp.connection import get_connection
+from mock import patch
+import pytest
+
+import orp.connection
+from orp.connection import get_connection, TempConnectionError
 
 
 def test_temp_connection_defaults():
@@ -29,3 +33,12 @@ def test_temp_connection_custom():
     conn = get_connection('temp://{}{}'.format(port, data_dir))
     assert conn.__uri__ == "http://localhost:{}/db/data/".format(port)
     assert os.path.exists(data_dir)
+
+
+def test_temp_connection_timeout():
+    with patch.object(orp.connection, 'TIMEOUT', 0):
+        with pytest.raises(TempConnectionError):
+            get_connection('temp://8888')
+
+
+

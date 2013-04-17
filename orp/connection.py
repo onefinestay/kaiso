@@ -16,6 +16,10 @@ _temporary_databases = {}
 TIMEOUT = 30  # seconds
 
 
+class TempConnectionError(Exception):
+    pass
+
+
 def get_neo4j_info():
     ''' Gets runtime information from the neo4j command.
 
@@ -108,10 +112,10 @@ def temp_neo4j_instance(uri):
 
     # the startup process is async so we monitor the http interface to know
     # when to allow the test runner to continue
-    started = time.time()
+    timeout_time = time.time() + TIMEOUT
     url = "http://localhost:{}/db/data/".format(port)
 
-    while time.time() < started + TIMEOUT:
+    while time.time() < timeout_time:
         try:
             req = requests.get(url)
             if "neo4j_version" in req.text:
@@ -120,8 +124,11 @@ def temp_neo4j_instance(uri):
         except requests.ConnectionError:
             time.sleep(0.2)
 
-    logger.critical('Unable to start Neo4j: timeout after {} '
-                    'seconds. See logs in {}.'.format(TIMEOUT, temp_data_dir))
+    logger.critical(
+        'Unable to start Neo4j: timeout after %s '
+        'seconds. See logs in %s.', TIMEOUT, temp_data_dir)
+
+    raise TempConnectionError(url)
 
 
 def get_connection(uri):
