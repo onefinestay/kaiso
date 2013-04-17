@@ -7,8 +7,6 @@ register_type(object)
 @register_type
 class PersistableType(type):
     def __new__(mcs, name, bases, dct):
-        # This is only required for subclasses of PersistableType
-        register_type(mcs)
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         register_type(cls)
         return cls

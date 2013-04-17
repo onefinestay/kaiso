@@ -60,6 +60,5 @@ class Attribute(object):
 
 class DefaultableAttribute(Attribute):
     def __init__(self, default=None, unique=False):
-        # do we have a preference for using super() over <BaseClass>.<method>?
         super(DefaultableAttribute, self).__init__(unique)
         self.default = default

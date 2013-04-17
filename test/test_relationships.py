@@ -23,7 +23,6 @@ def test_rel_attributes(storage):
     box2 = Box()
     contains = Contains(box1, box2)
 
-    # box1.contained_within = box1
     storage.add(box1)
     storage.add(box2)
     storage.add(contains)
