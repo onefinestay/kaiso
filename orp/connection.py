@@ -46,7 +46,7 @@ def temp_neo4j_instance(uri):
     """
 
     # split the uri
-    match = re.match("temp://?(?P<port>\d*)(?P<temp_dir>.*)", uri)
+    match = re.match(r"temp://?(?P<port>\d*)(?P<temp_dir>.*)", uri)
 
     neo4j_info = get_neo4j_info()
 
