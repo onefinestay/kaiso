@@ -1,47 +1,14 @@
-from functools import wraps
-
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
+from orp.iter_helpers import unique
 from orp.query import encode_query_values
-from orp.types import PersistableType, Persistable
-from orp.relationships import Relationship, InstanceOf, IsA
-
-
-def first(items):
-    ''' Returns the first item of an iterable object.
-
-    Args:
-        items: An iterable object
-
-    Returns:
-        The first item from items.
-    '''
-    return iter(items).next()
-
-
-def unique(fn):
-    ''' Wraps a function to return only unique items.
-    The wrapped function must return an iterable object.
-    When the wrapped function is called, each item from the iterable
-    will be yielded only once and duplicates will be ignored.
-
-    Args:
-        fn: The function to be wrapped.
-
-    Returns:
-        A wrapper function for fn.
-    '''
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        items = set()
-        for item in fn(*args, **kwargs):
-            if item not in items:
-                items.add(item)
-                yield item
-    return wrapped
+from orp.references import set_store_for_object
+from orp.attributes import Outgoing, Incoming
+from orp.relationships import InstanceOf, IsA
+from orp.types import PersistableType, Persistable, Relationship
 
 
 def object_to_dict(obj):
@@ -183,7 +150,7 @@ def get_index_query(obj, name=None):
     if name is None:
         name = obj.__name__
 
-    index_name, key, value = first(get_indexes(obj))
+    index_name, key, value = next(get_indexes(obj))
 
     query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
     return query
@@ -292,7 +259,8 @@ class Storage(object):
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
-
+            else:
+                set_store_for_object(obj, self)
             return obj
         return value
 
@@ -330,6 +298,25 @@ class Storage(object):
         obj = self._convert_value(node)
         return obj
 
+    def get_related_objects(self, rel_cls, ref_cls, obj):
+
+        if ref_cls is Outgoing:
+            rel_query = 'n -[:{}]-> related'
+        elif ref_cls is Incoming:
+            rel_query = 'n <-[:{}]- related'
+
+        # TODO: should get the rel name from descriptor?
+        rel_query = rel_query.format(rel_cls.__name__.upper())
+
+        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
+
+        query = query.format(
+            idx_lookup=get_index_query(obj, 'n'),
+            rel_query=rel_query
+        )
+
+        return self.query(query)
+
     def query(self, query, **params):
         ''' Queries the store given a parameterized cypher query.
 
@@ -364,7 +351,7 @@ class Storage(object):
                 get_index_query(obj.end, 'n2'),
                 rel_props['__type__'].upper(),
             )
-            first(self._execute(query, rel_props=rel_props))
+            next(self._execute(query, rel_props=rel_props))
             return
 
         if obj is Persistable:
@@ -390,7 +377,7 @@ class Storage(object):
             for key, obj in zip(keys, objects):
                 query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = first(self._execute(query, **query_args))
+        nodes = next(self._execute(query, **query_args))
 
         # index all the created nodes
         # infact, we are indexing all nodes, created or not ;-(
@@ -399,6 +386,8 @@ class Storage(object):
             for index_name, key, value in indexes:
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
                 index.add(key, value, node)
+
+            set_store_for_object(obj, self)
 
 
 def can_add(obj):
@@ -410,6 +399,7 @@ def can_add(obj):
     '''
     return (
         (isinstance(obj, type) and issubclass(obj, Persistable)) or
+        # we could also just use isinstanceof(AttributedBase) for the rest
         isinstance(obj, Persistable) or
         isinstance(obj, Relationship)
     )
