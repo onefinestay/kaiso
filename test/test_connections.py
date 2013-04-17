@@ -1,8 +1,10 @@
 import os
 
+from mock import patch
 import pytest
 
-from orp.connection import get_connection
+import orp.connection
+from orp.connection import get_connection, TempConnectionError
 
 
 @pytest.mark.slow
@@ -35,3 +37,9 @@ def test_temp_connection_custom():
     conn = get_connection('temp://{}{}'.format(port, data_dir))
     assert conn.__uri__ == "http://localhost:{}/db/data/".format(port)
     assert os.path.exists(data_dir)
+
+
+def test_temp_connection_timeout():
+    with patch.object(orp.connection, 'TIMEOUT', 0):
+        with pytest.raises(TempConnectionError):
+            get_connection('temp://8888')

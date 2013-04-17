@@ -1,4 +1,4 @@
-""" Provides all the excpetions that may be raised.
+""" Provides all the exceptions that may be raised.
 """
 
 

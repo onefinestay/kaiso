@@ -2,7 +2,7 @@
 objects and their types.
 
 
-The functions are mainly used by the persistence and provide:
+The functions are mainly used by the persistence module and provide:
 
 * information about attributes declared on class
 * indexes for an object, their index names, keys and values
