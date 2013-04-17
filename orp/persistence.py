@@ -459,7 +459,8 @@ class Storage(object):
 
             # if we get this far, there's no existing node, and
             # we should create a new one
-            return self.add(persistable)
+            self.add(persistable)
+            return persistable
 
     def query(self, query, **params):
         ''' Queries the store given a parameterized cypher query.
