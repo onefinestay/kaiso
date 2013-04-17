@@ -15,5 +15,5 @@ def storage(request):
     from orp.persistence import Storage
     neo4j_uri = request.config.getoption('neo4j_uri')
     storage = Storage(neo4j_uri)
-    storage.clear()
+    storage.delete_all_data()
     return storage
