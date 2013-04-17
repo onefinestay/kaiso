@@ -4,27 +4,6 @@ import uuid
 import iso8601
 
 
-class RelationshipReference(object):
-    def __init__(self, relationship_class, min, max):
-        self.relationship_class = relationship_class
-        self.min = min
-        self.max = max
-
-    def get(self, instance):
-        if self.max <= 1:
-            return instance
-        else:
-            return [instance]
-
-
-class Outgoing(RelationshipReference):
-    pass
-
-
-class Incoming(RelationshipReference):
-    pass
-
-
 class Attribute(object):
     def __init__(self, unique=False):
         self.unique = unique
@@ -40,7 +19,7 @@ class Attribute(object):
 
 class DefaultableAttribute(Attribute):
     def __init__(self, default=None, unique=False):
-        # do we have a preference for using super() over <BaseClass>.<method> ?
+        # do we have a preference for using super() over <BaseClass>.<method>?
         super(DefaultableAttribute, self).__init__(unique)
         self.default = default
 

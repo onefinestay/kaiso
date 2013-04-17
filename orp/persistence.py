@@ -1,47 +1,13 @@
-from functools import wraps
-
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
+from orp.iter_helpers import first, unique
 from orp.query import encode_query_values
-from orp.types import PersistableType, Persistable
-from orp.relationships import Relationship, InstanceOf, IsA
-
-
-def first(items):
-    ''' Returns the first item of an iterable object.
-
-    Args:
-        items: An iterable object
-
-    Returns:
-        The first item from items.
-    '''
-    return iter(items).next()
-
-
-def unique(fn):
-    ''' Wraps a function to return only unique items.
-    The wrapped function must return an iterable object.
-    When the wrapped function is called, each item from the iterable
-    will be yielded only once and duplicates will be ignored.
-
-    Args:
-        fn: The function to be wrapped.
-
-    Returns:
-        A wrapper function for fn.
-    '''
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        items = set()
-        for item in fn(*args, **kwargs):
-            if item not in items:
-                items.add(item)
-                yield item
-    return wrapped
+from orp.references import set_store_for_object, Outgoing, Incoming
+from orp.relationships import InstanceOf, IsA
+from orp.types import PersistableType, Persistable, Relationship
 
 
 def object_to_dict(obj):
@@ -292,7 +258,8 @@ class Storage(object):
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
-
+            else:
+                set_store_for_object(obj, self)
             return obj
         return value
 
@@ -329,6 +296,25 @@ class Storage(object):
 
         obj = self._convert_value(node)
         return obj
+
+    def get_related_objects(self, rel_cls, ref_cls, obj):
+
+        if ref_cls is Outgoing:
+            rel_query = 'n -[:{}]-> related'
+        elif ref_cls is Incoming:
+            rel_query = 'n <-[:{}]- related'
+
+        # TODO: should get the rel name from descriptor?
+        rel_query = rel_query.format(rel_cls.__name__.upper())
+
+        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
+
+        query = query.format(
+            idx_lookup=get_index_query(obj, 'n'),
+            rel_query=rel_query
+        )
+
+        return self.query(query)
 
     def query(self, query, **params):
         ''' Queries the store given a parameterized cypher query.
@@ -400,6 +386,8 @@ class Storage(object):
                 index = self._conn.get_or_create_index(neo4j.Node, index_name)
                 index.add(key, value, node)
 
+            set_store_for_object(obj, self)
+
 
 def can_add(obj):
     ''' Returns whether or not an object can be added to the db.
@@ -410,6 +398,7 @@ def can_add(obj):
     '''
     return (
         (isinstance(obj, type) and issubclass(obj, Persistable)) or
+        # we could also just use isinstanceof(AttributedBase) for the rest
         isinstance(obj, Persistable) or
         isinstance(obj, Relationship)
     )

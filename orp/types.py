@@ -6,8 +6,8 @@ register_type(object)
 
 @register_type
 class PersistableType(type):
-    # MJB: Docstring please
     def __new__(meta, name, bases, dct):
+        # This is only required for subclasses of PersistableType
         register_type(meta)
         cls = super(PersistableType, meta).__new__(meta, name, bases, dct)
         register_type(cls)
@@ -57,7 +57,6 @@ class Persistable(AttributedBase):
 
 
 class Relationship(AttributedBase):
-
     def __init__(self, start, end, **kwargs):
         super(Relationship, self).__init__(**kwargs)
 

@@ -1,7 +1,8 @@
 import pytest
 
-from orp.attributes import Uuid, Outgoing, Incoming
-from orp.relationships import Relationship, many
+from orp.attributes import Uuid
+from orp.references import Incoming, Outgoing, many, RelatedObjectNotFound
+from orp.relationships import Relationship
 from orp.types import Persistable
 
 
@@ -14,6 +15,8 @@ class Box(Persistable):
 
     contains = Outgoing(Contains, 0, many)
     contained_within = Incoming(Contains, 0, 1)
+
+    contains_single = Outgoing(Contains, 1, 1)
 
 
 @pytest.mark.usefixtures('storage')
@@ -31,12 +34,20 @@ def test_rel_attributes(storage):
     assert box2.contained_within.id == box1.id
 
 
+@pytest.mark.usefixtures('storage')
 def test_empty_rel_attributes(storage):
     box = Box()
 
     storage.add(box)
 
-    assert len(box.contains) == 0
+    assert len(list(box.contains)) == 0
     assert box.contained_within is None
 
-# TODO: test for creation bug
+
+@pytest.mark.usefixtures('storage')
+def test_missing_rel_raises(storage):
+    box = Box()
+
+    storage.add(box)
+    with pytest.raises(RelatedObjectNotFound):
+        box.contains_single
