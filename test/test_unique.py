@@ -1,10 +1,12 @@
 import decimal
 from datetime import datetime
+import random
+import string
 
 import pytest
 
 from orp.connection import get_connection
-from orp.exceptions import UniqueConstraintError
+from orp.exceptions import UniqueConstraintError, NoIndexesError
 from orp.persistence import Storage
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship
@@ -14,6 +16,10 @@ from orp.attributes import (
 
 conn_uri = 'http://localhost:7474/db/data'
 
+
+
+class NoIndexThing(Persistable):
+    field_a = String()
 
 class UniqueThing(Persistable):
     id = Integer(unique=True)
@@ -103,3 +109,20 @@ class TestReplace(object):
         assert len(rows) == 1
         assert rows[0][0].extra is None
 
+    def test_cant_replace_non_indexed(self):
+        obj1 = NoIndexThing(field='a')
+        with pytest.raises(NoIndexesError):
+            self.store.replace(obj1)
+
+    def test_no_existing_index(self):
+        name = ''.join(random.choice(string.ascii_letters) for i in range(20))
+
+        # we have no way of removing indexes from the db, so create a new
+        # type that we haven't seen before to test the case where
+        # the index does not exist
+        RandomThing = PersistableType(name, (Persistable,),
+            {'code': String(unique=True)})
+
+        obj = RandomThing(code='a')
+
+        self.store.add(obj)

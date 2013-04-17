@@ -6,7 +6,7 @@ from py2neo import cypher, neo4j
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
-from orp.exceptions import UniqueConstraintError
+from orp.exceptions import NoIndexesError, UniqueConstraintError
 from orp.query import encode_query_values
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship, InstanceOf, IsA
@@ -403,7 +403,7 @@ class Storage(object):
 
             # check for any existing nodes
             indexes = get_indexes(persistable)
-            if not indexes:
+            if not next(indexes, None):
                 raise NoIndexesError("Can't replace an object with no indexes")
 
             existing = self._get_by_unique(persistable)
