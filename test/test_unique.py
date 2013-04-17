@@ -1,5 +1,3 @@
-import decimal
-from datetime import datetime
 import random
 import string
 
@@ -9,10 +7,7 @@ from orp.connection import get_connection
 from orp.exceptions import UniqueConstraintError, NoIndexesError
 from orp.persistence import Storage
 from orp.types import PersistableType, Persistable
-from orp.relationships import Relationship
-from orp.attributes import (
-    Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
-
+from orp.attributes import Integer, String
 
 conn_uri = 'http://localhost:7474/db/data'
 

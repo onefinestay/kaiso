@@ -397,10 +397,6 @@ class Storage(object):
             pass
 
         elif isinstance(persistable, Persistable):
-            # but not a relationship
-            start_clauses = []
-            return_clauses = []
-
             # check for any existing nodes
             indexes = get_indexes(persistable)
             if not next(indexes, None):
@@ -408,7 +404,6 @@ class Storage(object):
 
             existing = self._get_by_unique(persistable)
 
-            print 'existing', existing
             if existing:
                 # all the nodes returned should be the same
                 for node in existing:
