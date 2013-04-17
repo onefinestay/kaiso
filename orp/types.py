@@ -6,14 +6,16 @@ register_type(object)
 
 @register_type
 class PersistableType(type):
-    def __new__(meta, name, bases, dct):
+    def __new__(mcs, name, bases, dct):
         # This is only required for subclasses of PersistableType
-        register_type(meta)
-        cls = super(PersistableType, meta).__new__(meta, name, bases, dct)
+        register_type(mcs)
+        cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         register_type(cls)
         return cls
 
     def __init__(cls, name, bases, dct):
+        super(PersistableType, cls).__init__(name, bases, dct)
+
         for name, attr in dct.items():
             if is_attribute(attr):
                 # TODO: assert not hasattr(attr._declared_on) ?
@@ -26,7 +28,7 @@ class AttributedBase(object):
 
     def __new__(cls, *args, **kwargs):
 
-        obj = super(AttributedBase, cls).__new__(cls)
+        obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
         # setup default values for attributes
         descriptor = get_descriptor(cls)
