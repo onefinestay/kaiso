@@ -1,3 +1,9 @@
+""" Provides a connection factory for connecting to existing or
+temporary neo4j instances.
+
+For temporary instances it requires the neo4j command
+to be available on the path.
+"""
 import os
 import re
 import time
@@ -17,11 +23,11 @@ TIMEOUT = 30  # seconds
 
 
 def get_neo4j_info():
-    ''' Gets runtime information from the neo4j command.
+    """ Gets runtime information from the neo4j command.
 
     Returns:
         A dict.
-    '''
+    """
     output = subprocess.check_output(['neo4j', 'info'])
 
     keys = ['NEO4J_HOME', 'NEO4J_INSTANCE', 'JAVA_OPTS', 'CLASSPATH']
@@ -40,9 +46,8 @@ def get_neo4j_info():
 
 
 def temp_neo4j_instance(uri):
-    """
-    Start or return an existing instance of the neo4j graph database server
-    using the given URI
+    """ Start or return an existing instance of the neo4j graph database server
+    using the given URI.
     """
 
     # split the uri

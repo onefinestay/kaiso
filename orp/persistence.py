@@ -12,7 +12,7 @@ from orp.types import PersistableType, Persistable, Relationship
 
 
 def object_to_dict(obj):
-    ''' Converts a persistable object to a dict.
+    """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value will
     be the type_name as given by the descriptor for type(obj).
@@ -35,7 +35,7 @@ def object_to_dict(obj):
             '__type__': 'Persistable',
             'attr1' : 1234
         }
-    '''
+    """
     obj_type = type(obj)
 
     descr = get_descriptor(obj_type)
@@ -55,7 +55,7 @@ def object_to_dict(obj):
 
 
 def dict_to_object(properties):
-    ''' Converts a dict into a persistable object.
+    """ Converts a dict into a persistable object.
 
     The properties dict needs at least a __type__ key containing the name of
     any registered class.
@@ -74,7 +74,7 @@ def dict_to_object(properties):
 
     Returns:
         A persistable object.
-    '''
+    """
 
     type_name = properties['__type__']
     descriptor = get_named_descriptor(type_name)
@@ -101,7 +101,7 @@ def dict_to_object(properties):
 
 @unique
 def get_type_relationships(obj):
-    ''' Generates a list of the type relationships of an object.
+    """ Generates a list of the type relationships of an object.
     e.g.
         get_type_relationships(Persistable())
 
@@ -120,7 +120,7 @@ def get_type_relationships(obj):
     Returns:
         A generator, generating tuples
             (object, relatsionship type, related obj)
-    '''
+    """
     obj_type = type(obj)
 
     if obj_type is not type:
@@ -137,7 +137,7 @@ def get_type_relationships(obj):
 
 
 def get_index_query(obj, name=None):
-    ''' Returns a node lookup by index as used by the START clause.
+    """ Returns a node lookup by index as used by the START clause.
 
     Args:
         obj: An object to create a index lookup.
@@ -145,7 +145,7 @@ def get_index_query(obj, name=None):
                 If name is None obj.__name__ will be used.
     Returns:
         A string with index lookup of a cypher START clause.
-    '''
+    """
 
     if name is None:
         name = obj.__name__
@@ -157,7 +157,7 @@ def get_index_query(obj, name=None):
 
 
 def get_create_types_query(obj):
-    ''' Returns a CREATE UNIQUE query for an entire type hierarchy.
+    """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Args:
         obj: An object to create a type hierarchy for.
@@ -165,7 +165,7 @@ def get_create_types_query(obj):
     Returns:
         A tuple containing:
         (cypher query, objects to create nodes for, the object names).
-    '''
+    """
 
     lines = []
     objects = {'Persistable': Persistable}
@@ -209,7 +209,7 @@ def get_create_types_query(obj):
 
 
 class Storage(object):
-    ''' Provides a queryable object store.
+    """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
     This includes instances of Persistable, PersistableType
@@ -217,17 +217,17 @@ class Storage(object):
 
     InstanceOf and IsA relationships are automatically generated,
     when persisting an object.
-    '''
+    """
     def __init__(self, connection_uri):
-        ''' Initializes a Storage object.
+        """ Initializes a Storage object.
 
         Args:
             connection_uri: A URI used to connect to the graph database.
-        '''
+        """
         self._conn = get_connection(connection_uri)
 
     def _execute(self, query, **params):
-        ''' Runs a cypher query returning only raw rows of data.
+        """ Runs a cypher query returning only raw rows of data.
 
         Args:
             query: A parameterized cypher query.
@@ -235,14 +235,14 @@ class Storage(object):
 
         Returns:
             A generator with the raw rows returned by the connection.
-        '''
+        """
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
             yield row
 
     def _convert_value(self, value):
-        ''' Converts a py2neo primitive(Node, Relationship, basic object)
+        """ Converts a py2neo primitive(Node, Relationship, basic object)
         to an equvalent python object.
         Any value which cannot be converted, will be returned as is.
 
@@ -251,7 +251,7 @@ class Storage(object):
 
         Returns:
             The converted value.
-        '''
+        """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
             obj = dict_to_object(properties)
@@ -321,7 +321,7 @@ class Storage(object):
         return related_objects
 
     def query(self, query, **params):
-        ''' Queries the store given a parameterized cypher query.
+        """ Queries the store given a parameterized cypher query.
 
         Args:
             query: A parameterized cypher query.
@@ -329,20 +329,20 @@ class Storage(object):
 
         Returns:
             A generator with tuples containing stored objects or values.
-        '''
+        """
         params = encode_query_values(params)
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
     def add(self, obj):
-        ''' Adds an object to the data store.
+        """ Adds an object to the data store.
 
         It will automatically generate the type relationships
         for the the object as required and store the object itself.
 
         Args:
             obj: The object to store.
-        '''
+        """
         if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
 
@@ -394,12 +394,12 @@ class Storage(object):
 
 
 def can_add(obj):
-    ''' Returns whether or not an object can be added to the db.
+    """ Returns whether or not an object can be added to the db.
 
         We can add instances of Persistable or Relationship.
         In addition it is also possible to add sub-classes of
         Persistable.
-    '''
+    """
     return (
         (isinstance(obj, type) and issubclass(obj, Persistable)) or
         # we could also just use isinstanceof(AttributedBase) for the rest
