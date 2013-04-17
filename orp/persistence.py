@@ -392,6 +392,15 @@ class Storage(object):
 
             set_store_for_object(obj, self)
 
+    def delete(self, obj):
+        """ Deletes and object from the store.
+
+        Args:
+            obj: The object to store.
+        """
+
+        query = 'START {} DELETE obj'.format(get_index_query(obj, 'obj'))
+        self.execute
 
 def can_add(obj):
     """ Returns True if obj can be added to the db.
