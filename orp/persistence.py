@@ -3,7 +3,7 @@ from py2neo import cypher, neo4j
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_named_descriptor, get_indexes)
-from orp.iter_helpers import first, unique
+from orp.iter_helpers import unique
 from orp.query import encode_query_values
 from orp.references import set_store_for_object, Outgoing, Incoming
 from orp.relationships import InstanceOf, IsA
@@ -149,7 +149,7 @@ def get_index_query(obj, name=None):
     if name is None:
         name = obj.__name__
 
-    index_name, key, value = first(get_indexes(obj))
+    index_name, key, value = next(get_indexes(obj))
 
     query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
     return query
@@ -350,7 +350,7 @@ class Storage(object):
                 get_index_query(obj.end, 'n2'),
                 rel_props['__type__'].upper(),
             )
-            first(self._execute(query, rel_props=rel_props))
+            next(self._execute(query, rel_props=rel_props))
             return
 
         if obj is Persistable:
@@ -376,7 +376,7 @@ class Storage(object):
             for key, obj in zip(keys, objects):
                 query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = first(self._execute(query, **query_args))
+        nodes = next(self._execute(query, **query_args))
 
         # index all the created nodes
         # infact, we are indexing all nodes, created or not ;-(

@@ -1,18 +1,6 @@
 from functools import wraps
 
 
-def first(items):
-    ''' Returns the first item of an iterable object.
-
-    Args:
-        items: An iterable object
-
-    Returns:
-        The first item from items.
-    '''
-    return iter(items).next()
-
-
 def unique(fn):
     ''' Wraps a function to return only unique items.
     The wrapped function must return an iterable object.
