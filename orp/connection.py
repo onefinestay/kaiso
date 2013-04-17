@@ -3,6 +3,7 @@ import re
 import time
 import atexit
 import logging
+import requests
 import tempfile
 import subprocess
 
@@ -105,25 +106,22 @@ def temp_neo4j_instance(uri):
     # terminate subprocess at exit
     atexit.register(neo4j_process.terminate)
 
-    # the startup process is async so we monitor the logs to know when to allow
-    # the test runner to continue. wait a couple of seconds before we look for
-    # its logfile to make sure it's been created.
-    time.sleep(2)
+    # the startup process is async so we monitor the http interface to know
+    # when to allow the test runner to continue
     started = time.time()
-    with open(os.path.join(temp_data_dir, 'messages.log')) as logfile:
-        while time.time() < started + TIMEOUT:
-            line = logfile.readline()
-            if line:
-                if "Server started" in line:
-                    url = "http://localhost:{}/db/data/".format(port)
-                    logger.debug('neo4j server started on {}'.format(url))
-                    return url  # return REST API url
-                elif "SEVERE" in line:
-                    logger.critical('Unable to start Neo4j: {}'.line)
-            else:
-                time.sleep(0.2)
-        logger.critical('Unable to start Neo4j: timeout after {} '
-                        'seconds'.format(TIMEOUT))
+    url = "http://localhost:{}/db/data/".format(port)
+
+    while time.time() < started + TIMEOUT:
+        try:
+            req = requests.get(url)
+            if "neo4j_version" in req.text:
+                logger.debug('neo4j server started on {}'.format(url))
+                return url  # return REST API url
+        except requests.ConnectionError:
+            time.sleep(0.2)
+
+    logger.critical('Unable to start Neo4j: timeout after {} '
+                    'seconds. See logs in {}.'.format(TIMEOUT, temp_data_dir))
 
 
 def get_connection(uri):
