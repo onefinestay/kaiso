@@ -315,7 +315,10 @@ class Storage(object):
             rel_query=rel_query
         )
 
-        return self.query(query)
+        rows = self.query(query)
+        related_objects = (related_obj for (related_obj, ) in rows)
+
+        return related_objects
 
     def query(self, query, **params):
         ''' Queries the store given a parameterized cypher query.

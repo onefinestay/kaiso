@@ -55,7 +55,7 @@ class Persistable(AttributedBase):
         except KeyError:
             return object.__getattribute__(self, name)
         else:
-            return rel_reference.get(self)
+            return rel_reference.get_manager(self)
 
 
 class Relationship(AttributedBase):
