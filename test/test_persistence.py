@@ -3,6 +3,7 @@ from datetime import datetime
 
 import iso8601
 import pytest
+from py2neo import cypher
 
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship
@@ -151,6 +152,24 @@ def test_delete_class(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_delete_all_data(storage):
+    storage.add(Thing)
+
+    storage.delete_all_data()
+
+    rows = storage.query('START n=node(*) RETURN n')
+    assert len(list(rows)) == 0
+
+    rows = storage.query(
+        'START n=node:persistableype(name="Thing") RETURN n')
+
+    with pytest.raises(cypher.CypherError) as excinfo:
+        next(rows)
+
+    assert excinfo.value.exception == 'MissingIndexException'
+
+
+@pytest.mark.usefixtures('storage')
 def test_attributes(storage):
 
     thing = Thing(bool_attr=True, init_attr=7)
@@ -262,3 +281,5 @@ def test_type_hierarchy_diamond(storage):
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
+
+
