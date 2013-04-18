@@ -23,6 +23,7 @@ class Thing(Persistable):
 
 
 class Related(Relationship):
+    id = Uuid(unique=True)
     str_attr = String()
 
 
@@ -153,20 +154,31 @@ def test_delete_class(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_delete_all_data(storage):
-    storage.add(Thing)
+
+    thing1 = Thing()
+    thing2 = Thing()
+
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(Related(thing1, thing2))
 
     storage.delete_all_data()
 
     rows = storage.query('START n=node(*) RETURN n')
     assert len(list(rows)) == 0
 
-    rows = storage.query(
-        'START n=node:persistableype(name="Thing") RETURN n')
+    queries = (
+        'START n=node:persistableype(name="Thing") RETURN n',
+        'START r=relationship:related(id="spam") RETURN r',
+    )
 
-    with pytest.raises(cypher.CypherError) as excinfo:
-        next(rows)
+    for query in queries:
+        rows = storage.query(query)
 
-    assert excinfo.value.exception == 'MissingIndexException'
+        with pytest.raises(cypher.CypherError) as excinfo:
+            next(rows)
+
+        assert excinfo.value.exception == 'MissingIndexException'
 
 
 @pytest.mark.usefixtures('storage')
@@ -221,6 +233,31 @@ def test_relationship(storage):
     assert queried_rel.str_attr == rel.str_attr
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
+
+
+@pytest.mark.usefixtures('storage')
+def test_indexed_relationship(storage):
+    thing1 = Thing()
+    thing2 = Thing()
+
+    rel = Related(thing1, thing2, str_attr='5cal')
+
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(rel)
+
+    rows = storage.query('''
+        START r = relationship:related(id={rel_id})
+        MATCH n1 -[r]-> n2
+        RETURN n1.id, n2.id
+    ''', rel_id=rel.id)
+
+    result = set(rows)
+    print result
+
+    assert result == {
+        (str(thing1.id), str(thing2.id))
+    }
 
 
 @pytest.mark.usefixtures('storage')
