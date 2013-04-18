@@ -9,9 +9,9 @@ from orp.descriptors import (
 from orp.exceptions import (NoIndexesError, MultipleObjectsFound,
     UniqueConstraintError)
 from orp.iter_helpers import unique
-from orp.query import encode_query_values
 from orp.references import set_store_for_object
 from orp.attributes import Outgoing, Incoming
+from orp.attributes.bases import get_attibute_for_type
 from orp.relationships import InstanceOf, IsA
 from orp.types import PersistableType, Persistable, Relationship
 
@@ -102,6 +102,19 @@ def dict_to_object(properties):
             setattr(obj, attr_name, value)
 
     return obj
+
+
+def object_to_db_value(obj):
+    try:
+        attr_cls = get_attibute_for_type(type(obj))
+    except KeyError:
+        return obj
+    else:
+        return attr_cls.to_db(obj)
+
+
+def dict_to_db_values_dict(data):
+    return {k: object_to_db_value(v) for k, v in data.items()}
 
 
 @unique
@@ -232,6 +245,7 @@ def _get_changes(old, new):
 
     return changes
 
+
 class Storage(object):
     """ Provides a queryable object store.
 
@@ -305,7 +319,7 @@ class Storage(object):
             return False
 
     def get(self, cls, **index_filter):
-        index_filter = encode_query_values(index_filter)
+        index_filter = dict_to_db_values_dict(index_filter)
         descriptor = get_descriptor(cls)
 
         # TODO: can we consider a different signature that avoids this assert?
@@ -357,7 +371,7 @@ class Storage(object):
 
     def _make_create_relationship_query(self, rel, unique=False):
         rel_props = object_to_dict(rel)
-        maybe_unique =  'UNIQUE' if unique else ''
+        maybe_unique = 'UNIQUE' if unique else ''
         query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
         query = query % (
             get_index_query(rel.start, 'n1'),
@@ -378,11 +392,11 @@ class Storage(object):
 
         if isinstance(persistable, Relationship):
             if has_indexes:
-                raise NotImplementedError('Relationships are not yet '
-                    'being indexed')
+                raise NotImplementedError(
+                    'Indexed Relationships cannot be replaced.')
 
-            query = self._make_create_relationship_query(persistable,
-                unique=True)
+            query = self._make_create_relationship_query(
+                persistable, unique=True)
             result = self._execute(query, rel_props=props)
             result = list(result)
 
@@ -396,8 +410,8 @@ class Storage(object):
                 # all the nodes returned should be the same
                 for node in existing:
                     if node.id != existing[0].id:
-                        raise UniqueConstraintError("Can't create {} as"
-                            "existing data contain values "
+                        raise UniqueConstraintError(
+                            "Can't create {} as existing data contain values "
                             "that must be unique: {} vs {}".format(
                                 persistable, node, existing[0]))
 
@@ -415,8 +429,8 @@ class Storage(object):
                 start_clause = get_index_query(existing_node, 'n')
                 changes = _get_changes(old=existing_props, new=props)
 
-                set_clauses = ['n.%s={%s}' % (key, key)
-                    for key in changes]
+                set_clauses = [
+                    'n.%s={%s}' % (key, key) for key in changes]
                 set_clause = ','.join(set_clauses)
 
                 query = '''START %s
@@ -463,7 +477,7 @@ class Storage(object):
         Returns:
             A generator with tuples containing stored objects or values.
         """
-        params = encode_query_values(params)
+        params = dict_to_db_values_dict(params)
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
@@ -488,10 +502,10 @@ class Storage(object):
 
         if isinstance(obj, Relationship):
             query = self._make_create_relationship_query(obj)
-            next(self._execute(query, rel_props=object_to_dict(obj)))
-            return
+            query_args = {'rel_props': object_to_dict(obj)}
+            objects = [obj]
 
-        if obj is Persistable:
+        elif obj is Persistable:
             if self._root_exists():
                 return
             else:
@@ -514,17 +528,25 @@ class Storage(object):
             for key, obj in zip(keys, objects):
                 query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = next(self._execute(query, **query_args))
+        items = next(self._execute(query, **query_args))
 
-        # index all the created nodes
-        # infact, we are indexing all nodes, created or not ;-(
-        for node, obj in zip(nodes, objects):
+        # index all the created nodes or relationships
+        # note, that all nodes in the type-chain for the added object
+        # will be re-indexed if they already existed
+        for node_or_rel, obj in zip(items, objects):
             indexes = get_indexes(obj)
             for index_name, key, value in indexes:
-                index = self._conn.get_or_create_index(neo4j.Node, index_name)
-                index.add(key, value, node)
+                if isinstance(obj, Relationship):
+                    index_type = neo4j.Relationship
+                else:
+                    index_type = neo4j.Node
 
-            set_store_for_object(obj, self)
+                index = self._conn.get_or_create_index(index_type, index_name)
+
+                index.add(key, value, node_or_rel)
+
+            if not isinstance(obj, Relationship):
+                set_store_for_object(obj, self)
 
     def delete(self, obj):
         """ Deletes an object from the store.
