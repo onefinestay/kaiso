@@ -141,6 +141,35 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
+def get_index_queries(obj, name=None):
+    """Returns a list of the possible
+       node lookups by index as used by the START clause.
+
+    Args:
+        obj: An object to create a index lookup.
+        name: The name of the object in the query.
+                If name is None obj.__name__ will be used.
+    Returns:
+        A list of strings  with index lookup of a cypher START clause.
+    """
+    queries = []
+
+    if name is None:
+        name = obj.__name__
+
+    if isinstance(obj, Relationship):
+        start_func = 'relationship'
+    else:
+        start_func = 'node'
+
+    indexes = get_indexes(obj)
+    for index_name, index_key, index_val in indexes:
+        queries.append('{}={}:{}({}="{}")'.format(
+            name, start_func, index_name, index_key, index_val
+        ))
+
+    return queries
+
 def get_index_query(obj, name=None):
     """ Returns a node lookup by index as used by the START clause.
 
@@ -151,14 +180,8 @@ def get_index_query(obj, name=None):
     Returns:
         A string with index lookup of a cypher START clause.
     """
-
-    if name is None:
-        name = obj.__name__
-
-    index_name, key, value = next(get_indexes(obj))
-
-    query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
-    return query
+    queries = get_index_queries(obj, name)
+    return queries[0] if queries else None
 
 
 def get_create_types_query(obj):
@@ -327,23 +350,11 @@ class Storage(object):
         """Return a list of any existing data from the database that
            matches any of the given objects' unique indexes.
         """
-
         found = []
-        indexes = get_indexes(obj)
 
-        if isinstance(obj, Relationship):
-            start_func = 'relationship'
-        else:
-            start_func = 'node'
-
-        for index in indexes:
-            index_name, index_key, index_val = index
-            start_clause = 'x={}:{}({}="{}")'.format(
-                start_func, index_name, index_key, index_val
-            )
-
+        for clause in get_index_queries(obj, 'x'):
             query = '''START {}
-                       RETURN x'''.format(start_clause)
+                       RETURN x'''.format(clause)
             try:
                 result = self._execute(query, node_props=object_to_dict(obj))
                 result = list(result)
