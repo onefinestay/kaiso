@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 from os.path import dirname, join
 import sys
@@ -56,8 +56,7 @@ setup(
     author='onefinestay',
     author_email='engineering@onefinestay.com',
     url='http://github.com/onefinestay/kaiso',
-    packages=['kaiso', ],
-    package_dir={'': setup_dir},
+    packages=find_packages(exclude=['test', 'test.*']),
     install_requires=requirements,
     tests_require=test_requirements,
     dependency_links=dependency_links,
