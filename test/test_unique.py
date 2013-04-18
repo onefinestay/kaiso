@@ -3,7 +3,6 @@ import string
 
 import pytest
 
-from orp.connection import get_connection
 from orp.exceptions import UniqueConstraintError, NoIndexesError
 from orp.persistence import Storage
 from orp.types import PersistableType, Persistable, Relationship
@@ -26,12 +25,15 @@ class Follows(Relationship):
     pass
 
 
+class IndexedRel(Relationship):
+    id = String(unique=True)
+
+
 class TestReplace(object):
 
     def setup_method(self, method):
-        conn = get_connection(conn_uri)
-        conn.clear()
         self.store = Storage(conn_uri)
+        self.store.delete_all_data()
 
     def test_unique_enforced_on_add(self):
         obj1 = UniqueThing(id=1, code='A', extra='lunch')
@@ -104,7 +106,7 @@ class TestReplace(object):
         self.store.replace(obj2)
         rows = self.store.query('''START n = node:uniquething("id:*")
                                    RETURN n''')
-        rows= list(rows)
+        rows = list(rows)
         assert len(rows) == 1
         assert rows[0][0].extra is None
 
@@ -119,8 +121,8 @@ class TestReplace(object):
         # we have no way of removing indexes from the db, so create a new
         # type that we haven't seen before to test the case where
         # the index does not exist
-        RandomThing = PersistableType(name, (Persistable,),
-            {'code': String(unique=True)})
+        RandomThing = PersistableType(
+            name, (Persistable,), {'code': String(unique=True)})
 
         obj = RandomThing(code='a')
         self.store.add(obj)
@@ -144,3 +146,12 @@ class TestReplace(object):
 
         result = list(result)
         assert len(result) == 1
+
+    def test_indexed_relationships_replace(self):
+        obj1 = UniqueThing(id=1, code='A', extra='lunch')
+        obj2 = UniqueThing(id=2, code='B', extra='snacks')
+        self.store.replace(obj1)
+        self.store.replace(obj2)
+
+        with pytest.raises(NotImplementedError):
+            self.store.replace(IndexedRel(obj1, obj2, id="foo"))
