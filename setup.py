@@ -11,7 +11,7 @@ class PyTest(TestCommand):
     def finalize_options(self):
         TestCommand.finalize_options(self)
         self.test_args = [
-            '--cov', 'nameko',
+            '--cov', 'kaiso',
             '--junitxml=test-results.xml',
             join(setup_dir, 'test'),
         ]
