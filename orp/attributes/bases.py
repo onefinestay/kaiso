@@ -2,6 +2,21 @@ from orp.exceptions import MultipleObjectsFound, NoResultFound
 from orp.references import get_store_for_object
 
 
+_attribute_types = {}
+
+
+def wraps_type(cls):
+    def wrapper(attr_cls):
+        _attribute_types[cls] = attr_cls
+        return attr_cls
+
+    return wrapper
+
+
+def get_attibute_for_type(cls):
+    return _attribute_types[cls]
+
+
 class RelationshipManager(object):
     def __init__(self, obj, relationship_reference):
         self.obj = obj

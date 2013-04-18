@@ -1,13 +1,10 @@
 import decimal
 import uuid
-
+import datetime
 import iso8601
 
 from orp.attributes.bases import (
-    Attribute, DefaultableAttribute, RelationshipReference, )
-
-
-many = '*'
+    Attribute, DefaultableAttribute, RelationshipReference, wraps_type)
 
 
 class Outgoing(RelationshipReference):
@@ -18,6 +15,7 @@ class Incoming(RelationshipReference):
     pass
 
 
+@wraps_type(uuid.UUID)
 class Uuid(Attribute):
     @property
     def default(self):
@@ -48,6 +46,7 @@ class String(DefaultableAttribute):
     pass
 
 
+@wraps_type(decimal.Decimal)
 class Decimal(DefaultableAttribute):
     @staticmethod
     def to_db(value):
@@ -60,6 +59,7 @@ class Decimal(DefaultableAttribute):
         return decimal.Decimal(value)
 
 
+@wraps_type(datetime.datetime)
 class DateTime(DefaultableAttribute):
     @staticmethod
     def to_db(value):

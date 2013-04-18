@@ -3,6 +3,7 @@ from datetime import datetime
 
 import iso8601
 import pytest
+from py2neo import cypher
 
 from orp.types import PersistableType, Persistable
 from orp.relationships import Relationship
@@ -23,6 +24,10 @@ class Thing(Persistable):
 
 class Related(Relationship):
     str_attr = String()
+
+
+class IndexedRelated(Relationship):
+    id = Uuid(unique=True)
 
 
 @pytest.mark.usefixtures('storage')
@@ -151,6 +156,35 @@ def test_delete_class(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_delete_all_data(storage):
+
+    thing1 = Thing()
+    thing2 = Thing()
+
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(IndexedRelated(thing1, thing2))
+
+    storage.delete_all_data()
+
+    rows = storage.query('START n=node(*) RETURN count(n)')
+    assert next(rows) == (0,)
+
+    queries = (
+        'START n=node:persistableype(name="Thing") RETURN n',
+        'START r=relationship:indexedrelated(id="spam") RETURN r',
+    )
+
+    for query in queries:
+        rows = storage.query(query)
+
+        with pytest.raises(cypher.CypherError) as excinfo:
+            next(rows)
+
+        assert excinfo.value.exception == 'MissingIndexException'
+
+
+@pytest.mark.usefixtures('storage')
 def test_attributes(storage):
 
     thing = Thing(bool_attr=True, init_attr=7)
@@ -202,6 +236,30 @@ def test_relationship(storage):
     assert queried_rel.str_attr == rel.str_attr
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
+
+
+@pytest.mark.usefixtures('storage')
+def test_indexed_relationship(storage):
+    thing1 = Thing()
+    thing2 = Thing()
+
+    rel = IndexedRelated(thing1, thing2)
+
+    storage.add(thing1)
+    storage.add(thing2)
+    storage.add(rel)
+
+    rows = storage.query('''
+        START r = relationship:indexedrelated(id={rel_id})
+        MATCH n1 -[r]-> n2
+        RETURN n1.id, n2.id
+    ''', rel_id=rel.id)
+
+    result = set(rows)
+
+    assert result == {
+        (str(thing1.id), str(thing2.id))
+    }
 
 
 @pytest.mark.usefixtures('storage')
@@ -262,3 +320,5 @@ def test_type_hierarchy_diamond(storage):
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
+
+
