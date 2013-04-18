@@ -1,5 +1,4 @@
 import decimal
-from datetime import datetime
 
 import iso8601
 import pytest
@@ -320,5 +319,3 @@ def test_type_hierarchy_diamond(storage):
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
-
-
