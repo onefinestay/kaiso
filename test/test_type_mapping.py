@@ -1,7 +1,7 @@
-from orp.persistence import(
+from kaiso.persistence import(
     object_to_dict, dict_to_object, get_type_relationships)
-from orp.relationships import Relationship, InstanceOf, IsA
-from orp.types import PersistableType, Persistable, AttributedBase
+from kaiso.relationships import Relationship, InstanceOf, IsA
+from kaiso.types import PersistableType, Persistable, AttributedBase
 
 
 class Foo(Persistable):

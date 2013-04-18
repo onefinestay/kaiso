@@ -3,17 +3,17 @@ import logging
 
 from py2neo import cypher, neo4j
 
-from orp.connection import get_connection
-from orp.descriptors import (
+from kaiso.connection import get_connection
+from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from orp.exceptions import (NoIndexesError, MultipleObjectsFound,
+from kaiso.exceptions import (NoIndexesError, MultipleObjectsFound,
     UniqueConstraintError)
-from orp.iter_helpers import unique
-from orp.references import set_store_for_object
-from orp.attributes import Outgoing, Incoming
-from orp.attributes.bases import get_attibute_for_type
-from orp.relationships import InstanceOf, IsA
-from orp.types import PersistableType, Persistable, Relationship
+from kaiso.iter_helpers import unique
+from kaiso.references import set_store_for_object
+from kaiso.attributes import Outgoing, Incoming
+from kaiso.attributes.bases import get_attibute_for_type
+from kaiso.relationships import InstanceOf, IsA
+from kaiso.types import PersistableType, Persistable, Relationship
 
 
 def object_to_dict(obj):

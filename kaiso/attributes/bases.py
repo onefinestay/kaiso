@@ -1,5 +1,5 @@
-from orp.exceptions import MultipleObjectsFound, NoResultFound
-from orp.references import get_store_for_object
+from kaiso.exceptions import MultipleObjectsFound, NoResultFound
+from kaiso.references import get_store_for_object
 
 
 _attribute_types = {}

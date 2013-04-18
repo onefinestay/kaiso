@@ -1,4 +1,4 @@
-from orp.descriptors import register_type, get_descriptor
+from kaiso.descriptors import register_type, get_descriptor
 
 register_type(type)
 register_type(object)

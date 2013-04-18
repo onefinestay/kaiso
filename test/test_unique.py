@@ -3,10 +3,10 @@ import string
 
 import pytest
 
-from orp.exceptions import UniqueConstraintError, NoIndexesError
-from orp.persistence import Storage
-from orp.types import PersistableType, Persistable, Relationship
-from orp.attributes import Integer, String
+from kaiso.exceptions import UniqueConstraintError, NoIndexesError
+from kaiso.persistence import Storage
+from kaiso.types import PersistableType, Persistable, Relationship
+from kaiso.attributes import Integer, String
 
 
 

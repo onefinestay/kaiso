@@ -10,7 +10,7 @@ to the data store.
 They may be used for querying and map to pyhton's issubclass()
 and isinstanceof() functionality.
 """
-from orp.types import Relationship
+from kaiso.types import Relationship
 
 
 class IsA(Relationship):

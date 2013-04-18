@@ -1,9 +1,9 @@
 import pytest
 
-from orp.attributes import Uuid, Incoming, Outgoing
-from orp.exceptions import MultipleObjectsFound, NoResultFound
-from orp.relationships import Relationship
-from orp.types import Persistable
+from kaiso.attributes import Uuid, Incoming, Outgoing
+from kaiso.exceptions import MultipleObjectsFound, NoResultFound
+from kaiso.relationships import Relationship
+from kaiso.types import Persistable
 
 
 class Contains(Relationship):

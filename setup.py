@@ -11,7 +11,7 @@ class PyTest(TestCommand):
     def finalize_options(self):
         TestCommand.finalize_options(self)
         self.test_args = [
-            '--cov', 'nameko',
+            '--cov', 'kaiso',
             '--junitxml=test-results.xml',
             join(setup_dir, 'test'),
         ]
@@ -49,14 +49,14 @@ test_requirements, dependency_links = parse_requirements(
     dependency_links)
 
 setup(
-    name='orp',
+    name='kaiso',
     version='0.1-dev',
     description='A queryable object persistence and relationship framework'
                 ' based on the Neo4j graph database.',
     author='onefinestay',
     author_email='engineering@onefinestay.com',
-    url='http://github.com/onefinestay/orp',
-    packages=['orp', ],
+    url='http://github.com/onefinestay/kaiso',
+    packages=['kaiso', ],
     package_dir={'': setup_dir},
     install_requires=requirements,
     tests_require=test_requirements,
