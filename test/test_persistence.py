@@ -23,8 +23,11 @@ class Thing(Persistable):
 
 
 class Related(Relationship):
-    id = Uuid(unique=True)
     str_attr = String()
+
+
+class IndexedRelated(Relationship):
+    id = Uuid(unique=True)
 
 
 @pytest.mark.usefixtures('storage')
@@ -160,16 +163,16 @@ def test_delete_all_data(storage):
 
     storage.add(thing1)
     storage.add(thing2)
-    storage.add(Related(thing1, thing2))
+    storage.add(IndexedRelated(thing1, thing2))
 
     storage.delete_all_data()
 
-    rows = storage.query('START n=node(*) RETURN n')
-    assert len(list(rows)) == 0
+    rows = storage.query('START n=node(*) RETURN count(n)')
+    assert next(rows) == (0,)
 
     queries = (
         'START n=node:persistableype(name="Thing") RETURN n',
-        'START r=relationship:related(id="spam") RETURN r',
+        'START r=relationship:indexedrelated(id="spam") RETURN r',
     )
 
     for query in queries:
@@ -240,20 +243,19 @@ def test_indexed_relationship(storage):
     thing1 = Thing()
     thing2 = Thing()
 
-    rel = Related(thing1, thing2, str_attr='5cal')
+    rel = IndexedRelated(thing1, thing2)
 
     storage.add(thing1)
     storage.add(thing2)
     storage.add(rel)
 
     rows = storage.query('''
-        START r = relationship:related(id={rel_id})
+        START r = relationship:indexedrelated(id={rel_id})
         MATCH n1 -[r]-> n2
         RETURN n1.id, n2.id
     ''', rel_id=rel.id)
 
     result = set(rows)
-    print result
 
     assert result == {
         (str(thing1.id), str(thing2.id))

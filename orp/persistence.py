@@ -395,9 +395,9 @@ class Storage(object):
 
         items = next(self._execute(query, **query_args))
 
-        # index all the created nodes
-        # infact, we are indexing all nodes, and relationships
-        # created or not ;-(
+        # index all the created nodes or relationships
+        # note, that all nodes in the type-chain for the added object
+        # will be re-indexed if they already existed
         for node_or_rel, obj in zip(items, objects):
             indexes = get_indexes(obj)
             for index_name, key, value in indexes:
