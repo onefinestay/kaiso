@@ -1,8 +1,13 @@
+from functools import wraps
+import logging
+
 from py2neo import cypher, neo4j
 
 from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
+from orp.exceptions import (NoIndexesError, MultipleObjectsFound,
+    UniqueConstraintError)
 from orp.iter_helpers import unique
 from orp.references import set_store_for_object
 from orp.attributes import Outgoing, Incoming
@@ -149,6 +154,36 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
+def get_index_queries(obj, name=None):
+    """Returns a list of the possible
+       node lookups by index as used by the START clause.
+
+    Args:
+        obj: An object to create a index lookup.
+        name: The name of the object in the query.
+                If name is None obj.__name__ will be used.
+    Returns:
+        A list of strings  with index lookup of a cypher START clause.
+    """
+    queries = []
+
+    if name is None:
+        name = obj.__name__
+
+    if isinstance(obj, Relationship):
+        start_func = 'relationship'
+    else:
+        start_func = 'node'
+
+    indexes = get_indexes(obj)
+    for index_name, index_key, index_val in indexes:
+        queries.append('{}={}:{}({}="{}")'.format(
+            name, start_func, index_name, index_key, index_val
+        ))
+
+    return queries
+
+
 def get_index_query(obj, name=None):
     """ Returns a node lookup by index as used by the START clause.
 
@@ -159,14 +194,8 @@ def get_index_query(obj, name=None):
     Returns:
         A string with index lookup of a cypher START clause.
     """
-
-    if name is None:
-        name = obj.__name__
-
-    index_name, key, value = next(get_indexes(obj))
-
-    query = '%s = node:%s(%s="%s")' % (name, index_name, key, value)
-    return query
+    queries = get_index_queries(obj, name)
+    return queries[0] if queries else None
 
 
 def get_create_types_query(obj):
@@ -219,6 +248,27 @@ def get_create_types_query(obj):
     query = '\n'.join(query)
 
     return query, objects, keys
+
+
+def _get_changes(old, new):
+    """Return a changes dictionary containing the key/values in new that are
+       different from old. Any key in old that is not in new will have a None
+       value in the resulting dictionary
+    """
+    changes = {}
+
+    # check for any keys that have changed, put their new value in
+    for key, value in new.items():
+        if old.get(key) != value:
+            changes[key] = value
+
+    # if a key has dissappeared in new, put a None in changes, which
+    # will remove it in neo
+    for key in old.keys():
+        if key not in new:
+            changes[key] = None
+
+    return changes
 
 
 class Storage(object):
@@ -311,6 +361,105 @@ class Storage(object):
         obj = self._convert_value(node)
         return obj
 
+    def _get_by_unique(self, obj):
+        """Return a list of any existing data from the database that
+           matches any of the given objects' unique indexes.
+        """
+        found = []
+
+        for clause in get_index_queries(obj, 'x'):
+            query = '''START {}
+                       RETURN x'''.format(clause)
+            try:
+                result = self._execute(query, node_props=object_to_dict(obj))
+                result = list(result)
+            except cypher.CypherError as exc:
+                if exc.exception != 'MissingIndexException':
+                    raise  # pragma: no cover
+                # MissingIndexException is ok, treat as no result
+            else:
+                if result:
+                    found.append(result[0][0])
+
+        return found
+
+    def _make_create_relationship_query(self, rel, unique=False):
+        rel_props = object_to_dict(rel)
+        maybe_unique = 'UNIQUE' if unique else ''
+        query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
+        query = query % (
+            get_index_query(rel.start, 'n1'),
+            get_index_query(rel.end, 'n2'),
+            maybe_unique,
+            rel_props['__type__'].upper(),
+        )
+
+        return query
+
+    def replace(self, persistable):
+        """Store the given persistable in the graph database. If a matching
+           object (by unique keys) already exists, replace it with the
+           given one
+        """
+        props = object_to_dict(persistable)
+        indexes = get_indexes(persistable)
+        has_indexes = bool(next(indexes, False))
+
+        if isinstance(persistable, Relationship):
+            if has_indexes:
+                raise NotImplementedError(
+                    'Indexed Relationships cannot be replaced.')
+
+            query = self._make_create_relationship_query(
+                persistable, unique=True)
+            result = self._execute(query, rel_props=props)
+            result = list(result)
+
+        elif isinstance(persistable, Persistable):
+            if not has_indexes:
+                raise NoIndexesError("Can't replace an object with no indexes")
+
+            existing = self._get_by_unique(persistable)
+
+            if existing:
+                # all the nodes returned should be the same
+                for node in existing:
+                    if node.id != existing[0].id:
+                        raise UniqueConstraintError(
+                            "Can't create {} as existing data contain values "
+                            "that must be unique: {} vs {}".format(
+                                persistable, node, existing[0]))
+
+                # we have one existing node and all the unique indexes match
+
+                # if the rest of the properties are the same,
+                # we have nothing to do
+                existing_node = self._convert_value(existing[0])
+                existing_props = object_to_dict(existing_node)
+                if existing_props == props:
+                    return existing_node
+
+                # otherwise update with new properties
+
+                start_clause = get_index_query(existing_node, 'n')
+                changes = _get_changes(old=existing_props, new=props)
+
+                set_clauses = [
+                    'n.%s={%s}' % (key, key) for key in changes]
+                set_clause = ','.join(set_clauses)
+
+                query = '''START %s
+                           SET %s
+                           RETURN n''' % (start_clause, set_clause)
+
+                result = self._execute(query, **changes)
+                return next(result)[0]
+
+            # if we get this far, there's no existing node, and
+            # we should create a new one
+            self.add(persistable)
+            return persistable
+
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
@@ -359,15 +508,16 @@ class Storage(object):
         if not can_add(obj):
             raise TypeError('cannot persist %s' % obj)
 
-        if isinstance(obj, Relationship):
-            rel_props = object_to_dict(obj)
-            query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
-            query = query % (
-                get_index_query(obj.start, 'n1'),
-                get_index_query(obj.end, 'n2'),
-                rel_props['__type__'].upper(),
+        existing = self._get_by_unique(obj)
+
+        if (not obj is Persistable) and existing:
+            raise UniqueConstraintError(
+                'Can not add {}s as {} exist'.format(obj, existing)
             )
-            query_args = {'rel_props': rel_props}
+
+        if isinstance(obj, Relationship):
+            query = self._make_create_relationship_query(obj)
+            query_args = {'rel_props': object_to_dict(obj)}
             objects = [obj]
 
         elif obj is Persistable:
@@ -417,7 +567,7 @@ class Storage(object):
         """ Deletes an object from the store.
 
         Args:
-            obj: The object to store.
+            obj: The object to delete.
         """
 
         if isinstance(obj, Relationship):
