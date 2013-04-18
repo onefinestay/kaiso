@@ -4,9 +4,9 @@ from orp.connection import get_connection
 from orp.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
 from orp.iter_helpers import unique
-from orp.query import encode_query_values
 from orp.references import set_store_for_object
 from orp.attributes import Outgoing, Incoming
+from orp.attributes.bases import get_attibute_for_type
 from orp.relationships import InstanceOf, IsA
 from orp.types import PersistableType, Persistable, Relationship
 
@@ -97,6 +97,19 @@ def dict_to_object(properties):
             setattr(obj, attr_name, value)
 
     return obj
+
+
+def object_to_db_value(obj):
+    try:
+        attr_cls = get_attibute_for_type(type(obj))
+    except KeyError:
+        return obj
+    else:
+        return attr_cls.to_db(obj)
+
+
+def dict_to_db_values_dict(data):
+    return {k: object_to_db_value(v) for k, v in data.items()}
 
 
 @unique
@@ -281,7 +294,7 @@ class Storage(object):
             return False
 
     def get(self, cls, **index_filter):
-        index_filter = encode_query_values(index_filter)
+        index_filter = dict_to_db_values_dict(index_filter)
         descriptor = get_descriptor(cls)
 
         # TODO: can we consider a different signature that avoids this assert?
@@ -330,7 +343,7 @@ class Storage(object):
         Returns:
             A generator with tuples containing stored objects or values.
         """
-        params = encode_query_values(params)
+        params = dict_to_db_values_dict(params)
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
@@ -354,10 +367,10 @@ class Storage(object):
                 get_index_query(obj.end, 'n2'),
                 rel_props['__type__'].upper(),
             )
-            next(self._execute(query, rel_props=rel_props))
-            return
+            query_args = {'rel_props': rel_props}
+            objects = [obj]
 
-        if obj is Persistable:
+        elif obj is Persistable:
             if self._root_exists():
                 return
             else:
@@ -380,17 +393,25 @@ class Storage(object):
             for key, obj in zip(keys, objects):
                 query_args['%s_props' % key] = object_to_dict(obj)
 
-        nodes = next(self._execute(query, **query_args))
+        items = next(self._execute(query, **query_args))
 
-        # index all the created nodes
-        # infact, we are indexing all nodes, created or not ;-(
-        for node, obj in zip(nodes, objects):
+        # index all the created nodes or relationships
+        # note, that all nodes in the type-chain for the added object
+        # will be re-indexed if they already existed
+        for node_or_rel, obj in zip(items, objects):
             indexes = get_indexes(obj)
             for index_name, key, value in indexes:
-                index = self._conn.get_or_create_index(neo4j.Node, index_name)
-                index.add(key, value, node)
+                if isinstance(obj, Relationship):
+                    index_type = neo4j.Relationship
+                else:
+                    index_type = neo4j.Node
 
-            set_store_for_object(obj, self)
+                index = self._conn.get_or_create_index(index_type, index_name)
+
+                index.add(key, value, node_or_rel)
+
+            if not isinstance(obj, Relationship):
+                set_store_for_object(obj, self)
 
     def delete(self, obj):
         """ Deletes an object from the store.
