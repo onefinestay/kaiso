@@ -183,6 +183,7 @@ def get_index_queries(obj, name=None):
 
     return queries
 
+
 def get_index_query(obj, name=None):
     """ Returns a node lookup by index as used by the START clause.
 
@@ -374,7 +375,7 @@ class Storage(object):
                 result = list(result)
             except cypher.CypherError as exc:
                 if exc.exception != 'MissingIndexException':
-                    raise
+                    raise  # pragma: no cover
                 # MissingIndexException is ok, treat as no result
             else:
                 if result:
