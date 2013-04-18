@@ -4,9 +4,9 @@ import iso8601
 import pytest
 from py2neo import cypher
 
-from orp.types import PersistableType, Persistable
-from orp.relationships import Relationship
-from orp.attributes import (
+from kaiso.types import PersistableType, Persistable
+from kaiso.relationships import Relationship
+from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 
 

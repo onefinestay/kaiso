@@ -3,8 +3,8 @@ import os
 from mock import patch
 import pytest
 
-import orp.connection
-from orp.connection import get_connection, TempConnectionError
+import kaiso.connection
+from kaiso.connection import get_connection, TempConnectionError
 
 
 @pytest.mark.slow
@@ -40,6 +40,6 @@ def test_temp_connection_custom():
 
 
 def test_temp_connection_timeout():
-    with patch.object(orp.connection, 'TIMEOUT', 0):
+    with patch.object(kaiso.connection, 'TIMEOUT', 0):
         with pytest.raises(TempConnectionError):
             get_connection('temp://8888')
