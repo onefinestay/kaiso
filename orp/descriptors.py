@@ -11,7 +11,7 @@ The functions are mainly used by the persistence module and provide:
 """
 from inspect import getmembers
 
-from orp.attributes import Attribute, RelationshipReference
+from kaiso.attributes import Attribute, RelationshipReference
 
 
 _descriptors = {}

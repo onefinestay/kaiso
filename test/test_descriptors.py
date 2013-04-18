@@ -1,5 +1,5 @@
-from orp.descriptors import get_descriptor
-from orp.types import PersistableType, Persistable
+from kaiso.descriptors import get_descriptor
+from kaiso.types import PersistableType, Persistable
 
 
 class Foo(Persistable):

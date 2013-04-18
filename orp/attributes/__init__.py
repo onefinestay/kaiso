@@ -3,7 +3,7 @@ import uuid
 import datetime
 import iso8601
 
-from orp.attributes.bases import (
+from kaiso.attributes.bases import (
     Attribute, DefaultableAttribute, RelationshipReference, wraps_type)
 
 
