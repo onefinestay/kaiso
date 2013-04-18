@@ -1,10 +1,10 @@
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
-from os.path import dirname, join
+from os.path import abspath, dirname, join
 import sys
 
 
-setup_dir = dirname(__file__) or '.'
+setup_dir = dirname(abspath(__file__))
 
 
 class PyTest(TestCommand):
