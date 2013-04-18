@@ -216,7 +216,8 @@ def get_create_types_query(obj):
 def _get_changes(old, new):
     """Return a changes dictionary containing the key/values in new that are
        different from old. Any key in old that is not in new will have a None
-       value in the None dictionary"""
+       value in the resulting dictionary
+    """
     changes = {}
 
     # check for any keys that have changed, put their new value in
@@ -324,13 +325,14 @@ class Storage(object):
 
     def _get_by_unique(self, obj):
         """Return a list of any existing data from the database that
-           matches any of the given objects' unique indexes. """
+           matches any of the given objects' unique indexes.
+        """
 
         found = []
         indexes = get_indexes(obj)
 
         if isinstance(obj, Relationship):
-            start_func = 'rel'
+            start_func = 'relationship'
         else:
             start_func = 'node'
 
@@ -371,7 +373,8 @@ class Storage(object):
     def replace(self, persistable):
         """Store the given persistable in the graph database. If a matching
            object (by unique keys) already exists, replace it with the
-           given one"""
+           given one
+        """
         props = object_to_dict(persistable)
         indexes = get_indexes(persistable)
         has_indexes = bool(next(indexes, False))
@@ -530,7 +533,7 @@ class Storage(object):
         """ Deletes an object from the store.
 
         Args:
-            obj: The object to store.
+            obj: The object to delete.
         """
 
         if isinstance(obj, Relationship):
