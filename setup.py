@@ -1,11 +1,11 @@
+#!/usr/bin/env python
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
-from os.path import dirname, join
+from os.path import abspath, dirname, join
 import sys
 
 
-setup_dir = dirname(__file__) or '.'
-
+setup_dir = dirname(abspath(__file__))
 
 class PyTest(TestCommand):
     def finalize_options(self):
@@ -57,7 +57,6 @@ setup(
     author_email='engineering@onefinestay.com',
     url='http://github.com/onefinestay/kaiso',
     packages=['kaiso', ],
-    package_dir={'': setup_dir},
     install_requires=requirements,
     tests_require=test_requirements,
     dependency_links=dependency_links,
