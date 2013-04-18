@@ -32,7 +32,22 @@ def get_neo4j_info():
     Returns:
         A dict.
     """
-    output = subprocess.check_output(['neo4j', 'info'])
+    default_cmd = os.pathsep.join([
+        'neo4j',
+        '/etc/init.d/neo4j-service'
+    ])
+    neo4j_cmds = os.environ.get('NEO4J_CMD', default_cmd).split(os.pathsep)
+    output = None
+    for cmd in neo4j_cmds:
+        try:
+            output = subprocess.check_output([cmd, 'info'])
+        except OSError:
+            pass
+
+    if not output:
+        raise TempConnectionError('Cannot determine neo4j info. Is the '
+                                  'NEO4J_CMD environment varaible set '
+                                  'correctly?')
 
     keys = ['NEO4J_HOME', 'NEO4J_INSTANCE', 'JAVA_OPTS', 'CLASSPATH']
 
