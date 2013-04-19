@@ -498,6 +498,7 @@ class Storage(object):
         """
         params = dict_to_db_values_dict(params)
         for row in self._execute(query, **params):
+            logger.debug("query row: %s", row)
             yield tuple(self._convert_row(row))
 
     def add(self, obj):
