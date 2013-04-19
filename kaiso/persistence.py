@@ -1,13 +1,9 @@
-from functools import wraps
-import logging
-
 from py2neo import cypher, neo4j
 
 from kaiso.connection import get_connection
 from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import (NoIndexesError, MultipleObjectsFound,
-    UniqueConstraintError)
+from kaiso.exceptions import NoIndexesError, UniqueConstraintError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming

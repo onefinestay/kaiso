@@ -1,6 +1,7 @@
 """ Provides all the exceptions that may be raised.
 """
 
+
 class UniqueConstraintError(Exception):
     """Raised when attempting to create more than one object with the same
        value on an attribute declared to be unique"""
