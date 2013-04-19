@@ -315,8 +315,12 @@ class Storage(object):
             A generator with the raw rows returned by the connection.
         """
 
+        logger.warn("Cypher:\n%s, %s", query, params)
         rows, _ = cypher.execute(self._conn, query, params)
+
         for row in rows:
+            if "CREATE" in query:
+                logger.warn("Cypher create query:\n %s", '\n'.join(map(log_repr, row)))
             yield row
 
     def _convert_value(self, value):
