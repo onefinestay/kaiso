@@ -22,3 +22,9 @@ class NoResultFound(Exception):
     """ Raised when a caller of a RelationshipManager
     expected at least one object, but none was found.
     """
+
+
+class DeserialisationError(Exception):
+    """ Raised when we fail to deserialise a neo4j node into a
+    python object.
+    """
