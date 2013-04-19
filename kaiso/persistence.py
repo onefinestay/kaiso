@@ -1,3 +1,5 @@
+import logging
+
 from py2neo import cypher, neo4j
 
 from kaiso.connection import get_connection
@@ -10,6 +12,10 @@ from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import PersistableType, Persistable, Relationship
+
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 def object_to_dict(obj):
@@ -76,6 +82,8 @@ def dict_to_object(properties):
     Returns:
         A persistable object.
     """
+
+    logger.debug("dict_to_object: %s", properties)
 
     type_name = properties['__type__']
     descriptor = get_descriptor_by_name(type_name)
