@@ -1,18 +1,18 @@
 language: python
 python:
   - "2.7"
-services:
-  - neo4j
 
 before_install:
+  - wget -O - http://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add - 
+  - echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee /etc/apt/sources.list.d/neo4j.list
   - sudo apt-get update # -qq
   - sudo apt-get install neo4j
+  - sudo neo4j start
 
 install:
   - python setup.py -q install
   - pip install -r test_requirements.txt
-  - /etc/init.d/neo4j-service info ; true
-  - neo4j info ; true
+  - neo4j info
 
 script:
   - make test
