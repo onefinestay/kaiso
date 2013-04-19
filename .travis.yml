@@ -5,10 +5,9 @@ services:
   - neo4j
 
 install:
+  - service neo4j info
   - python setup.py -q install
   - pip install -r test_requirements.txt
-  - /etc/init.d/neo4j-service info ; true
-  - neo4j info ; true
 
 script:
   - make test

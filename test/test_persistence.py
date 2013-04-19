@@ -302,6 +302,17 @@ def test_type_hierarchy_diamond(storage):
     carmine = Carmine()
     storage.add(carmine)
 
+    # debugging
+
+    query_str = """
+        START obj = node(*)
+        RETURN COALESCE(obj.__type__?, 'notype'), COALESCE(obj.name?, 'noname')
+    """
+    rows = storage.query(query_str)
+    for row in rows:
+        print row
+
+
     query_str = """
         START base = node(*)
         MATCH obj -[r]-> base
