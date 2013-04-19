@@ -5,7 +5,8 @@ from py2neo import cypher, neo4j
 from kaiso.connection import get_connection
 from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import NoIndexesError, UniqueConstraintError
+from kaiso.exceptions import (
+    NoIndexesError, UniqueConstraintError, DeserialisationError)
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
@@ -14,8 +15,11 @@ from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import PersistableType, Persistable, Relationship
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+def log_repr(node):
+    return "%r: %s" % (node, node.get_properties())
 
 
 def object_to_dict(obj):
@@ -83,9 +87,13 @@ def dict_to_object(properties):
         A persistable object.
     """
 
-    logger.debug("dict_to_object: %s", properties)
+    logger.warning("dict_to_object: %r", properties)
 
-    type_name = properties['__type__']
+    try:
+        type_name = properties['__type__']
+    except KeyError:
+        raise DeserialisationError("No __type__ information found")
+
     descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
@@ -333,7 +341,13 @@ class Storage(object):
 
     def _convert_row(self, row):
         for value in row:
-            yield self._convert_value(value)
+            try:
+                yield self._convert_value(value)
+            except DeserialisationError:
+                logger.warning("_convert_row: error, value: %r", value)
+                logger.warning("_convert_row: error, row: %s", map(
+                    log_repr, row))
+                raise
 
     def _root_exists(self):
         try:
@@ -498,8 +512,11 @@ class Storage(object):
         """
         params = dict_to_db_values_dict(params)
         for row in self._execute(query, **params):
-            logger.debug("query row: %s", row)
-            yield tuple(self._convert_row(row))
+            try:
+                yield tuple(self._convert_row(row))
+            except DeserialisationError:
+                logger.warning("query: deserialisation error. row: %r", row)
+                raise
 
     def add(self, obj):
         """ Adds an object to the data store.

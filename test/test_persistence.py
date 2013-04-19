@@ -4,6 +4,7 @@ import iso8601
 import pytest
 from py2neo import cypher
 
+from kaiso.exceptions import DeserialisationError
 from kaiso.types import PersistableType, Persistable
 from kaiso.relationships import Relationship
 from kaiso.attributes import (
@@ -319,3 +320,15 @@ def test_type_hierarchy_diamond(storage):
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
+
+
+@pytest.mark.usefixtures('storage')
+def test_bad_data(storage):
+    create_str = "CREATE (node{})"
+    next(storage._execute(create_str), None)
+
+    query_str = "START n = node(*) RETURN n"
+
+    rows = storage.query(query_str)
+    with pytest.raises(DeserialisationError):
+        next(rows, None)
