@@ -306,7 +306,7 @@ def test_type_hierarchy_diamond(storage):
 
     query_str = """
         START obj = node(*)
-        RETURN COALESCE(obj.__type__?, 'notype'), COALESCE(obj.name?, 'noname')
+        RETURN id(obj), COALESCE(obj.__type__?, 'notype'), COALESCE(obj.name?, 'noname')
     """
     rows = storage.query(query_str)
     for row in rows:
