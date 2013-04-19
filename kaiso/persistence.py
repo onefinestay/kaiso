@@ -19,7 +19,10 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 def log_repr(node):
-    return "%r: %s" % (node, node.get_properties())
+    try:
+        return "%r: %s" % (node, node.get_properties())
+    except AttributeError:
+        return "%r" % (node)
 
 
 def object_to_dict(obj):
