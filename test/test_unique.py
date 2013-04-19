@@ -4,10 +4,8 @@ import string
 import pytest
 
 from kaiso.exceptions import UniqueConstraintError, NoIndexesError
-from kaiso.persistence import Storage
 from kaiso.types import PersistableType, Persistable, Relationship
 from kaiso.attributes import Integer, String
-
 
 
 class NoIndexThing(Persistable):
