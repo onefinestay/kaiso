@@ -4,6 +4,10 @@ python:
 services:
   - neo4j
 
+before_install:
+  - sudo apt-get update # -qq
+  - sudo apt-get install neo4j
+
 install:
   - python setup.py -q install
   - pip install -r test_requirements.txt
