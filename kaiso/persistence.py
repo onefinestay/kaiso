@@ -1,15 +1,15 @@
 from py2neo import cypher, neo4j
 
 from kaiso.connection import get_connection
-from kaiso.descriptors import (
-    get_descriptor, get_descriptor_by_name, get_indexes)
 from kaiso.exceptions import NoIndexesError, UniqueConstraintError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import PersistableMeta, Entity, Relationship
+from kaiso.types import (
+    PersistableMeta, Entity, Relationship, Attribute,
+    get_descriptor, get_descriptor_by_name, get_indexes)
 
 
 def object_to_dict(obj):
@@ -47,6 +47,8 @@ def object_to_dict(obj):
 
     if isinstance(obj, type):
         properties['name'] = get_descriptor(obj).type_name
+    elif isinstance(obj, Attribute):
+        properties['unique'] = obj.unique
     else:
         for name, attr in descr.members.items():
             value = attr.to_db(getattr(obj, name))
@@ -77,7 +79,7 @@ def dict_to_object(properties):
         A persistable object.
     """
 
-    type_name = properties['__type__']
+    type_name = properties.pop('__type__')
     descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
@@ -87,15 +89,19 @@ def dict_to_object(properties):
     else:
         obj = cls.__new__(cls)
 
-        for attr_name, attr in descriptor.members.items():
-            try:
-                value = properties[attr_name]
-            except KeyError:
-                value = attr.default
-            else:
-                value = attr.to_python(value)
+        if issubclass(cls, Attribute):
+            for attr_name, value in properties.iteritems():
+                setattr(obj, attr_name, value)
+        else:
+            for attr_name, attr in descriptor.members.items():
+                try:
+                    value = properties[attr_name]
+                except KeyError:
+                    value = attr.default
+                else:
+                    value = attr.to_python(value)
 
-            setattr(obj, attr_name, value)
+                setattr(obj, attr_name, value)
 
     return obj
 

@@ -1,5 +1,4 @@
-from kaiso.descriptors import get_descriptor
-from kaiso.types import PersistableMeta, Entity
+from kaiso.types import PersistableMeta, Entity, get_descriptor
 
 
 class Foo(Entity):

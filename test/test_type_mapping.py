@@ -1,10 +1,15 @@
 from kaiso.persistence import(
     object_to_dict, dict_to_object, get_type_relationships)
 from kaiso.relationships import Relationship, InstanceOf, IsA
-from kaiso.types import PersistableMeta, Entity, AttributedBase
+from kaiso.types import (
+    Persistable, PersistableMeta, Entity, AttributedBase, Attribute)
 
 
 class Foo(Entity):
+    pass
+
+
+class Bar(Attribute):
     pass
 
 
@@ -44,7 +49,17 @@ def test_objects():
     assert isinstance(obj, Foo)
 
 
-def test_relationship_to_dict():
+def test_attribute():
+    attr = Bar(unique=True)
+    dct = object_to_dict(attr)
+    assert dct == {'__type__': 'Bar', 'unique': True}
+
+    obj = dict_to_object({'__type__': 'Bar', 'unique': True})
+    assert isinstance(obj, Bar)
+    assert obj.unique is True
+
+
+def test_relationship():
     dct = object_to_dict(Relationship(None, None))
     assert dct == {'__type__': 'Relationship'}
 
@@ -72,7 +87,13 @@ def test_base_types():
     assert isinstance(obj, object)
 
 
-def test_type_relationships():
+def test_IsA_and_InstanceOf_type_relationships():
+    """ Testing type hierarchy creation.
+
+    We don't want to test all the types in their relationships,
+    but only the set of types which are persisted with IsA and InstanceOf
+    relationships.
+    """
     result = list(get_type_relationships(Entity))
 
     assert result == [
@@ -80,8 +101,11 @@ def test_type_relationships():
         (type, IsA, object),
         (type, InstanceOf, type),
         (PersistableMeta, IsA, type),
+        (Persistable, IsA, object),
+        (Persistable, InstanceOf, type),
+        (PersistableMeta, IsA, Persistable),
         (PersistableMeta, InstanceOf, type),
-        (AttributedBase, IsA, object),
+        (AttributedBase, IsA, Persistable),
         (AttributedBase, InstanceOf, PersistableMeta),
         (Entity, IsA, AttributedBase),
         (Entity, InstanceOf, PersistableMeta),
@@ -95,8 +119,11 @@ def test_type_relationships():
         (type, IsA, object),
         (type, InstanceOf, type),
         (PersistableMeta, IsA, type),
+        (Persistable, IsA, object),
+        (Persistable, InstanceOf, type),
+        (PersistableMeta, IsA, Persistable),
         (PersistableMeta, InstanceOf, type),
-        (AttributedBase, IsA, object),
+        (AttributedBase, IsA, Persistable),
         (AttributedBase, InstanceOf, PersistableMeta),
         (Entity, IsA, AttributedBase),
         (Entity, InstanceOf, PersistableMeta),
@@ -111,8 +138,11 @@ def test_type_relationships():
         (type, IsA, object),
         (type, InstanceOf, type),
         (PersistableMeta, IsA, type),
+        (Persistable, IsA, object),
+        (Persistable, InstanceOf, type),
+        (PersistableMeta, IsA, Persistable),
         (PersistableMeta, InstanceOf, type),
-        (AttributedBase, IsA, object),
+        (AttributedBase, IsA, Persistable),
         (AttributedBase, InstanceOf, PersistableMeta),
         (Entity, IsA, AttributedBase),
         (Entity, InstanceOf, PersistableMeta),
