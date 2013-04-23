@@ -3,14 +3,14 @@ import pytest
 from kaiso.attributes import Uuid, Incoming, Outgoing
 from kaiso.exceptions import MultipleObjectsFound, NoResultFound
 from kaiso.relationships import Relationship
-from kaiso.types import Persistable
+from kaiso.types import Entity
 
 
 class Contains(Relationship):
     pass
 
 
-class Box(Persistable):
+class Box(Entity):
     id = Uuid(unique=True)
 
     contains = Outgoing(Contains)

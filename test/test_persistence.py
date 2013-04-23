@@ -4,13 +4,13 @@ import iso8601
 import pytest
 from py2neo import cypher
 
-from kaiso.types import PersistableType, Persistable
+from kaiso.types import PersistableMeta, Entity
 from kaiso.relationships import Relationship
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 
 
-class Thing(Persistable):
+class Thing(Entity):
     id = Uuid(unique=True)
     bool_attr = Bool()
     int_attr = Integer()
@@ -36,7 +36,7 @@ def test_add_fails_on_non_persistable(storage):
         storage.add(object())
 
     with pytest.raises(TypeError):
-        storage.add(PersistableType)
+        storage.add(PersistableMeta)
 
     with pytest.raises(TypeError):
         storage.add(Relationship)
@@ -48,20 +48,20 @@ def test_add_fails_on_non_persistable(storage):
 @pytest.mark.usefixtures('storage')
 def test_add_persistable_only_adds_single_node(storage):
 
-    storage.add(Persistable)
+    storage.add(Entity)
 
     result = list(storage.query('START n=node(*) RETURN n'))
-    assert result == [(Persistable,)]
+    assert result == [(Entity,)]
 
 
 @pytest.mark.usefixtures('storage')
 def test_only_adds_persistable_once(storage):
 
-    storage.add(Persistable)
-    storage.add(Persistable)
+    storage.add(Entity)
+    storage.add(Entity)
 
     result = list(storage.query('START n=node(*) RETURN n'))
-    assert result == [(Persistable,)]
+    assert result == [(Entity,)]
 
 
 @pytest.mark.usefixtures('storage')
@@ -76,7 +76,7 @@ def test_only_adds_types_once(storage):
 
     result = set(item for (item,) in rows)
 
-    assert result == {Persistable, Thing, str(thing1.id), str(thing2.id)}
+    assert result == {Entity, Thing, str(thing1.id), str(thing2.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -84,7 +84,7 @@ def test_simple_add_and_get_type(storage):
 
     storage.add(Thing)
 
-    result = storage.get(PersistableType, name='Thing')
+    result = storage.get(PersistableMeta, name='Thing')
 
     assert result is Thing
 
@@ -110,7 +110,7 @@ def test_delete_instance(storage):
     # we are expecting the types to stay in place
     rows = storage.query('START n=node(*) RETURN n')
     result = set(item for (item,) in rows)
-    assert result == {Persistable, Thing}
+    assert result == {Entity, Thing}
 
 
 @pytest.mark.usefixtures('storage')
@@ -134,7 +134,7 @@ def test_delete_relationship(storage):
     result = set(rows)
 
     assert result == {
-        (Thing, 'IsA', Persistable),
+        (Thing, 'IsA', Entity),
         (str(thing1.id), 'InstanceOf', Thing),
         (str(thing2.id), 'InstanceOf', Thing),
     }
@@ -151,7 +151,7 @@ def test_delete_class(storage):
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
 
-    assert result == {Persistable, str(thing.id)}
+    assert result == {Entity, str(thing.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -276,7 +276,7 @@ def test_type_hierarchy_object(storage):
     result = set(rows)
 
     assert result == {
-        (Thing, 'IsA', Persistable),
+        (Thing, 'IsA', Entity),
         (str(obj.id), 'InstanceOf', Thing)
     }
 
@@ -310,7 +310,7 @@ def test_type_hierarchy_diamond(storage):
     result = set(rows)
 
     assert result == {
-        (Thing, 'IsA', Persistable),
+        (Thing, 'IsA', Entity),
         (Flavouring, 'IsA', Thing),
         (Colouring, 'IsA', Thing),
         (Carmine, 'IsA', Colouring),

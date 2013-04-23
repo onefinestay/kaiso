@@ -4,15 +4,15 @@ import string
 import pytest
 
 from kaiso.exceptions import UniqueConstraintError, NoIndexesError
-from kaiso.types import PersistableType, Persistable, Relationship
+from kaiso.types import PersistableMeta, Entity, Relationship
 from kaiso.attributes import Integer, String
 
 
-class NoIndexThing(Persistable):
+class NoIndexThing(Entity):
     field_a = String()
 
 
-class UniqueThing(Persistable):
+class UniqueThing(Entity):
     id = Integer(unique=True)
     code = String(unique=True)
     extra = String()
@@ -113,8 +113,8 @@ class TestReplace(object):
         # we have no way of removing indexes from the db, so create a new
         # type that we haven't seen before to test the case where
         # the index does not exist
-        RandomThing = PersistableType(
-            name, (Persistable,), {'code': String(unique=True)})
+        RandomThing = PersistableMeta(
+            name, (Entity,), {'code': String(unique=True)})
 
         obj = RandomThing(code='a')
         storage.add(obj)
