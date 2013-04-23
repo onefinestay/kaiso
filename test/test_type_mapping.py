@@ -1,41 +1,41 @@
 from kaiso.persistence import(
     object_to_dict, dict_to_object, get_type_relationships)
 from kaiso.relationships import Relationship, InstanceOf, IsA
-from kaiso.types import PersistableType, Persistable, AttributedBase
+from kaiso.types import PersistableMeta, Entity, AttributedBase
 
 
-class Foo(Persistable):
+class Foo(Entity):
     pass
 
 
 def test_types_to_dict():
-    dct = object_to_dict(PersistableType)
-    assert dct == {'__type__': 'type', 'name': 'PersistableType'}
+    dct = object_to_dict(PersistableMeta)
+    assert dct == {'__type__': 'type', 'name': 'PersistableMeta'}
 
     obj = dict_to_object(dct)
-    assert obj is PersistableType
+    assert obj is PersistableMeta
 
 
 def test_classes_to_dict():
-    dct = object_to_dict(Persistable)
-    assert dct == {'__type__': 'PersistableType', 'name': 'Persistable'}
+    dct = object_to_dict(Entity)
+    assert dct == {'__type__': 'PersistableMeta', 'name': 'Entity'}
 
     obj = dict_to_object(dct)
-    assert obj is Persistable
+    assert obj is Entity
 
     dct = object_to_dict(Foo)
-    assert dct == {'__type__': 'PersistableType', 'name': 'Foo'}
+    assert dct == {'__type__': 'PersistableMeta', 'name': 'Foo'}
 
     obj = dict_to_object(dct)
     assert obj is Foo
 
 
 def test_objects():
-    dct = object_to_dict(Persistable())
-    assert dct == {'__type__': 'Persistable'}
+    dct = object_to_dict(Entity())
+    assert dct == {'__type__': 'Entity'}
 
     obj = dict_to_object(dct)
-    assert isinstance(obj, Persistable)
+    assert isinstance(obj, Entity)
 
     dct = object_to_dict(Foo())
     assert dct == {'__type__': 'Foo'}
@@ -73,34 +73,34 @@ def test_base_types():
 
 
 def test_type_relationships():
-    result = list(get_type_relationships(Persistable))
+    result = list(get_type_relationships(Entity))
 
     assert result == [
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableType, IsA, type),
-        (PersistableType, InstanceOf, type),
+        (PersistableMeta, IsA, type),
+        (PersistableMeta, InstanceOf, type),
         (AttributedBase, IsA, object),
-        (AttributedBase, InstanceOf, PersistableType),
-        (Persistable, IsA, AttributedBase),
-        (Persistable, InstanceOf, PersistableType),
+        (AttributedBase, InstanceOf, PersistableMeta),
+        (Entity, IsA, AttributedBase),
+        (Entity, InstanceOf, PersistableMeta),
     ]
 
-    pers = Persistable()
+    pers = Entity()
     result = list(get_type_relationships(pers))
 
     assert result == [
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableType, IsA, type),
-        (PersistableType, InstanceOf, type),
+        (PersistableMeta, IsA, type),
+        (PersistableMeta, InstanceOf, type),
         (AttributedBase, IsA, object),
-        (AttributedBase, InstanceOf, PersistableType),
-        (Persistable, IsA, AttributedBase),
-        (Persistable, InstanceOf, PersistableType),
-        (pers, InstanceOf, Persistable),
+        (AttributedBase, InstanceOf, PersistableMeta),
+        (Entity, IsA, AttributedBase),
+        (Entity, InstanceOf, PersistableMeta),
+        (pers, InstanceOf, Entity),
     ]
 
     foo = Foo()
@@ -110,13 +110,13 @@ def test_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableType, IsA, type),
-        (PersistableType, InstanceOf, type),
+        (PersistableMeta, IsA, type),
+        (PersistableMeta, InstanceOf, type),
         (AttributedBase, IsA, object),
-        (AttributedBase, InstanceOf, PersistableType),
-        (Persistable, IsA, AttributedBase),
-        (Persistable, InstanceOf, PersistableType),
-        (Foo, IsA, Persistable),
-        (Foo, InstanceOf, PersistableType),
+        (AttributedBase, InstanceOf, PersistableMeta),
+        (Entity, IsA, AttributedBase),
+        (Entity, InstanceOf, PersistableMeta),
+        (Foo, IsA, Entity),
+        (Foo, InstanceOf, PersistableMeta),
         (foo, InstanceOf, Foo),
     ]
