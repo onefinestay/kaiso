@@ -33,16 +33,16 @@ class IndexedRelated(Relationship):
 def test_add_fails_on_non_persistable(storage):
 
     with pytest.raises(TypeError):
+        storage.add(type)
+
+    with pytest.raises(TypeError):
+        storage.add(object)
+
+    with pytest.raises(TypeError):
         storage.add(object())
 
     with pytest.raises(TypeError):
         storage.add(PersistableMeta)
-
-    with pytest.raises(TypeError):
-        storage.add(Relationship)
-
-    with pytest.raises(TypeError):
-        storage.add(Related)
 
 
 @pytest.mark.usefixtures('storage')

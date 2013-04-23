@@ -8,7 +8,7 @@ from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import (
-    PersistableMeta, Entity, Relationship, Attribute,
+    Persistable, PersistableMeta, Entity, Relationship, Attribute,
     get_descriptor, get_descriptor_by_name, get_indexes)
 
 
@@ -602,8 +602,4 @@ def can_add(obj):
         In addition it is also possible to add sub-classes of
         Entity.
     """
-    return (
-        (isinstance(obj, type) and issubclass(obj, Entity)) or
-        isinstance(obj, Entity) or
-        isinstance(obj, Relationship)
-    )
+    return isinstance(obj, Persistable)
