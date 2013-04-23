@@ -9,7 +9,7 @@ from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import PersistableType, Persistable, Relationship
+from kaiso.types import PersistableMeta, Entity, Relationship
 
 
 def object_to_dict(obj):
@@ -33,7 +33,7 @@ def object_to_dict(obj):
         and type information for deserialization.
         e.g.
         {
-            '__type__': 'Persistable',
+            '__type__': 'Entity',
             'attr1' : 1234
         }
     """
@@ -117,16 +117,16 @@ def dict_to_db_values_dict(data):
 def get_type_relationships(obj):
     """ Generates a list of the type relationships of an object.
     e.g.
-        get_type_relationships(Persistable())
+        get_type_relationships(Entity())
 
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableType, IsA, type),
-        (PersistableType, InstanceOf, type),
-        (Persistable, IsA, object),
-        (Persistable, InstanceOf, PersistableType),
-        (<Persistable object>, InstanceOf, Persistable)
+        (PersistableMeta, IsA, type),
+        (PersistableMeta, InstanceOf, type),
+        (Entity, IsA, object),
+        (Entity, InstanceOf, PersistableMeta),
+        (<Entity object>, InstanceOf, Entity)
 
     Args:
         obj:    An object to generate the type relationships for.
@@ -206,11 +206,11 @@ def get_create_types_query(obj):
     """
 
     lines = []
-    objects = {'Persistable': Persistable}
+    objects = {'Entity': Entity}
 
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
         # this filters out the types, which we don't want to persist
-        if issubclass(obj2, Persistable):
+        if issubclass(obj2, Entity):
             if isinstance(obj1, type):
                 name1 = obj1.__name__
             else:
@@ -237,7 +237,7 @@ def get_create_types_query(obj):
     keys, objects = zip(*objects.items())
 
     query = (
-        'START %s' % get_index_query(Persistable),
+        'START %s' % get_index_query(Entity),
         'CREATE UNIQUE')
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
@@ -271,7 +271,7 @@ class Storage(object):
     """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
-    This includes instances of Persistable, PersistableType
+    This includes instances of Entity, PersistableMeta
     and subclasses of either.
 
     InstanceOf and IsA relationships are automatically generated,
@@ -330,9 +330,9 @@ class Storage(object):
     def _root_exists(self):
         try:
             # we have to make sure we have a starting point for
-            # the type hierarchy, for now that is Persistable
-            obj = self.get(PersistableType, name='Persistable')
-            if obj is not Persistable:
+            # the type hierarchy, for now that is Entity
+            obj = self.get(PersistableMeta, name='Entity')
+            if obj is not Entity:
                 raise Exception("Db is broken")  # TODO: raise DbIsBroken()
 
             return True
@@ -411,7 +411,7 @@ class Storage(object):
             result = self._execute(query, rel_props=props)
             result = list(result)
 
-        elif isinstance(persistable, Persistable):
+        elif isinstance(persistable, Entity):
             if not has_indexes:
                 raise NoIndexesError("Can't replace an object with no indexes")
 
@@ -506,7 +506,7 @@ class Storage(object):
 
         existing = self._get_by_unique(obj)
 
-        if (not obj is Persistable) and existing:
+        if (not obj is Entity) and existing:
             raise UniqueConstraintError(
                 'Can not add {}s as {} exist'.format(obj, existing)
             )
@@ -516,18 +516,18 @@ class Storage(object):
             query_args = {'rel_props': object_to_dict(obj)}
             objects = [obj]
 
-        elif obj is Persistable:
+        elif obj is Entity:
             if self._root_exists():
                 return
             else:
-                # create the PersistableType node.
+                # create the PersistableMeta node.
                 # if we had a standard start node, we would not need this
                 query = 'CREATE (n {props}) RETURN n'
-                query_args = {'props': object_to_dict(Persistable)}
-                objects = [Persistable]
+                query_args = {'props': object_to_dict(Entity)}
+                objects = [Entity]
         else:
             if not self._root_exists():
-                self.add(Persistable)
+                self.add(Entity)
 
             query, objects, keys = get_create_types_query(obj)
 
@@ -592,12 +592,12 @@ class Storage(object):
 def can_add(obj):
     """ Returns True if obj can be added to the db.
 
-        We can add instances of Persistable or Relationship.
+        We can add instances of Entity or Relationship.
         In addition it is also possible to add sub-classes of
-        Persistable.
+        Entity.
     """
     return (
-        (isinstance(obj, type) and issubclass(obj, Persistable)) or
-        isinstance(obj, Persistable) or
+        (isinstance(obj, type) and issubclass(obj, Entity)) or
+        isinstance(obj, Entity) or
         isinstance(obj, Relationship)
     )

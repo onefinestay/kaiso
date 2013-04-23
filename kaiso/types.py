@@ -5,14 +5,14 @@ register_type(object)
 
 
 @register_type
-class PersistableType(type):
+class PersistableMeta(type):
     def __new__(mcs, name, bases, dct):
-        cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
+        cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
         register_type(cls)
         return cls
 
     def __init__(cls, name, bases, dct):
-        super(PersistableType, cls).__init__(name, bases, dct)
+        super(PersistableMeta, cls).__init__(name, bases, dct)
 
         descriptor = get_descriptor(cls)
         for name, attr in dct.items():
@@ -27,7 +27,7 @@ class AttributedBase(object):
     Sets default values during instance creation and applies kwargs
     passed to __init__.
     """
-    __metaclass__ = PersistableType
+    __metaclass__ = PersistableMeta
 
     def __new__(cls, *args, **kwargs):
 
@@ -49,7 +49,7 @@ class AttributedBase(object):
             setattr(self, key, value)
 
 
-class Persistable(AttributedBase):
+class Entity(AttributedBase):
     def __getattribute__(self, name):
         cls = type(self)
         descriptor = get_descriptor(cls)
