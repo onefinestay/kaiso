@@ -47,6 +47,6 @@ def test_temp_connection_timeout():
 
 
 def test_temp_connection_no_neo4j_info():
-    with patch.object(subprocess, 'check_output', lambda *args, **kwargs: None):
+    with patch.object(subprocess, 'check_output', lambda _: None):
         with pytest.raises(TempConnectionError):
             get_connection('temp://8888')
