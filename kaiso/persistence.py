@@ -3,7 +3,7 @@ from py2neo import cypher, neo4j
 from kaiso.connection import get_connection
 from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import NoIndexesError, UniqueConstraintError
+from kaiso.exceptions import UniqueConstraintError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
@@ -392,19 +392,27 @@ class Storage(object):
 
         return query
 
-    def replace(self, persistable):
+    def save(self, persistable):
         """Store the given persistable in the graph database. If a matching
            object (by unique keys) already exists, replace it with the
            given one
         """
+        if not can_add(persistable):
+            raise TypeError('cannot persist %s' % persistable)
+
         props = object_to_dict(persistable)
         indexes = get_indexes(persistable)
         has_indexes = bool(next(indexes, False))
 
+        if not has_indexes:
+            # no update possible, just add a new one
+            return self._add(persistable)
+
         if isinstance(persistable, Relationship):
-            if has_indexes:
+            existing = self._get_by_unique(persistable)
+            if existing:
                 raise NotImplementedError(
-                    'Indexed Relationships cannot be replaced.')
+                    'Indexed Relationships cannot be updated.')
 
             query = self._make_create_relationship_query(
                 persistable, unique=True)
@@ -412,9 +420,6 @@ class Storage(object):
             result = list(result)
 
         elif isinstance(persistable, Entity):
-            if not has_indexes:
-                raise NoIndexesError("Can't replace an object with no indexes")
-
             existing = self._get_by_unique(persistable)
 
             if existing:
@@ -440,6 +445,8 @@ class Storage(object):
                 start_clause = get_index_query(existing_node, 'n')
                 changes = _get_changes(old=existing_props, new=props)
 
+                #TODO: don't allow changing of unique attributes
+
                 set_clauses = [
                     'n.%s={%s}' % (key, key) for key in changes]
                 set_clause = ','.join(set_clauses)
@@ -453,7 +460,7 @@ class Storage(object):
 
             # if we get this far, there's no existing node, and
             # we should create a new one
-            self.add(persistable)
+            self._add(persistable)
             return persistable
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
@@ -492,7 +499,7 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def add(self, obj):
+    def _add(self, obj):
         """ Adds an object to the data store.
 
         It will automatically generate the type relationships
@@ -501,9 +508,6 @@ class Storage(object):
         Args:
             obj: The object to store.
         """
-        if not can_add(obj):
-            raise TypeError('cannot persist %s' % obj)
-
         existing = self._get_by_unique(obj)
 
         if (not obj is Entity) and existing:
@@ -527,7 +531,7 @@ class Storage(object):
                 objects = [Entity]
         else:
             if not self._root_exists():
-                self.add(Entity)
+                self._add(Entity)
 
             query, objects, keys = get_create_types_query(obj)
 
