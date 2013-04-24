@@ -324,6 +324,7 @@ def test_type_hierarchy_diamond(storage):
         (str(carmine.id), 'InstanceOf', Carmine),
     }
 
+
 def count(storage, type_):
     type_name = type_.__name__
     query = """
