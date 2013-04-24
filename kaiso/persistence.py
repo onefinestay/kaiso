@@ -10,7 +10,8 @@ from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import (
     Persistable, PersistableMeta, Entity, Relationship, Attribute,
-    get_descriptor, get_descriptor_by_name, get_indexes)
+    get_descriptor, get_descriptor_by_name, get_declaring_class,
+    get_indexes, get_index_name, is_indexable)
 
 
 def object_to_dict(obj):
@@ -218,10 +219,7 @@ def get_create_types_query(obj):
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
         # this filters out the types, which we don't want to persist
         if issubclass(obj2, Entity):
-            if isinstance(obj1, type):
-                name1 = obj1.__name__
-            else:
-                name1 = 'new_obj'
+            name1 = obj1.__name__
 
             if name1 in objects:
                 abstr1 = name1
@@ -451,10 +449,10 @@ class Storage(object):
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
                 index_type = neo4j.Relationship
+                index = self._conn.get_or_create_index(index_type, index_name)
             else:
                 index_type = neo4j.Node
-
-            index = self._conn.get_or_create_index(index_type, index_name)
+                index = self._conn.get_index(index_type, index_name)
 
             index.add(key, value, node_or_rel)
 
@@ -467,7 +465,8 @@ class Storage(object):
             query = 'CREATE (n {props}) RETURN n'
             query_args = {'props': object_to_dict(Entity)}
             objects = [cls]
-
+            self._conn.get_or_create_index(
+                neo4j.Node, get_index_name(type(cls)))
         else:
             if not self._root_exists():
                 self._add_types(Entity)
@@ -482,18 +481,13 @@ class Storage(object):
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
+        for obj in objects:
+            if is_indexable(obj):
+                index_name = get_index_name(obj)
+                self._conn.get_or_create_index(neo4j.Node, index_name)
+
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
-
-        return cls
-
-        descr = get_descriptor(cls)
-        # create indexes for the indexable attributes for the added type
-        for name, attr in descr.members.items():
-            if attr.unique:
-                declaring_class = get_declaring_class(cls, name)
-                index_name = get_index_name(declaring_class)
-                self._conn.get_or_create_index(index_type, index_name)
 
         return cls
 

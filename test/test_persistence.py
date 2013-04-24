@@ -337,6 +337,16 @@ def test_type_hierarchy_diamond(storage):
     }
 
 
+@pytest.mark.usefixtures('storage')
+def test_add_type_creates_index(storage):
+    storage.save(Thing)
+
+    # this should not raise a MissingIndex error
+    result = list(storage.query('START n=node:thing("id:*") RETURN n'))
+
+    assert result == []
+
+
 def count(storage, type_):
     type_name = type_.__name__
     query = """

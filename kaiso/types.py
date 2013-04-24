@@ -57,6 +57,20 @@ def get_indexes(obj):
                 yield (index_name, key, value)
 
 
+def is_indexable(cls):
+    """ Returns True if the class ``cls`` declares any indexable attributes.
+    """
+
+    descr = get_descriptor(cls)
+    for name, attr in descr.members.items():
+        if attr.unique:
+            declaring_class = get_declaring_class(descr.cls, name)
+            if declaring_class is cls:
+                return True
+
+    return False
+
+
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
