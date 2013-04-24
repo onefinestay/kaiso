@@ -442,18 +442,6 @@ class Storage(object):
         result = self._execute(query, **changes)
         return next(result)[0]
 
-        # if isinstance(persistable, Relationship):
-
-            # query = self._make_create_relationship_query(
-                # persistable, unique=True)
-            # result = self._execute(query, rel_props=props)
-            # result = list(result)
-
-        # elif isinstance(persistable, Entity):
-
-
-            # # otherwise update with new properties
-
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
