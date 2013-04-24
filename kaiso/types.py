@@ -10,6 +10,7 @@ def get_declaring_class(cls, attr_name):
     for base in getmro(cls):
         if hasattr(base, attr_name):
             return base
+
     raise AttributeError(
         "Attribute not defined on any base class of {}".format(cls)
     )
