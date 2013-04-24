@@ -34,11 +34,6 @@ class IndexedRelated(Relationship):
 
 
 @pytest.mark.usefixtures('storage')
-def test_foo(storage):
-    # import ipdb; ipdb.set_trace()
-    pass
-
-@pytest.mark.usefixtures('storage')
 def test_add_fails_on_non_persistable(storage):
 
     with pytest.raises(TypeError):
