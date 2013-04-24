@@ -22,3 +22,9 @@ class NoResultFound(Exception):
     """ Raised when a caller of a RelationshipManager
     expected at least one object, but none was found.
     """
+
+
+class UnknownType(Exception):
+    """ Raised when trying to deserialise a class that hasn't been
+    registered
+    """

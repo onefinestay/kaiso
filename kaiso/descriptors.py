@@ -12,6 +12,7 @@ The functions are mainly used by the persistence module and provide:
 from inspect import getmembers
 
 from kaiso.attributes import Attribute, RelationshipReference
+from kaiso.exceptions import UnknownType
 
 
 _descriptors = {}
@@ -38,7 +39,10 @@ def get_descriptor_by_name(name):
     Returns:
         A Descriptor object.
     """
-    return _descriptors[name]
+    try:
+        return _descriptors[name]
+    except KeyError:
+        raise UnknownType('Unknown type "{}"'.format(name))
 
 
 def register_type(cls):
