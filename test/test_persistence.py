@@ -63,8 +63,8 @@ def test_add_persistable_only_adds_single_node(storage):
 @pytest.mark.usefixtures('storage')
 def test_only_adds_entity_once(storage):
 
-    storage._add(Entity)
-    storage._add(Entity)
+    storage.save(Entity)
+    storage.save(Entity)
 
     result = list(storage.query('START n=node(*) RETURN n'))
     assert result == [(Entity,)]

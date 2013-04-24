@@ -410,43 +410,6 @@ class Storage(object):
 
         return query
 
-    def save(self, persistable):
-        """ Store the given persistable in the graph database. If a matching
-        object (by unique keys) already exists, replace it with the given one.
-        """
-        if not can_add(persistable):
-            raise TypeError('cannot persist %s' % persistable)
-
-        existing = self._get_by_unique(persistable)
-
-        if not existing:
-            return self._add(persistable)
-
-        existing_props = object_to_dict(existing)
-        props = object_to_dict(persistable)
-
-        if existing_props == props:
-            # no changes
-            return existing
-
-        changes = _get_changes(old=existing_props, new=props)
-        for (_, index_attr, _) in get_indexes(existing):
-            if index_attr in changes:
-                raise NotImplementedError(
-                    "We currently don't support changing unique attributes")
-
-        start_clause = get_index_query(existing, 'n')
-        set_clauses = [
-            'n.%s={%s}' % (key, key) for key in changes]
-        set_clause = ','.join(set_clauses)
-
-        query = '''START %s
-                   SET %s
-                   RETURN n''' % (start_clause, set_clause)
-
-        result = self._execute(query, **changes)
-        return next(result)[0]
-
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
@@ -483,63 +446,127 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
+    def _index_object(self, obj, node_or_rel):
+        indexes = get_indexes(obj)
+        for index_name, key, value in indexes:
+            if isinstance(obj, Relationship):
+                index_type = neo4j.Relationship
+            else:
+                index_type = neo4j.Node
+
+            index = self._conn.get_or_create_index(index_type, index_name)
+
+            index.add(key, value, node_or_rel)
+
+        if not isinstance(obj, Relationship):
+            set_store_for_object(obj, self)
+
+    def _add_types(self, cls):
+
+        if cls is Entity:
+            query = 'CREATE (n {props}) RETURN n'
+            query_args = {'props': object_to_dict(Entity)}
+            objects = [cls]
+
+        else:
+            if not self._root_exists():
+                self._add_types(Entity)
+
+            query, objects, keys = get_create_types_query(cls)
+
+            query_args = {
+                'IsA_props': object_to_dict(IsA(None, None))
+            }
+            for key, obj in zip(keys, objects):
+                query_args['%s_props' % key] = object_to_dict(obj)
+
+        nodes_or_rels = next(self._execute(query, **query_args))
+
+        for obj, node_or_rel in zip(objects, nodes_or_rels):
+            self._index_object(obj, node_or_rel)
+
+        return cls
+
+        descr = get_descriptor(cls)
+        # create indexes for the indexable attributes for the added type
+        for name, attr in descr.members.items():
+            if attr.unique:
+                declaring_class = get_declaring_class(cls, name)
+                index_name = get_index_name(declaring_class)
+                self._conn.get_or_create_index(index_type, index_name)
+
+        return cls
+
     def _add(self, obj):
         """ Adds an object to the data store.
 
         It will automatically generate the type relationships
         for the the object as required and store the object itself.
-
-        Args:
-            obj: The object to store.
         """
 
         if isinstance(obj, Relationship):
             query = self._make_create_relationship_query(obj)
             query_args = {'rel_props': object_to_dict(obj)}
-            objects = [obj]
 
-        elif obj is Entity:
-            if self._root_exists():
-                return
-            else:
-                # create the PersistableMeta node.
-                # if we had a standard start node, we would not need this
-                query = 'CREATE (n {props}) RETURN n'
-                query_args = {'props': object_to_dict(Entity)}
-                objects = [Entity]
+        elif isinstance(obj, PersistableMeta):
+            return self._add_types(obj)
         else:
-            if not self._root_exists():
-                self._add(Entity)
+            obj_type = type(obj)
+            self._add_types(obj_type)
 
-            query, objects, keys = get_create_types_query(obj)
+            query = (
+                'START {} '.format(get_index_query(obj_type, 'cls')) +
+                'CREATE (n {node_props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'RETURN n'
+            )
 
             query_args = {
-                'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
-                'IsA_props': object_to_dict(IsA(None, None))
+                'node_props': object_to_dict(obj),
+                'rel_props': object_to_dict(InstanceOf(None, None)),
             }
 
-            for key, obj in zip(keys, objects):
-                query_args['%s_props' % key] = object_to_dict(obj)
+        (node_or_rel,) = next(self._execute(query, **query_args))
 
-        items = next(self._execute(query, **query_args))
+        self._index_object(obj, node_or_rel)
 
-        # index all the created nodes or relationships
-        # note, that all nodes in the type-chain for the added object
-        # will be re-indexed if they already existed
-        for node_or_rel, obj in zip(items, objects):
-            indexes = get_indexes(obj)
-            for index_name, key, value in indexes:
-                if isinstance(obj, Relationship):
-                    index_type = neo4j.Relationship
-                else:
-                    index_type = neo4j.Node
+        return obj
 
-                index = self._conn.get_or_create_index(index_type, index_name)
+    def save(self, persistable):
+        """ Store the given persistable in the graph database. If a matching
+        object (by unique keys) already exists, replace it with the given one.
+        """
+        if not can_add(persistable):
+            raise TypeError('cannot persist %s' % persistable)
 
-                index.add(key, value, node_or_rel)
+        existing = self._get_by_unique(persistable)
 
-            if not isinstance(obj, Relationship):
-                set_store_for_object(obj, self)
+        if not existing:
+            return self._add(persistable)
+
+        existing_props = object_to_dict(existing)
+        props = object_to_dict(persistable)
+
+        if existing_props == props:
+            # no changes
+            return existing
+
+        changes = _get_changes(old=existing_props, new=props)
+        for (_, index_attr, _) in get_indexes(existing):
+            if index_attr in changes:
+                raise NotImplementedError(
+                    "We currently don't support changing unique attributes")
+
+        start_clause = get_index_query(existing, 'n')
+        set_clauses = [
+            'n.%s={%s}' % (key, key) for key in changes]
+        set_clause = ','.join(set_clauses)
+
+        query = '''START %s
+                   SET %s
+                   RETURN n''' % (start_clause, set_clause)
+
+        result = self._execute(query, **changes)
+        return next(result)[0]
 
     def delete(self, obj):
         """ Deletes an object from the store.
