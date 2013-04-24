@@ -361,3 +361,16 @@ def test_save_replace(storage):
     storage.save(obj1)
     storage.save(obj2)
     assert count(storage, Thing) == 1
+
+
+@pytest.mark.usefixtures('storage')
+def test_save_update(storage):
+    obj = Thing(str_attr='one')
+
+    storage.save(obj)
+
+    obj.str_attr = 'two'
+    storage.save(obj)
+
+    retrieved = storage.get(Thing, id=obj.id)
+    assert retrieved.str_attr == 'two'
