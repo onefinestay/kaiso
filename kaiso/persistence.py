@@ -487,12 +487,6 @@ class Storage(object):
         Args:
             obj: The object to store.
         """
-        existing = self._get_by_unique(obj)
-
-        if (not obj is Entity) and existing:
-            raise UniqueConstraintError(
-                'Can not add {}s as {} exist'.format(obj, existing)
-            )
 
         if isinstance(obj, Relationship):
             query = self._make_create_relationship_query(obj)
