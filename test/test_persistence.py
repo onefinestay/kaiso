@@ -21,6 +21,10 @@ class Thing(Entity):
     ch_attr = Choice('a', 'b')
 
 
+class NonUnique(Entity):
+    val = String()
+
+
 class Related(Relationship):
     str_attr = String()
 
@@ -33,32 +37,32 @@ class IndexedRelated(Relationship):
 def test_add_fails_on_non_persistable(storage):
 
     with pytest.raises(TypeError):
-        storage.add(object())
+        storage.save(object())
 
     with pytest.raises(TypeError):
-        storage.add(PersistableMeta)
+        storage.save(PersistableMeta)
 
     with pytest.raises(TypeError):
-        storage.add(Relationship)
+        storage.save(Relationship)
 
     with pytest.raises(TypeError):
-        storage.add(Related)
+        storage.save(Related)
 
 
 @pytest.mark.usefixtures('storage')
 def test_add_persistable_only_adds_single_node(storage):
 
-    storage.add(Entity)
+    storage.save(Entity)
 
     result = list(storage.query('START n=node(*) RETURN n'))
     assert result == [(Entity,)]
 
 
 @pytest.mark.usefixtures('storage')
-def test_only_adds_persistable_once(storage):
+def test_only_adds_entity_once(storage):
 
-    storage.add(Entity)
-    storage.add(Entity)
+    storage._add(Entity)
+    storage._add(Entity)
 
     result = list(storage.query('START n=node(*) RETURN n'))
     assert result == [(Entity,)]
@@ -69,8 +73,8 @@ def test_only_adds_types_once(storage):
     thing1 = Thing()
     thing2 = Thing()
 
-    storage.add(thing1)
-    storage.add(thing2)
+    storage.save(thing1)
+    storage.save(thing2)
 
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
 
@@ -82,7 +86,7 @@ def test_only_adds_types_once(storage):
 @pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_type(storage):
 
-    storage.add(Thing)
+    storage.save(Thing)
 
     result = storage.get(PersistableMeta, name='Thing')
 
@@ -92,7 +96,7 @@ def test_simple_add_and_get_type(storage):
 @pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_instance(storage):
     thing = Thing()
-    storage.add(thing)
+    storage.save(thing)
 
     queried_thing = storage.get(Thing, id=thing.id)
 
@@ -103,7 +107,7 @@ def test_simple_add_and_get_instance(storage):
 @pytest.mark.usefixtures('storage')
 def test_delete_instance(storage):
     thing = Thing()
-    storage.add(thing)
+    storage.save(thing)
 
     storage.delete(thing)
 
@@ -119,9 +123,9 @@ def test_delete_relationship(storage):
     thing2 = Thing()
     rel = Related(thing1, thing2)
 
-    storage.add(thing1)
-    storage.add(thing2)
-    storage.add(rel)
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(rel)
 
     storage.delete(rel)
 
@@ -143,7 +147,7 @@ def test_delete_relationship(storage):
 @pytest.mark.usefixtures('storage')
 def test_delete_class(storage):
     thing = Thing()
-    storage.add(thing)
+    storage.save(thing)
 
     storage.delete(Thing)
 
@@ -160,9 +164,9 @@ def test_delete_all_data(storage):
     thing1 = Thing()
     thing2 = Thing()
 
-    storage.add(thing1)
-    storage.add(thing2)
-    storage.add(IndexedRelated(thing1, thing2))
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(IndexedRelated(thing1, thing2))
 
     storage.delete_all_data()
 
@@ -193,7 +197,7 @@ def test_attributes(storage):
     thing.dt_attr = iso8601.parse_date("2001-02-03 16:17:00")
     thing.ch_attr = 'b'
 
-    storage.add(thing)
+    storage.save(thing)
 
     queried_thing = storage.get(Thing, id=thing.id)
 
@@ -214,9 +218,9 @@ def test_relationship(storage):
 
     rel = Related(thing1, thing2, str_attr='5cal')
 
-    storage.add(thing1)
-    storage.add(thing2)
-    storage.add(rel)
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(rel)
 
     rows = storage.query('''
         START n1 = node:thing(id={id})
@@ -244,9 +248,9 @@ def test_indexed_relationship(storage):
 
     rel = IndexedRelated(thing1, thing2)
 
-    storage.add(thing1)
-    storage.add(thing2)
-    storage.add(rel)
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(rel)
 
     rows = storage.query('''
         START r = relationship:indexedrelated(id={rel_id})
@@ -264,7 +268,7 @@ def test_indexed_relationship(storage):
 @pytest.mark.usefixtures('storage')
 def test_type_hierarchy_object(storage):
     obj = Thing()
-    storage.add(obj)
+    storage.save(obj)
 
     query_str = """
         START base = node(*)
@@ -296,10 +300,10 @@ def test_type_hierarchy_diamond(storage):
         pass
 
     beetroot = Beetroot()
-    storage.add(beetroot)
+    storage.save(beetroot)
 
     carmine = Carmine()
-    storage.add(carmine)
+    storage.save(carmine)
 
     query_str = """
         START base = node(*)
@@ -319,3 +323,55 @@ def test_type_hierarchy_diamond(storage):
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
     }
+
+
+def count(storage, type_):
+    type_name = type_.__name__
+    query = """
+        START Thing=node:persistablemeta(name="{}")
+        MATCH (n)-[:INSTANCEOF]->Thing
+        RETURN count(n);
+        """.format(type_name)
+    rows = storage.query(query)
+    (count,) = next(rows)
+    return count
+
+
+@pytest.mark.usefixtures('storage')
+def test_save(storage):
+    obj = Thing()
+    storage.save(obj)
+    assert count(storage, Thing) == 1
+
+
+@pytest.mark.usefixtures('storage')
+def test_save_new(storage):
+    obj1 = Thing()
+    obj2 = Thing()
+    storage.save(obj1)
+    storage.save(obj2)
+    assert count(storage, Thing) == 2
+
+
+@pytest.mark.usefixtures('storage')
+def test_save_replace(storage):
+    obj1 = Thing()
+    obj2 = Thing()
+
+    obj2.id = obj1.id
+    storage.save(obj1)
+    storage.save(obj2)
+    assert count(storage, Thing) == 1
+
+
+@pytest.mark.usefixtures('storage')
+def test_save_update(storage):
+    obj = Thing(str_attr='one')
+
+    storage.save(obj)
+
+    obj.str_attr = 'two'
+    storage.save(obj)
+
+    retrieved = storage.get(Thing, id=obj.id)
+    assert retrieved.str_attr == 'two'
