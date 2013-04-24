@@ -3,7 +3,7 @@ import string
 
 import pytest
 
-from kaiso.exceptions import UniqueConstraintError, NoIndexesError
+from kaiso.exceptions import UniqueConstraintError
 from kaiso.types import PersistableMeta, Entity, Relationship
 from kaiso.attributes import Integer, String
 
@@ -19,7 +19,7 @@ class UniqueThing(Entity):
 
 
 class Follows(Relationship):
-    pass
+    id = Integer(unique=True)
 
 
 class IndexedRel(Relationship):
@@ -28,11 +28,17 @@ class IndexedRel(Relationship):
 
 class TestReplace(object):
     def test_unique_enforced_on_add(self, storage):
+        """ Currently we can't change unique attributes
+            (need to figure out how to retain db integrity during such
+            changes)
+        """
         obj1 = UniqueThing(id=1, code='A', extra='lunch')
         storage.save(obj1)
 
+        # This is interpreted as find object with id:1 and change
+        # obj.code to 'B' (not "try to create a new object (1, 'B') )
         obj2 = UniqueThing(id=1, code='B', extra='snacks')
-        with pytest.raises(UniqueConstraintError):
+        with pytest.raises(NotImplementedError):
             storage.save(obj2)
 
     def test_replace_no_conflict(self, storage):
@@ -101,11 +107,6 @@ class TestReplace(object):
         assert len(rows) == 1
         assert rows[0][0].extra is None
 
-    def test_cant_replace_non_indexed(self, storage):
-        obj1 = NoIndexThing(field='a')
-        with pytest.raises(NoIndexesError):
-            storage.save(obj1)
-
     def test_no_existing_index(self, storage):
         name = ''.join(random.choice(string.ascii_letters) for i in range(20))
 
@@ -124,10 +125,10 @@ class TestReplace(object):
         storage.save(obj1)
         storage.save(obj2)
 
-        follow_rel1 = Follows(obj1, obj2)
+        follow_rel1 = Follows(obj1, obj2, id=1)
         storage.save(follow_rel1)
 
-        follow_rel2 = Follows(obj1, obj2)
+        follow_rel2 = Follows(obj1, obj2, id=1)
         storage.save(follow_rel2)
 
         result = storage.query('''
@@ -137,12 +138,3 @@ class TestReplace(object):
 
         result = list(result)
         assert len(result) == 1
-
-    def test_indexed_relationships_replace(self, storage):
-        obj1 = UniqueThing(id=1, code='A', extra='lunch')
-        obj2 = UniqueThing(id=2, code='B', extra='snacks')
-        storage.save(obj1)
-        storage.save(obj2)
-
-        with pytest.raises(NotImplementedError):
-            storage.save(IndexedRel(obj1, obj2, id="foo"))

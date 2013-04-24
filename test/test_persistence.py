@@ -1,5 +1,4 @@
 import decimal
-import uuid
 
 import iso8601
 import pytest
@@ -36,7 +35,8 @@ class IndexedRelated(Relationship):
 
 @pytest.mark.usefixtures('storage')
 def test_foo(storage):
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
+    pass
 
 @pytest.mark.usefixtures('storage')
 def test_add_fails_on_non_persistable(storage):
@@ -358,16 +358,6 @@ def test_save_new(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_save_new_nonunique(storage):
-    obj1 = NonUnique(val='spam')
-    obj2 = NonUnique(val='spam')
-    storage.save(obj1)
-    import ipdb; ipdb.set_trace()
-    storage.save(obj2)
-    assert count(storage, NonUnique) == 2
-
-
-@pytest.mark.usefixtures('storage')
 def test_save_replace(storage):
     obj1 = Thing()
     obj2 = Thing()
@@ -376,16 +366,3 @@ def test_save_replace(storage):
     storage.save(obj1)
     storage.save(obj2)
     assert count(storage, Thing) == 1
-
-
-@pytest.mark.usefixtures('storage')
-def test_save_edit_unique(storage):
-    obj = Thing()
-
-    storage.save(obj)
-
-    obj_copy = storage.get(Thing, id=obj.id)
-    obj.id = uuid.uuid4()
-
-    with pytest.raises(Exception):  # TODO
-        storage.save(obj_copy)

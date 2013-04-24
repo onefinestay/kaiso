@@ -377,7 +377,19 @@ class Storage(object):
                 if result:
                     found.append(result[0][0])
 
-        return found
+        if not found:
+            return found
+
+        # all the nodes returned should be the same
+        first = found[0]
+        for node in found:
+            if node.id != first.id:
+                raise UniqueConstraintError((
+                    "Multiple nodes ({}) found for unique object lookup for "
+                    "{}").format(found, obj))
+
+        obj = self._convert_value(first)
+        return obj
 
     def _make_create_relationship_query(self, rel, unique=False):
         rel_props = object_to_dict(rel)
@@ -400,68 +412,47 @@ class Storage(object):
         if not can_add(persistable):
             raise TypeError('cannot persist %s' % persistable)
 
-        props = object_to_dict(persistable)
-        indexes = get_indexes(persistable)
-        has_indexes = bool(next(indexes, False))
+        existing = self._get_by_unique(persistable)
 
-        if not has_indexes:
-            # no update possible, just add a new one
+        if not existing:
             return self._add(persistable)
 
-        if isinstance(persistable, Relationship):
-            existing = self._get_by_unique(persistable)
-            if existing:
+        existing_props = object_to_dict(existing)
+        props = object_to_dict(persistable)
+
+        if existing_props == props:
+            # no changes
+            return existing
+
+        changes = _get_changes(old=existing_props, new=props)
+        for (_, index_attr, _) in get_indexes(existing):
+            if index_attr in changes:
                 raise NotImplementedError(
-                    'Indexed Relationships cannot be updated.')
+                    "We currently don't support changing unique attributes")
 
-            query = self._make_create_relationship_query(
-                persistable, unique=True)
-            result = self._execute(query, rel_props=props)
-            result = list(result)
+        start_clause = get_index_query(existing, 'n')
+        set_clauses = [
+            'n.%s={%s}' % (key, key) for key in changes]
+        set_clause = ','.join(set_clauses)
 
-        elif isinstance(persistable, Entity):
-            existing = self._get_by_unique(persistable)
+        query = '''START %s
+                   SET %s
+                   RETURN n''' % (start_clause, set_clause)
 
-            if existing:
-                # all the nodes returned should be the same
-                for node in existing:
-                    if node.id != existing[0].id:
-                        raise UniqueConstraintError(
-                            "Can't create {} as existing data contain values "
-                            "that must be unique: {} vs {}".format(
-                                persistable, node, existing[0]))
+        result = self._execute(query, **changes)
+        return next(result)[0]
 
-                # we have one existing node and all the unique indexes match
+        # if isinstance(persistable, Relationship):
 
-                # if the rest of the properties are the same,
-                # we have nothing to do
-                existing_node = self._convert_value(existing[0])
-                existing_props = object_to_dict(existing_node)
-                if existing_props == props:
-                    return existing_node
+            # query = self._make_create_relationship_query(
+                # persistable, unique=True)
+            # result = self._execute(query, rel_props=props)
+            # result = list(result)
 
-                # otherwise update with new properties
+        # elif isinstance(persistable, Entity):
 
-                start_clause = get_index_query(existing_node, 'n')
-                changes = _get_changes(old=existing_props, new=props)
 
-                #TODO: don't allow changing of unique attributes
-
-                set_clauses = [
-                    'n.%s={%s}' % (key, key) for key in changes]
-                set_clause = ','.join(set_clauses)
-
-                query = '''START %s
-                           SET %s
-                           RETURN n''' % (start_clause, set_clause)
-
-                result = self._execute(query, **changes)
-                return next(result)[0]
-
-            # if we get this far, there's no existing node, and
-            # we should create a new one
-            self._add(persistable)
-            return persistable
+            # # otherwise update with new properties
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
