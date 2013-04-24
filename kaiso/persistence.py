@@ -3,7 +3,7 @@ from py2neo import cypher, neo4j
 from kaiso.connection import get_connection
 from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import NoIndexesError, UniqueConstraintError
+from kaiso.exceptions import UniqueConstraintError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
@@ -377,7 +377,19 @@ class Storage(object):
                 if result:
                     found.append(result[0][0])
 
-        return found
+        if not found:
+            return found
+
+        # all the nodes returned should be the same
+        first = found[0]
+        for node in found:
+            if node.id != first.id:
+                raise UniqueConstraintError((
+                    "Multiple nodes ({}) found for unique object lookup for "
+                    "{}").format(found, obj))
+
+        obj = self._convert_value(first)
+        return obj
 
     def _make_create_relationship_query(self, rel, unique=False):
         rel_props = object_to_dict(rel)
@@ -392,69 +404,43 @@ class Storage(object):
 
         return query
 
-    def replace(self, persistable):
+    def save(self, persistable):
         """Store the given persistable in the graph database. If a matching
            object (by unique keys) already exists, replace it with the
            given one
         """
+        if not can_add(persistable):
+            raise TypeError('cannot persist %s' % persistable)
+
+        existing = self._get_by_unique(persistable)
+
+        if not existing:
+            return self._add(persistable)
+
+        existing_props = object_to_dict(existing)
         props = object_to_dict(persistable)
-        indexes = get_indexes(persistable)
-        has_indexes = bool(next(indexes, False))
 
-        if isinstance(persistable, Relationship):
-            if has_indexes:
+        if existing_props == props:
+            # no changes
+            return existing
+
+        changes = _get_changes(old=existing_props, new=props)
+        for (_, index_attr, _) in get_indexes(existing):
+            if index_attr in changes:
                 raise NotImplementedError(
-                    'Indexed Relationships cannot be replaced.')
+                    "We currently don't support changing unique attributes")
 
-            query = self._make_create_relationship_query(
-                persistable, unique=True)
-            result = self._execute(query, rel_props=props)
-            result = list(result)
+        start_clause = get_index_query(existing, 'n')
+        set_clauses = [
+            'n.%s={%s}' % (key, key) for key in changes]
+        set_clause = ','.join(set_clauses)
 
-        elif isinstance(persistable, Entity):
-            if not has_indexes:
-                raise NoIndexesError("Can't replace an object with no indexes")
+        query = '''START %s
+                   SET %s
+                   RETURN n''' % (start_clause, set_clause)
 
-            existing = self._get_by_unique(persistable)
-
-            if existing:
-                # all the nodes returned should be the same
-                for node in existing:
-                    if node.id != existing[0].id:
-                        raise UniqueConstraintError(
-                            "Can't create {} as existing data contain values "
-                            "that must be unique: {} vs {}".format(
-                                persistable, node, existing[0]))
-
-                # we have one existing node and all the unique indexes match
-
-                # if the rest of the properties are the same,
-                # we have nothing to do
-                existing_node = self._convert_value(existing[0])
-                existing_props = object_to_dict(existing_node)
-                if existing_props == props:
-                    return existing_node
-
-                # otherwise update with new properties
-
-                start_clause = get_index_query(existing_node, 'n')
-                changes = _get_changes(old=existing_props, new=props)
-
-                set_clauses = [
-                    'n.%s={%s}' % (key, key) for key in changes]
-                set_clause = ','.join(set_clauses)
-
-                query = '''START %s
-                           SET %s
-                           RETURN n''' % (start_clause, set_clause)
-
-                result = self._execute(query, **changes)
-                return next(result)[0]
-
-            # if we get this far, there's no existing node, and
-            # we should create a new one
-            self.add(persistable)
-            return persistable
+        result = self._execute(query, **changes)
+        return next(result)[0]
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
@@ -492,7 +478,7 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def add(self, obj):
+    def _add(self, obj):
         """ Adds an object to the data store.
 
         It will automatically generate the type relationships
@@ -501,15 +487,6 @@ class Storage(object):
         Args:
             obj: The object to store.
         """
-        if not can_add(obj):
-            raise TypeError('cannot persist %s' % obj)
-
-        existing = self._get_by_unique(obj)
-
-        if (not obj is Entity) and existing:
-            raise UniqueConstraintError(
-                'Can not add {}s as {} exist'.format(obj, existing)
-            )
 
         if isinstance(obj, Relationship):
             query = self._make_create_relationship_query(obj)
@@ -527,7 +504,7 @@ class Storage(object):
                 objects = [Entity]
         else:
             if not self._root_exists():
-                self.add(Entity)
+                self._add(Entity)
 
             query, objects, keys = get_create_types_query(obj)
 
