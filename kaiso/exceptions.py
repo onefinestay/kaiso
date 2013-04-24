@@ -24,7 +24,7 @@ class NoResultFound(Exception):
     """
 
 
-class UnknownEntityType(Exception):
+class UnknownType(Exception):
     """ Raised when trying to deserialise a class that hasn't been
     registered
     """
