@@ -346,17 +346,19 @@ class Storage(object):
         for value in row:
             yield self._convert_value(value)
 
+    def _ensure_type_index_exists(self):
+        """ Creates PersistableMeta node index if it doesn't already exist.
+        """
+        self._conn.get_or_create_index(
+            neo4j.Node, get_index_name(PersistableMeta))
+
     def _get_by_unique(self, obj):
         """ Returns and object uniquely matching ``obj`` or None if
         no match could be found.
         A ``UniqueConstraintError`` is raised if more than one object
         was found.
         """
-
         query_args = {}
-
-        self._conn.get_or_create_index(
-            neo4j.Node, get_index_name(PersistableMeta))
 
         if isinstance(obj, Relationship):
             self._conn.get_or_create_index(
@@ -418,6 +420,8 @@ class Storage(object):
             set_store_for_object(obj, self)
 
     def _add_types(self, cls):
+        self._ensure_type_index_exists()
+
         if cls is Entity:
             query = 'CREATE (n {props}) RETURN n'
             query_args = {'props': object_to_dict(Entity)}
@@ -487,6 +491,7 @@ class Storage(object):
         assert issubclass(obj, Entity)
 
         # check all bases already exist in the db
+        self._ensure_type_index_exists()
         for base in obj.__bases__:
             if not self._get_by_unique(base):
                 raise TypeError('Base class {} does not exist.'.format(base))
@@ -538,6 +543,7 @@ class Storage(object):
         if not can_add(persistable):
             raise TypeError('cannot persist %s' % persistable)
 
+        self._ensure_type_index_exists()
         existing = self._get_by_unique(persistable)
 
         if existing is None:
