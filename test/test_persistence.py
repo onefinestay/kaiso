@@ -443,17 +443,3 @@ def test_persist_type_attributes(storage):
         ('DateTime', 'dt_attr', False),
         ('Choice', 'ch_attr', False),
     }
-
-
-def test_get_index_queries():
-    multiple_none = MultipleUniques()
-
-    multiple1 = MultipleUniques(u1="A")
-    multiple2 = MultipleUniques(u2="B")
-
-    multiple_both = MultipleUniques(u1="A", u2="B")
-
-    assert len(get_index_queries(multiple_none, 'n')) == 0
-    assert len(get_index_queries(multiple1, 'n')) == 1
-    assert len(get_index_queries(multiple2, 'n')) == 1
-    assert len(get_index_queries(multiple_both, 'n')) == 2
