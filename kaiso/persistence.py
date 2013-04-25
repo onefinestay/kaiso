@@ -444,13 +444,14 @@ class Storage(object):
                     "We currently don't support changing unique attributes")
 
         start_clause = get_start_clause(existing, 'n')
-        set_clauses = [
-            'n.%s={%s}' % (key, key) for key in changes]
-        set_clause = ','.join(set_clauses)
 
-        query = '''START %s
-                   SET %s
-                   RETURN n''' % (start_clause, set_clause)
+        set_clauses = ', '.join(['n.%s={%s}' % (key, key) for key in changes])
+
+        query = '\n'.join((
+            'START %s' % start_clause,
+            'SET %s' % set_clauses,
+            'RETURN n'
+        ))
 
         result = self._execute(query, **changes)
         return next(result)[0]
