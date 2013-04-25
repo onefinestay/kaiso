@@ -109,16 +109,6 @@ def test_get_type_non_existing_obj(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_get_type_non_existing_index(storage):
-
-    thing = Thing()
-    storage.save(thing)
-
-    with pytest.raises(AttributeError):
-        storage.get(Thing, foobar='Thing')
-
-
-@pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_instance(storage):
     thing = Thing()
     storage.save(thing)
