@@ -7,11 +7,6 @@ class UniqueConstraintError(Exception):
        value on an attribute declared to be unique"""
 
 
-class NoIndexesError(Exception):
-    """Raised when attempting to make use of unique attributes but none were
-       declared"""
-
-
 class MultipleObjectsFound(Exception):
     """ Raised when a caller of a RelationshipManager
     expected a single object, but multiple were returned.
