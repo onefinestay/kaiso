@@ -84,11 +84,14 @@ def test_only_adds_types_once(storage):
     storage.save(thing1)
     storage.save(thing2)
 
-    rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    rows = storage.query("""
+        START n=node(*)
+        MATCH n-[:ISA|INSTANCEOF]->m
+        RETURN COALESCE(n.id?, n)""")
 
     result = set(item for (item,) in rows)
 
-    assert result == {Entity, Thing, str(thing1.id), str(thing2.id)}
+    assert result == {Thing, str(thing1.id), str(thing2.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -302,7 +305,7 @@ def test_type_hierarchy_object(storage):
 
     query_str = """
         START base = node(*)
-        MATCH obj -[r]-> base
+        MATCH obj -[r:ISA|INSTANCEOF]-> base
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
 
@@ -337,7 +340,7 @@ def test_type_hierarchy_diamond(storage):
 
     query_str = """
         START base = node(*)
-        MATCH obj -[r]-> base
+        MATCH obj -[r:ISA|INSTANCEOF]-> base
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
     rows = storage.query(query_str)
