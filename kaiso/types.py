@@ -8,7 +8,7 @@ _descriptors = {}
 def get_declaring_class(cls, attr_name):
     """ Returns the class in the type heirarchhy of ``cls`` defined attribute
     ``attr_name``. """
-    for base in getmro(cls):
+    for base in reversed(getmro(cls)):
         if hasattr(base, attr_name):
             return base
 
@@ -48,7 +48,7 @@ def get_indexes(obj):
     else:
         descr = get_descriptor(obj_type)
 
-        for name, attr in descr.members.items():
+        for name, attr in descr.attributes.items():
             if attr.unique:
                 declaring_class = get_declaring_class(descr.cls, name)
 
@@ -61,11 +61,11 @@ def get_indexes(obj):
 
 
 def is_indexable(cls):
-    """ Returns True if the class ``cls`` declares any indexable attributes.
+    """ Returns True if the class ``cls`` has any indexable attributes.
     """
 
     descr = get_descriptor(cls)
-    for name, attr in descr.members.items():
+    for name, attr in descr.attributes.items():
         if attr.unique:
             declaring_class = get_declaring_class(descr.cls, name)
             if declaring_class is cls:
@@ -84,7 +84,8 @@ class Descriptor(object):
         self.cls = cls
         self.type_name = cls.__name__
 
-        self._members = None
+        self._attributes = None
+        self._declared_attributes = None
         self._relationships = None
 
     def get_index_name_for_attribute(self, attr_name=None):
@@ -122,13 +123,25 @@ class Descriptor(object):
         return relationships
 
     @property
-    def members(self):
-        members = self._members
-        if members is None:
-            members = dict(getmembers(self.cls, _is_attribute))
-            self._members = members
+    def attributes(self):
+        attributes = self._attributes
+        if attributes is None:
+            attributes = dict(getmembers(self.cls, _is_attribute))
+            self._attributes = attributes
 
-        return members
+        return attributes
+
+    @property
+    def declared_attributes(self):
+        declared = self._declared_attributes
+        if declared is None:
+            declared = {}
+            for name, attr in self.attributes.items():
+                if get_declaring_class(self.cls, name) == self.cls:
+                    declared[name] = attr
+            self._declared_attributes = declared
+
+        return declared
 
 
 def register_type(cls):
@@ -231,8 +244,7 @@ class AttributedBase(Persistable):
         # setup default values for attributes
         descriptor = get_descriptor(cls)
 
-        # TODO: rename members->attributes?
-        for name, attr in descriptor.members.items():
+        for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
 
         return obj

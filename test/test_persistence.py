@@ -430,8 +430,7 @@ def test_save_update(storage):
 @pytest.mark.usefixtures('storage')
 def test_persist_type_attributes(storage):
 
-    storage.save(Entity)  # _add_type doesn't yet create the hierarchy
-    storage._add_type(Thing)
+    storage._add_types(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(name="Thing")
@@ -452,13 +451,6 @@ def test_persist_type_attributes(storage):
         ('DateTime', 'dt_attr', False),
         ('Choice', 'ch_attr', False),
     }
-
-
-@pytest.mark.usefixtures('storage')
-def test_persist_type_attributes_missing_bases(storage):
-
-    with pytest.raises(TypeError):  # Base type Entity does not exist.
-        storage._add_type(Thing)
 
 
 def test_get_index_queries():
