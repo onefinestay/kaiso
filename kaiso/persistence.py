@@ -180,9 +180,10 @@ def get_index_queries(obj, name=None):
 
     indexes = get_indexes(obj)
     for index_name, index_key, index_val in indexes:
-        queries.append('{}={}:{}({}="{}")'.format(
-            name, start_func, index_name, index_key, index_val
-        ))
+        if index_val is not None:
+            queries.append('{}={}:{}({}="{}")'.format(
+                name, start_func, index_name, index_key, index_val
+            ))
 
     return queries
 

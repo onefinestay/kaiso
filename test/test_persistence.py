@@ -4,10 +4,11 @@ import iso8601
 import pytest
 from py2neo import cypher
 
-from kaiso.types import PersistableMeta, Entity
-from kaiso.relationships import Relationship
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
+from kaiso.persistence import get_index_queries
+from kaiso.relationships import Relationship
+from kaiso.types import PersistableMeta, Entity
 
 
 class Thing(Entity):
@@ -23,6 +24,11 @@ class Thing(Entity):
 
 class NonUnique(Entity):
     val = String()
+
+
+class MultipleUniques(Entity):
+    u1 = String(unique=True)
+    u2 = String(unique=True)
 
 
 class Related(Relationship):
@@ -438,3 +444,18 @@ def test_persist_type_attributes_missing_bases(storage):
 
     with pytest.raises(TypeError):  # Base type Entity does not exist.
         storage._add_type(Thing)
+
+
+def test_get_index_queries():
+    multiple_none = MultipleUniques()
+
+    multiple1 = MultipleUniques(u1="A")
+    multiple2 = MultipleUniques(u2="B")
+
+    multiple_both = MultipleUniques(u1="A", u2="B")
+
+    assert len(get_index_queries(multiple_none, 'n')) == 0
+    assert len(get_index_queries(multiple1, 'n')) == 1
+    assert len(get_index_queries(multiple2, 'n')) == 1
+    assert len(get_index_queries(multiple_both, 'n')) == 2
+

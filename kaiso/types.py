@@ -1,5 +1,7 @@
 from inspect import getmembers, getmro
 
+from kaiso.exceptions import UnknownType
+
 _descriptors = {}
 
 
@@ -152,7 +154,7 @@ def get_descriptor(cls):
     Returns:
         A Descriptor object.
     """
-    return _descriptors[cls.__name__]
+    return get_descriptor_by_name(cls.__name__)
 
 
 def get_descriptor_by_name(name):
@@ -164,7 +166,10 @@ def get_descriptor_by_name(name):
     Returns:
         A Descriptor object.
     """
-    return _descriptors[name]
+    try:
+        return _descriptors[name]
+    except KeyError:
+        raise UnknownType('Unknown type "{}"'.format(name))
 
 
 register_type(type)
