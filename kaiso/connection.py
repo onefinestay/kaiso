@@ -71,19 +71,19 @@ def temp_neo4j_instance(uri):
 
     # split the uri
     match = re.match(r"temp://?(?P<port>\d*)(?P<temp_dir>.*)", uri)
-
-    neo4j_info = get_neo4j_info()
-
     port = match.group("port") or '7475'
-    temp_dir = match.group("temp_dir") or tempfile.mkdtemp()
-    temp_data_dir = os.path.join(temp_dir, 'data')
-    if not os.path.exists(temp_data_dir):
-        os.makedirs(temp_data_dir)
 
     # return http uri if this temporary database already exists,
     # using the port as the unique identifer
     if port in _temporary_databases:
         return "http://localhost:{}/db/data/".format(port)
+
+    neo4j_info = get_neo4j_info()
+
+    temp_dir = match.group("temp_dir") or tempfile.mkdtemp()
+    temp_data_dir = os.path.join(temp_dir, 'data')
+    if not os.path.exists(temp_data_dir):
+        os.makedirs(temp_data_dir)
 
     # otherwise, start a new neo4j process.
     # define the subprocess command and the required classpath
