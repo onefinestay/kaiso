@@ -185,10 +185,9 @@ def get_index_queries(obj, name=None):
 
     indexes = get_indexes(obj)
     for index_name, index_key, index_val in indexes:
-        if index_val is not None:
-            queries.append('{}={}:{}({}="{}")'.format(
-                name, start_func, index_name, index_key, index_val
-            ))
+        queries.append('{}={}:{}({}="{}")'.format(
+            name, start_func, index_name, index_key, index_val
+        ))
 
     return queries
 
@@ -381,9 +380,8 @@ class Storage(object):
         else:
             idx_where = []
             for index_name, key, value in get_indexes(obj):
-                if value is not None:
-                    idx_where.append('n.%s? = {%s}' % (key, key))
-                    query_args[key] = value
+                idx_where.append('n.%s? = {%s}' % (key, key))
+                query_args[key] = value
 
             idx_where = ' or '.join(idx_where)
             query = (

@@ -55,7 +55,9 @@ def get_indexes(obj):
                 index_name = get_index_name(declaring_class)
                 key = name
                 value = attr.to_db(getattr(obj, name))
-                yield (index_name, key, value)
+
+                if value is not None:
+                    yield (index_name, key, value)
 
 
 def is_indexable(cls):
