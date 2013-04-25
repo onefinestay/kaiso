@@ -130,6 +130,21 @@ def test_simple_add_and_get_instance(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_simple_add_and_get_relationship(storage):
+    thing1 = Thing()
+    thing2 = Thing()
+    rel = IndexedRelated(start=thing1, end=thing2)
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(rel)
+
+    queried_rel = storage.get(IndexedRelated, id=rel.id)
+
+    assert type(queried_rel) == IndexedRelated
+    assert queried_rel.id == rel.id
+
+
+@pytest.mark.usefixtures('storage')
 def test_delete_instance(storage):
     thing = Thing()
     storage.save(thing)

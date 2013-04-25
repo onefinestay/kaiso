@@ -589,11 +589,17 @@ class Storage(object):
         assert len(index_filter) == 1, "only one index allowed at a time"
         key, value = index_filter.items()[0]
         index_name = descriptor.get_index_name_for_attribute(key)
-        node = self._conn.get_indexed_node(index_name, key, value)
-        if node is None:
+
+        if issubclass(cls, Relationship):
+            node_or_rel = self._conn.get_indexed_relationship(
+                index_name, key, value)
+        else:
+            node_or_rel = self._conn.get_indexed_node(index_name, key, value)
+
+        if node_or_rel is None:
             return None
 
-        obj = self._convert_value(node)
+        obj = self._convert_value(node_or_rel)
         return obj
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
