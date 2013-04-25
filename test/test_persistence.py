@@ -96,6 +96,13 @@ def test_simple_add_and_get_type(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_get_type_non_existing_obj(storage):
+    storage.save(Thing)
+
+    assert storage.get(PersistableMeta, name="Ting") is None
+
+
+@pytest.mark.usefixtures('storage')
 def test_get_type_non_existing_index(storage):
 
     thing = Thing()

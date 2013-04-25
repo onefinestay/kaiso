@@ -251,6 +251,20 @@ def get_create_types_query(obj):
     return query, objects, keys
 
 
+def get_create_relationship_query(rel, unique=False):
+    rel_props = object_to_dict(rel)
+    maybe_unique = 'UNIQUE' if unique else ''
+    query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
+    query = query % (
+        get_index_query(rel.start, 'n1'),
+        get_index_query(rel.end, 'n2'),
+        maybe_unique,
+        rel_props['__type__'].upper(),
+    )
+
+    return query
+
+
 def _get_changes(old, new):
     """Return a changes dictionary containing the key/values in new that are
        different from old. Any key in old that is not in new will have a None
@@ -332,57 +346,50 @@ class Storage(object):
         for value in row:
             yield self._convert_value(value)
 
-    def _root_exists(self):
-        try:
-            # we have to make sure we have a starting point for
-            # the type hierarchy, for now that is Entity
-            obj = self.get(PersistableMeta, name='Entity')
-            if obj is not Entity:
-                raise Exception("Db is broken")  # TODO: raise DbIsBroken()
-
-            return True
-        except:  # (IndexDoesn'texistYet or None returned)
-            return False
-
-    def get(self, cls, **index_filter):
-        index_filter = dict_to_db_values_dict(index_filter)
-        descriptor = get_descriptor(cls)
-
-        # TODO: can we consider a different signature that avoids this assert?
-        # TODO: something like:
-        # TODO: def get(self, cls, (key, value)):
-        assert len(index_filter) == 1, "only one index allowed at a time"
-        key, value = index_filter.items()[0]
-        index_name = descriptor.get_index_name_for_attribute(key)
-        node = self._conn.get_indexed_node(index_name, key, value)
-        if node is None:
-            return None
-
-        obj = self._convert_value(node)
-        return obj
-
     def _get_by_unique(self, obj):
-        """Return a list of any existing data from the database that
-           matches any of the given objects' unique indexes.
+        """ Returns and object uniquely matching ``obj`` or None if
+        no match could be found.
+        A ``UniqueConstraintError`` is raised if more than one object
+        was found.
         """
-        found = []
 
-        for clause in get_index_queries(obj, 'x'):
-            query = '''START {}
-                       RETURN x'''.format(clause)
-            try:
-                result = self._execute(query, node_props=object_to_dict(obj))
-                result = list(result)
-            except cypher.CypherError as exc:
-                if exc.exception != 'MissingIndexException':
-                    raise  # pragma: no cover
-                # MissingIndexException is ok, treat as no result
-            else:
-                if result:
-                    found.append(result[0][0])
+        query_args = {}
+
+        self._conn.get_or_create_index(
+            neo4j.Node, get_index_name(PersistableMeta))
+
+        if isinstance(obj, Relationship):
+            self._conn.get_or_create_index(
+                neo4j.Relationship, get_index_name(type(obj)))
+
+            idx_query = get_index_query(obj, 'r')
+            if idx_query is None:
+                return None
+
+            query = 'START {} RETURN r'.format(idx_query)
+
+        elif isinstance(obj, PersistableMeta):
+            query = 'START {} RETURN n'.format(get_index_query(obj, 'n'))
+
+        else:
+            idx_where = []
+            for index_name, key, value in get_indexes(obj):
+                if value is not None:
+                    idx_where.append('n.%s? = {%s}' % (key, key))
+                    query_args[key] = value
+
+            idx_where = ' or '.join(idx_where)
+            query = (
+                'START {} '.format(get_index_query(Entity, 'tpe')) +
+                'MATCH tpe <-[:ISA*]- () <-[:INSTANCEOF]- n ' +
+                'WHERE {} '.format(idx_where) +
+                'RETURN n'
+            )
+
+        found = [node for (node, ) in self._execute(query, **query_args)]
 
         if not found:
-            return found
+            return None
 
         # all the nodes returned should be the same
         first = found[0]
@@ -394,55 +401,6 @@ class Storage(object):
 
         obj = self._convert_value(first)
         return obj
-
-    def _make_create_relationship_query(self, rel, unique=False):
-        rel_props = object_to_dict(rel)
-        maybe_unique = 'UNIQUE' if unique else ''
-        query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
-        query = query % (
-            get_index_query(rel.start, 'n1'),
-            get_index_query(rel.end, 'n2'),
-            maybe_unique,
-            rel_props['__type__'].upper(),
-        )
-
-        return query
-
-    def get_related_objects(self, rel_cls, ref_cls, obj):
-
-        if ref_cls is Outgoing:
-            rel_query = 'n -[:{}]-> related'
-        elif ref_cls is Incoming:
-            rel_query = 'n <-[:{}]- related'
-
-        # TODO: should get the rel name from descriptor?
-        rel_query = rel_query.format(rel_cls.__name__.upper())
-
-        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
-
-        query = query.format(
-            idx_lookup=get_index_query(obj, 'n'),
-            rel_query=rel_query
-        )
-
-        rows = self.query(query)
-        related_objects = (related_obj for (related_obj,) in rows)
-
-        return related_objects
-
-    def query(self, query, **params):
-        """ Queries the store given a parameterized cypher query.
-
-        Args:
-            query: A parameterized cypher query.
-            params: query: A parameterized cypher query.
-
-        Returns:
-            A generator with tuples containing stored objects or values.
-        """
-        params = dict_to_db_values_dict(params)
-        for row in self._execute(query, **params):
-            yield tuple(self._convert_row(row))
 
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
@@ -465,10 +423,8 @@ class Storage(object):
             query = 'CREATE (n {props}) RETURN n'
             query_args = {'props': object_to_dict(Entity)}
             objects = [cls]
-            self._conn.get_or_create_index(
-                neo4j.Node, get_index_name(type(cls)))
         else:
-            if not self._root_exists():
+            if not self._get_by_unique(Entity):
                 self._add_types(Entity)
 
             query, objects, keys = get_create_types_query(cls)
@@ -499,7 +455,7 @@ class Storage(object):
         """
 
         if isinstance(obj, Relationship):
-            query = self._make_create_relationship_query(obj)
+            query = get_create_relationship_query(obj)
             query_args = {'rel_props': object_to_dict(obj)}
 
         elif isinstance(obj, PersistableMeta):
@@ -526,15 +482,16 @@ class Storage(object):
         return obj
 
     def save(self, persistable):
-        """ Store the given persistable in the graph database. If a matching
-        object (by unique keys) already exists, replace it with the given one.
+        """ Stores the given ``persistable`` in the graph database.
+        If a matching object (by unique keys) already exists, it will
+        update it with the modified attributes.
         """
         if not can_add(persistable):
             raise TypeError('cannot persist %s' % persistable)
 
         existing = self._get_by_unique(persistable)
 
-        if not existing:
+        if existing is None:
             return self._add(persistable)
 
         existing_props = object_to_dict(existing)
@@ -562,6 +519,45 @@ class Storage(object):
         result = self._execute(query, **changes)
         return next(result)[0]
 
+    def get(self, cls, **index_filter):
+        index_filter = dict_to_db_values_dict(index_filter)
+        descriptor = get_descriptor(cls)
+
+        # TODO: can we consider a different signature that avoids this assert?
+        # TODO: something like:
+        # TODO: def get(self, cls, (key, value)):
+        assert len(index_filter) == 1, "only one index allowed at a time"
+        key, value = index_filter.items()[0]
+        index_name = descriptor.get_index_name_for_attribute(key)
+        node = self._conn.get_indexed_node(index_name, key, value)
+        if node is None:
+            return None
+
+        obj = self._convert_value(node)
+        return obj
+
+    def get_related_objects(self, rel_cls, ref_cls, obj):
+
+        if ref_cls is Outgoing:
+            rel_query = 'n -[:{}]-> related'
+        elif ref_cls is Incoming:
+            rel_query = 'n <-[:{}]- related'
+
+        # TODO: should get the rel name from descriptor?
+        rel_query = rel_query.format(rel_cls.__name__.upper())
+
+        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
+
+        query = query.format(
+            idx_lookup=get_index_query(obj, 'n'),
+            rel_query=rel_query
+        )
+
+        rows = self.query(query)
+        related_objects = (related_obj for (related_obj,) in rows)
+
+        return related_objects
+
     def delete(self, obj):
         """ Deletes an object from the store.
 
@@ -578,7 +574,23 @@ class Storage(object):
             query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
                 get_index_query(obj, 'obj'))
 
+        # TODO: delete node/rel from indexes
+
         cypher.execute(self._conn, query)
+
+    def query(self, query, **params):
+        """ Queries the store given a parameterized cypher query.
+
+        Args:
+            query: A parameterized cypher query.
+            params: query: A parameterized cypher query.
+
+        Returns:
+            A generator with tuples containing stored objects or values.
+        """
+        params = dict_to_db_values_dict(params)
+        for row in self._execute(query, **params):
+            yield tuple(self._convert_row(row))
 
     def delete_all_data(self):
         """ Removes all nodes, relationships and indexes in the store.
