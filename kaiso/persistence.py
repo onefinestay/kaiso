@@ -1,11 +1,11 @@
 from py2neo import cypher, neo4j
 
-from kaiso.connection import get_connection
-from kaiso.exceptions import UniqueConstraintError
-from kaiso.iter_helpers import unique
-from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
+from kaiso.connection import get_connection
+from kaiso.exceptions import UniqueConstraintError, DeserialisationError
+from kaiso.iter_helpers import unique
+from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import (
     Persistable, PersistableMeta, Entity, Relationship, Attribute,
@@ -80,7 +80,12 @@ def dict_to_object(properties):
         A persistable object.
     """
 
-    type_name = properties.pop('__type__')
+    try:
+        type_name = properties['__type__']
+    except KeyError:
+        raise DeserialisationError(
+            'properties "{}" missing __type__ key'.format(properties))
+
     descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
