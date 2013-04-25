@@ -458,4 +458,3 @@ def test_get_index_queries():
     assert len(get_index_queries(multiple1, 'n')) == 1
     assert len(get_index_queries(multiple2, 'n')) == 1
     assert len(get_index_queries(multiple_both, 'n')) == 2
-
