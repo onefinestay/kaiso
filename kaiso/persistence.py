@@ -177,15 +177,9 @@ def get_index_queries(obj, name=None):
     if name is None:
         name = obj.__name__
 
-    if isinstance(obj, Relationship):
-        start_func = 'relationship'
-    else:
-        start_func = 'node'
-
-    indexes = get_indexes(obj)
-    for index_name, index_key, index_val in indexes:
-        queries.append('{}={}:{}({}="{}")'.format(
-            name, start_func, index_name, index_key, index_val
+    for index_name, index_key, index_val in get_indexes(obj):
+        queries.append('{}=node:{}({}="{}")'.format(
+            name, index_name, index_key, index_val
         ))
 
     return queries
@@ -381,50 +375,9 @@ class Storage(object):
         A ``UniqueConstraintError`` is raised if more than one object
         was found.
         """
-        query_args = {}
-
-        if isinstance(obj, Relationship):
-            self._conn.get_or_create_index(
-                neo4j.Relationship, get_index_name(type(obj)))
-
-            idx_query = get_index_query(obj, 'r')
-            if idx_query is None:
-                return None
-
-            query = 'START {} RETURN r'.format(idx_query)
-
-        elif isinstance(obj, PersistableMeta):
-            query = 'START {} RETURN n'.format(get_index_query(obj, 'n'))
-
-        else:
-            idx_where = []
-            for index_name, key, value in get_indexes(obj):
-                idx_where.append('n.%s? = {%s}' % (key, key))
-                query_args[key] = value
-
-            idx_where = ' or '.join(idx_where)
-            query = (
-                'START {} '.format(get_index_query(Entity, 'tpe')) +
-                'MATCH tpe <-[:ISA*]- () <-[:INSTANCEOF]- n ' +
-                'WHERE {} '.format(idx_where) +
-                'RETURN n'
-            )
-
-        found = [node for (node,) in self._execute(query, **query_args)]
-
-        if not found:
-            return None
-
-        # all the nodes returned should be the same
-        first = found[0]
-        for node in found:
-            if node.id != first.id:
-                raise UniqueConstraintError((
-                    "Multiple nodes ({}) found for unique object lookup for "
-                    "{}").format(found, obj))
-
-        obj = self._convert_value(first)
-        return obj
+        indexes = get_indexes(obj)
+        index_filter = {key: value for _, key, value in indexes}
+        return self.get(type(obj), **index_filter)
 
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
@@ -544,25 +497,55 @@ class Storage(object):
 
     def get(self, cls, **index_filter):
         index_filter = dict_to_db_values_dict(index_filter)
-        descriptor = get_descriptor(cls)
 
-        # TODO: can we consider a different signature that avoids this assert?
-        # TODO: something like:
-        # TODO: def get(self, cls, (key, value)):
-        assert len(index_filter) == 1, "only one index allowed at a time"
-        key, value = index_filter.items()[0]
-        index_name = descriptor.get_index_name_for_attribute(key)
+        query_args = {}
 
-        if issubclass(cls, Relationship):
-            node_or_rel = self._conn.get_indexed_relationship(
-                index_name, key, value)
-        else:
-            node_or_rel = self._conn.get_indexed_node(index_name, key, value)
-
-        if node_or_rel is None:
+        indexes = index_filter.items()
+        if len(indexes) == 0:
             return None
 
-        obj = self._convert_value(node_or_rel)
+        if issubclass(cls, (Relationship, PersistableMeta)):
+            idx_name = get_index_name(cls)
+            idx_key, idx_value = indexes[0]
+
+            if issubclass(cls, Relationship):
+                self._conn.get_or_create_index(neo4j.Relationship, idx_name)
+                start_func = 'relationship'
+            else:
+                start_func = 'node'
+
+            query = 'START nr = %s:%s(%s={idx_value}) RETURN nr' % (
+                start_func, idx_name, idx_key)
+
+            query_args['idx_value'] = idx_value
+        else:
+            idx_where = []
+            for key, value in indexes:
+                idx_where.append('n.%s? = {%s}' % (key, key))
+                query_args[key] = value
+
+            idx_where = ' or '.join(idx_where)
+            query = (
+                'START {} '.format(get_index_query(Entity, 'tpe')) +
+                'MATCH tpe <-[:ISA*]- () <-[:INSTANCEOF]- n ' +
+                'WHERE {} '.format(idx_where) +
+                'RETURN n'
+            )
+
+        found = [node for (node,) in self._execute(query, **query_args)]
+
+        if not found:
+            return None
+
+        # all the nodes returned should be the same
+        first = found[0]
+        for node in found:
+            if node.id != first.id:
+                raise UniqueConstraintError((
+                    "Multiple nodes ({}) found for unique lookup for "
+                    "{}").format(found, cls))
+
+        obj = self._convert_value(first)
         return obj
 
     def get_related_objects(self, rel_cls, ref_cls, obj):

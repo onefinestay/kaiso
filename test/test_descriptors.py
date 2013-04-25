@@ -19,11 +19,6 @@ def test_type_names():
     assert descr.type_name == 'Foo'
 
 
-def test_index_names():
-    descr = get_descriptor(PersistableMeta)
-    assert descr.get_index_name_for_attribute() == 'persistablemeta'
-
-
 def test_unknown_type():
     with pytest.raises(UnknownType):
         get_descriptor(UnknownType)

@@ -12,10 +12,6 @@ def get_declaring_class(cls, attr_name):
         if hasattr(base, attr_name):
             return base
 
-    raise AttributeError(
-        "Attribute not defined on any base class of {}".format(cls)
-    )
-
 
 def get_index_name(cls):
     """ Returns a cypher index name for a class.
@@ -87,28 +83,6 @@ class Descriptor(object):
         self._attributes = None
         self._declared_attributes = None
         self._relationships = None
-
-    def get_index_name_for_attribute(self, attr_name=None):
-        """ Returns the index name for the attribute declared on
-        the descriptor's class or it's bases.
-
-        If the descriptor's class is a subclass of <type>, i.e. a meta-class,
-        the attr_name arg is not required.
-
-        Otherwise, the index will be based on the class on which the attribute,
-        identified by attr_name was declared on.
-
-        Args:
-            attr_name: The name of the attribute for which to return an index.
-
-        Returns:
-            The index name, which can be used in index lookups in cypher.
-        """
-        if issubclass(self.cls, type):
-            # we are dealing with a meta-class
-            return get_index_name(self.cls)
-        else:
-            return get_index_name(get_declaring_class(self.cls, attr_name))
 
     @property
     def relationships(self):
