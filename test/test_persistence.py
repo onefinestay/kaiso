@@ -387,3 +387,37 @@ def test_save_update(storage):
 
     retrieved = storage.get(Thing, id=obj.id)
     assert retrieved.str_attr == 'two'
+
+
+@pytest.mark.usefixtures('storage')
+def test_persist_type_attributes(storage):
+
+    storage._add(Entity)  # _add_type doesn't yet create the hierarchy
+    storage._add_type(Thing)
+
+    query_str = """
+        START Thing = node:persistablemeta(name="Thing")
+        MATCH attr -[DECLAREDON]-> Thing
+        RETURN attr.__type__, attr.name, attr.unique
+    """
+
+    rows = storage.query(query_str)
+    result = set(rows)
+
+    assert result == {
+        ('Uuid', 'id', True),
+        ('Bool', 'bool_attr', False),
+        ('Integer', 'int_attr', False),
+        ('Float', 'float_attr', False),
+        ('String', 'str_attr', False),
+        ('Decimal', 'dec_attr', False),
+        ('DateTime', 'dt_attr', False),
+        ('Choice', 'ch_attr', False),
+    }
+
+
+@pytest.mark.usefixtures('storage')
+def test_persist_type_attributes_missing_bases(storage):
+
+    with pytest.raises(TypeError):  # Base type Entity does not exist.
+        storage._add_type(Thing)

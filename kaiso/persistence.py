@@ -483,6 +483,54 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
+    def _add_type(self, obj):
+        """ Adds a type to the data store.
+        """
+        # obj must be a subtype of Entity (or AttributedBase?)
+        assert issubclass(obj, Entity)
+
+        # check all bases already exist in the db
+        for base in obj.__bases__:
+            if not self._get_by_unique(base):
+                raise TypeError('Base class {} does not exist.'.format(base))
+
+        descriptor = get_descriptor(obj)
+        query_args = {
+            'obj_props': object_to_dict(obj)
+        }
+
+        # build start clause
+        start_clause = ",".join([get_index_query(base) for base in obj.__bases__])
+
+        # build type node and ISA relationships querystring
+        create_clauses = []
+        for idx, base in enumerate(obj.__bases__):
+            create_clauses.append(
+                "(%s {obj_props}) -[:ISA]-> %s" % (obj.__name__, base.__name__)
+            )
+
+        # build attribute nodes and DECLAREDON relationships querystring
+        for idx, (attr_name, attr) in enumerate(descriptor.members.iteritems()):
+            create_clauses.append(
+                '({attr_%s_props}) -[:DECLAREDON]-> %s' % (idx, obj.__name__)
+            )
+            attr_dict = object_to_dict(attr)
+            attr_dict['name'] = attr_name
+            query_args['attr_{}_props'.format(idx)] = attr_dict
+        create_clause = ",".join(create_clauses)
+
+        # persist nodes and relationships
+        query = """ START %s
+                    CREATE UNIQUE %s
+                    RETURN %s """ % (start_clause, create_clause, obj.__name__)
+
+        # execute
+        res = next(self._execute(query, **query_args))[0]
+
+        # index it
+        index = self._conn.get_or_create_index(neo4j.Node, 'persistablemeta')
+        index.add('name', obj.__name__, res)
+
     def _add(self, obj):
         """ Adds an object to the data store.
 
