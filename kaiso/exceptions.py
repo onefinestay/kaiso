@@ -28,3 +28,7 @@ class UnknownType(Exception):
     """ Raised when trying to deserialise a class that hasn't been
     registered
     """
+
+
+class DeserialisationError(Exception):
+    """ Raised when trying to deserialise a dict with no __type__ key """
