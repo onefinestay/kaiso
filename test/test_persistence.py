@@ -6,7 +6,6 @@ from py2neo import cypher
 
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
-from kaiso.persistence import get_index_queries
 from kaiso.relationships import Relationship
 from kaiso.types import PersistableMeta, Entity
 
