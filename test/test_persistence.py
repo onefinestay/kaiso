@@ -83,11 +83,14 @@ def test_only_adds_types_once(storage):
     storage.save(thing1)
     storage.save(thing2)
 
-    rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    rows = storage.query("""
+        START n=node(*)
+        MATCH n-[:ISA|INSTANCEOF]->m
+        RETURN COALESCE(n.id?, n)""")
 
     result = set(item for (item,) in rows)
 
-    assert result == {Entity, Thing, str(thing1.id), str(thing2.id)}
+    assert result == {Thing, str(thing1.id), str(thing2.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -301,7 +304,7 @@ def test_type_hierarchy_object(storage):
 
     query_str = """
         START base = node(*)
-        MATCH obj -[r]-> base
+        MATCH obj -[r:ISA|INSTANCEOF]-> base
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
 
@@ -336,7 +339,7 @@ def test_type_hierarchy_diamond(storage):
 
     query_str = """
         START base = node(*)
-        MATCH obj -[r]-> base
+        MATCH obj -[r:ISA|INSTANCEOF]-> base
         RETURN COALESCE(obj.id?, obj) , r.__type__, base
     """
     rows = storage.query(query_str)
@@ -419,8 +422,7 @@ def test_save_update(storage):
 @pytest.mark.usefixtures('storage')
 def test_persist_type_attributes(storage):
 
-    storage.save(Entity)  # _add_type doesn't yet create the hierarchy
-    storage._add_type(Thing)
+    storage._add_types(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(name="Thing")
@@ -443,9 +445,15 @@ def test_persist_type_attributes(storage):
     }
 
 
-@pytest.mark.usefixtures('storage')
-def test_persist_type_attributes_missing_bases(storage):
+def test_get_index_queries():
+    multiple_none = MultipleUniques()
 
-    with pytest.raises(TypeError):  # Base type Entity does not exist.
-        storage._add_type(Thing)
+    multiple1 = MultipleUniques(u1="A")
+    multiple2 = MultipleUniques(u2="B")
 
+    multiple_both = MultipleUniques(u1="A", u2="B")
+
+    assert len(get_index_queries(multiple_none, 'n')) == 0
+    assert len(get_index_queries(multiple1, 'n')) == 1
+    assert len(get_index_queries(multiple2, 'n')) == 1
+    assert len(get_index_queries(multiple_both, 'n')) == 2

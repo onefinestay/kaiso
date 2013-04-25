@@ -1,16 +1,15 @@
-from py2neo import cypher, neo4j
-
 from kaiso.attributes import Outgoing, Incoming
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
-from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import (
-    Persistable, PersistableMeta, Entity, Relationship, Attribute,
-    get_descriptor, get_descriptor_by_name,
-    get_indexes, get_index_name, is_indexable)
+from kaiso.relationships import InstanceOf, IsA, DeclaredOn
+from kaiso.types import Persistable, PersistableMeta, Entity, Relationship, \
+    Attribute, get_descriptor, get_descriptor_by_name, get_indexes, get_index_name, \
+    is_indexable
+from py2neo import cypher, neo4j
+
 
 
 def object_to_dict(obj):
@@ -51,7 +50,7 @@ def object_to_dict(obj):
     elif isinstance(obj, Attribute):
         properties['unique'] = obj.unique
     else:
-        for name, attr in descr.members.items():
+        for name, attr in descr.attributes.items():
             value = attr.to_db(getattr(obj, name))
             if value is not None:
                 properties[name] = value
@@ -99,7 +98,7 @@ def dict_to_object(properties):
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
-            for attr_name, attr in descriptor.members.items():
+            for attr_name, attr in descriptor.attributes.items():
                 try:
                     value = properties[attr_name]
                 except KeyError:
@@ -186,6 +185,8 @@ def get_start_clause(obj, name):
 def get_create_types_query(obj):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
+    Includes statements that create each type's attributes.
+
     Args:
         obj: An object to create a type hierarchy for.
 
@@ -193,12 +194,16 @@ def get_create_types_query(obj):
         A tuple containing:
         (cypher query, objects to create nodes for, the object names).
     """
-
     lines = []
     objects = {'Entity': Entity}
 
+    query_args = {
+        'IsA_props': object_to_dict(IsA(None, None)),
+        'DeclaredOn_props': object_to_dict(DeclaredOn(None, None))
+    }
+
     for obj1, rel_cls, obj2 in get_type_relationships(obj):
-        # this filters out the types, which we don't want to persist
+        # this filters out the types that we don't want to persist
         if issubclass(obj2, Entity):
             name1 = obj1.__name__
 
@@ -217,20 +222,34 @@ def get_create_types_query(obj):
 
             ln = '%s -[:%s {%s_props}]-> %s' % (
                 abstr1, rel_type, rel_name, name2)
-
             lines.append(ln)
 
-    keys, objects = zip(*objects.items())
+            # create obj1's attributes
+            descriptor = get_descriptor(obj1)
+
+            for attr_name, attr in descriptor.declared_attributes.iteritems():
+                key = "%s_%s" % (name1, attr_name)
+                ln = '({%s}) -[:DECLAREDON {%s_props}]-> %s' % (
+                    key, DeclaredOn.__name__, name1
+                )
+                lines.append(ln)
+
+                attr_dict = object_to_dict(attr)
+                attr_dict['name'] = attr_name
+                query_args[key] = attr_dict
+
+    for key, obj in objects.iteritems():
+        query_args['%s_props' % key] = object_to_dict(obj)
 
     query = (
         'START Entity=node:%s(name="Entity")' % get_index_name(type(Entity)),
         'CREATE UNIQUE'
     )
     query += ('    ' + ',\n    '.join(lines),)
-    query += ('RETURN %s' % ', '.join(keys),)
+    query += ('RETURN %s' % ', '.join(objects.keys()),)
     query = '\n'.join(query)
 
-    return query, objects, keys
+    return query, objects.values(), query_args
 
 
 def get_create_relationship_query(rel):
@@ -359,13 +378,7 @@ class Storage(object):
             # we have to make sure our root of the types exists
             self.save(Entity)
 
-            query, objects, keys = get_create_types_query(cls)
-
-            query_args = {
-                'IsA_props': object_to_dict(IsA(None, None))
-            }
-            for key, obj in zip(keys, objects):
-                query_args['%s_props' % key] = object_to_dict(obj)
+            query, objects, query_args = get_create_types_query(cls)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -385,14 +398,17 @@ class Storage(object):
         It will automatically generate the type relationships
         for the the object as required and store the object itself.
         """
-
         if isinstance(obj, Relationship):
+            # object is a relationship
             query = get_create_relationship_query(obj)
             query_args = {'rel_props': object_to_dict(obj)}
 
         elif isinstance(obj, PersistableMeta):
+            # object is a type; create the type and its hierarchy
             return self._add_types(obj)
         else:
+            # object is an instance; create its type, its hierarchy and then
+            # create the instance
             obj_type = type(obj)
             self._add_types(obj_type)
 
