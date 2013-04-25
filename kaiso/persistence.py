@@ -496,7 +496,8 @@ class Storage(object):
         }
 
         # build start clause
-        start_clause = ",".join([get_index_query(base) for base in obj.__bases__])
+        start_clauses = [get_index_query(base) for base in obj.__bases__]
+        start_clause = ",".join(start_clauses)
 
         # build type node and ISA relationships querystring
         create_clauses = []
@@ -506,7 +507,8 @@ class Storage(object):
             )
 
         # build attribute nodes and DECLAREDON relationships querystring
-        for idx, (attr_name, attr) in enumerate(descriptor.members.iteritems()):
+        attrs = descriptor.members.iteritems()
+        for idx, (attr_name, attr) in enumerate(attrs):
             create_clauses.append(
                 '({attr_%s_props}) -[:DECLAREDON]-> %s' % (idx, obj.__name__)
             )
