@@ -162,42 +162,25 @@ def get_type_relationships(obj):
     yield obj, InstanceOf, obj_type
 
 
-def get_index_queries(obj, name=None):
-    """Returns a list of the possible
-       node lookups by index as used by the START clause.
-
-    Args:
-        obj: An object to create a index lookup.
-        name: The name of the object in the query.
-                If name is None obj.__name__ will be used.
-    Returns:
-        A list of strings  with index lookup of a cypher START clause.
-    """
-    queries = []
-
-    if name is None:
-        name = obj.__name__
-
-    for index_name, index_key, index_val in get_indexes(obj):
-        queries.append('{}=node:{}({}="{}")'.format(
-            name, index_name, index_key, index_val
-        ))
-
-    return queries
+def get_index_filter(obj):
+    indexes = get_indexes(obj)
+    index_filter = {key: value for _, key, value in indexes}
+    return index_filter
 
 
-def get_index_query(obj, name=None):
+def get_start_clause(obj, name):
     """ Returns a node lookup by index as used by the START clause.
 
     Args:
-        obj: An object to create a index lookup.
+        obj: An object to create an index lookup.
         name: The name of the object in the query.
-                If name is None obj.__name__ will be used.
     Returns:
         A string with index lookup of a cypher START clause.
     """
-    queries = get_index_queries(obj, name)
-    return queries[0] if queries else None
+
+    index = next(get_indexes(obj), None)
+    query = '{}=node:{}({}="{}")'.format(name, *index)
+    return query
 
 
 def get_create_types_query(obj):
@@ -240,8 +223,9 @@ def get_create_types_query(obj):
     keys, objects = zip(*objects.items())
 
     query = (
-        'START %s' % get_index_query(Entity),
-        'CREATE UNIQUE')
+        'START Entity=node:%s(name="Entity")' % get_index_name(type(Entity)),
+        'CREATE UNIQUE'
+    )
     query += ('    ' + ',\n    '.join(lines),)
     query += ('RETURN %s' % ', '.join(keys),)
     query = '\n'.join(query)
@@ -249,14 +233,13 @@ def get_create_types_query(obj):
     return query, objects, keys
 
 
-def get_create_relationship_query(rel, unique=False):
+def get_create_relationship_query(rel):
     rel_props = object_to_dict(rel)
-    maybe_unique = 'UNIQUE' if unique else ''
-    query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
+    query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
+
     query = query % (
-        get_index_query(rel.start, 'n1'),
-        get_index_query(rel.end, 'n2'),
-        maybe_unique,
+        get_start_clause(rel.start, 'n1'),
+        get_start_clause(rel.end, 'n2'),
         rel_props['__type__'].upper(),
     )
 
@@ -350,16 +333,6 @@ class Storage(object):
         self._conn.get_or_create_index(
             neo4j.Node, get_index_name(PersistableMeta))
 
-    def _get_by_unique(self, obj):
-        """ Returns and object uniquely matching ``obj`` or None if
-        no match could be found.
-        A ``UniqueConstraintError`` is raised if more than one object
-        was found.
-        """
-        indexes = get_indexes(obj)
-        index_filter = {key: value for _, key, value in indexes}
-        return self.get(type(obj), **index_filter)
-
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
         for index_name, key, value in indexes:
@@ -383,8 +356,8 @@ class Storage(object):
             query_args = {'props': object_to_dict(Entity)}
             objects = [cls]
         else:
-            if not self._get_by_unique(Entity):
-                self._add_types(Entity)
+            # we have to make sure our root of the types exists
+            self.save(Entity)
 
             query, objects, keys = get_create_types_query(cls)
 
@@ -423,13 +396,15 @@ class Storage(object):
             obj_type = type(obj)
             self._add_types(obj_type)
 
+            idx_name = get_index_name(type(obj_type))
             query = (
-                'START {} '.format(get_index_query(obj_type, 'cls')) +
+                'START cls=node:%s(name={type_name}) '
                 'CREATE (n {node_props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
-            )
+            ) % idx_name
 
             query_args = {
+                'type_name': obj_type.__name__,
                 'node_props': object_to_dict(obj),
                 'rel_props': object_to_dict(InstanceOf(None, None)),
             }
@@ -440,57 +415,6 @@ class Storage(object):
 
         return obj
 
-    def _add_type(self, obj):
-        """ Adds a type to the data store.
-        """
-        # obj must be a subtype of Entity (or AttributedBase?)
-        assert issubclass(obj, Entity)
-
-        # check all bases already exist in the db
-        self._ensure_type_index_exists()
-        for base in obj.__bases__:
-            if not self._get_by_unique(base):
-                raise TypeError('Base class {} does not exist.'.format(base))
-
-        descriptor = get_descriptor(obj)
-        query_args = {
-            'obj_props': object_to_dict(obj)
-        }
-
-        # build start clause
-        start_clauses = [get_index_query(base) for base in obj.__bases__]
-        start_clause = ",".join(start_clauses)
-
-        # build type node and ISA relationships querystring
-        create_clauses = []
-        for idx, base in enumerate(obj.__bases__):
-            create_clauses.append(
-                "(%s {obj_props}) -[:ISA]-> %s" % (obj.__name__, base.__name__)
-            )
-
-        # build attribute nodes and DECLAREDON relationships querystring
-        attrs = descriptor.members.iteritems()
-        for idx, (attr_name, attr) in enumerate(attrs):
-            create_clauses.append(
-                '({attr_%s_props}) -[:DECLAREDON]-> %s' % (idx, obj.__name__)
-            )
-            attr_dict = object_to_dict(attr)
-            attr_dict['name'] = attr_name
-            query_args['attr_{}_props'.format(idx)] = attr_dict
-        create_clause = ",".join(create_clauses)
-
-        # persist nodes and relationships
-        query = """ START %s
-                    CREATE UNIQUE %s
-                    RETURN %s """ % (start_clause, create_clause, obj.__name__)
-
-        # execute
-        res = next(self._execute(query, **query_args))[0]
-
-        # index it
-        index = self._conn.get_or_create_index(neo4j.Node, 'persistablemeta')
-        index.add('name', obj.__name__, res)
-
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
         If a matching object (by unique keys) already exists, it will
@@ -500,7 +424,8 @@ class Storage(object):
             raise TypeError('cannot persist %s' % persistable)
 
         self._ensure_type_index_exists()
-        existing = self._get_by_unique(persistable)
+
+        existing = self.get(type(persistable), **get_index_filter(persistable))
 
         if existing is None:
             return self._add(persistable)
@@ -518,7 +443,7 @@ class Storage(object):
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
 
-        start_clause = get_index_query(existing, 'n')
+        start_clause = get_start_clause(existing, 'n')
         set_clauses = [
             'n.%s={%s}' % (key, key) for key in changes]
         set_clause = ','.join(set_clauses)
@@ -560,12 +485,15 @@ class Storage(object):
                 query_args[key] = value
 
             idx_where = ' or '.join(idx_where)
+
+            idx_name = get_index_name(PersistableMeta)
             query = (
-                'START {} '.format(get_index_query(Entity, 'tpe')) +
-                'MATCH tpe <-[:ISA*]- () <-[:INSTANCEOF]- n ' +
-                'WHERE {} '.format(idx_where) +
+                'START tpe=node:%s(name={idx_value}) '
+                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> tpe '
+                'WHERE %s '
                 'RETURN n'
-            )
+            ) % (idx_name, idx_where)
+            query_args['idx_value'] = 'Entity'
 
         found = [node for (node,) in self._execute(query, **query_args)]
 
@@ -596,7 +524,7 @@ class Storage(object):
         query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
 
         query = query.format(
-            idx_lookup=get_index_query(obj, 'n'),
+            idx_lookup=get_start_clause(obj, 'n'),
             rel_query=rel_query
         )
 
@@ -614,12 +542,12 @@ class Storage(object):
 
         if isinstance(obj, Relationship):
             query = 'START {}, {} MATCH n1 -[rel]-> n2 DELETE rel'.format(
-                get_index_query(obj.start, 'n1'),
-                get_index_query(obj.end, 'n2'),
+                get_start_clause(obj.start, 'n1'),
+                get_start_clause(obj.end, 'n2'),
             )
         else:
             query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
-                get_index_query(obj, 'obj'))
+                get_start_clause(obj, 'obj'))
 
         # TODO: delete node/rel from indexes
 
