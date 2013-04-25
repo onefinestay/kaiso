@@ -1,7 +1,6 @@
 from py2neo import cypher, neo4j
 
 from kaiso.connection import get_connection
-from kaiso.exceptions import NoIndexesError, UniqueConstraintError
 from kaiso.exceptions import UniqueConstraintError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
@@ -10,7 +9,7 @@ from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import (
     Persistable, PersistableMeta, Entity, Relationship, Attribute,
-    get_descriptor, get_descriptor_by_name, get_declaring_class,
+    get_descriptor, get_descriptor_by_name,
     get_indexes, get_index_name, is_indexable)
 
 

@@ -55,6 +55,7 @@ class RelationshipManager(object):
 def _is_relationship_reference(obj):
     return isinstance(obj, RelationshipReference)
 
+
 class RelationshipReference(object):
     def __init__(self, relationship_class):
         self.relationship_class = relationship_class

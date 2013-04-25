@@ -1,6 +1,5 @@
 from inspect import getmembers, getmro
 
-
 _descriptors = {}
 
 
@@ -258,12 +257,9 @@ class Relationship(AttributedBase):
         self.end = end
 
 
-
-
 class DefaultableAttribute(Attribute):
     # TODO: should it live in types.py?
 
     def __init__(self, default=None, unique=False):
         super(DefaultableAttribute, self).__init__(unique)
         self.default = default
-
