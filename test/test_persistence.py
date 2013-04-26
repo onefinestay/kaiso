@@ -1,13 +1,13 @@
-import decimal
-
-import iso8601
-import pytest
-from py2neo import cypher
-
-from kaiso.attributes import (
-    Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
+from kaiso.attributes import Uuid, Bool, Integer, Float, String, Decimal, \
+    DateTime, Choice
 from kaiso.relationships import Relationship
 from kaiso.types import PersistableMeta, Entity
+from py2neo import cypher
+import decimal
+import iso8601
+import pytest
+
+
 
 
 class Thing(Entity):
@@ -137,20 +137,28 @@ def test_simple_add_and_get_relationship(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_delete_instance(storage):
+def test_delete_instance_types_remain(storage):
     thing = Thing()
     storage.save(thing)
 
     storage.delete(thing)
 
-    # we are expecting the types to stay in place
-    rows = storage.query('START n=node(*) RETURN n')
+    # we are expecting the type to stay in place
+    rows = storage.query("""
+        START n=node(*)
+        MATCH n-[:ISA|INSTANCEOF]->m
+        RETURN n""")
     result = set(item for (item,) in rows)
-    assert result == {Entity, Thing}
+    assert result == {Thing}
 
 
 @pytest.mark.usefixtures('storage')
 def test_delete_relationship(storage):
+    """
+    Verify that relationships can be removed from the database.
+
+    The nodes that were related should not be removed.
+    """
     thing1 = Thing()
     thing2 = Thing()
     rel = Related(thing1, thing2)
@@ -161,29 +169,34 @@ def test_delete_relationship(storage):
 
     storage.delete(rel)
 
-    rows = storage.query('''
+    rows = storage.query("""
         START n1 = node(*)
         MATCH n1 -[r]-> n2
-        RETURN COALESCE(n1.id?, n1), r.__type__, n2
-    ''')
+        RETURN n1.id?, r.__type__
+    """)
 
-    result = set(rows)
+    result = list(rows)
+    ids = [item[0] for item in result]
+    rels = [item[1] for item in result]
 
-    assert result == {
-        (Thing, 'IsA', Entity),
-        (str(thing1.id), 'InstanceOf', Thing),
-        (str(thing2.id), 'InstanceOf', Thing),
-    }
+    assert str(thing1.id) in ids
+    assert str(thing2.id) in ids
+    assert 'Related' not in rels
 
 
 @pytest.mark.usefixtures('storage')
 def test_delete_class(storage):
+    """
+    Verify that types can be removed from the database.
+
+    The attributes of the type should be removed.
+    Instances of the type should not.
+    """
     thing = Thing()
     storage.save(thing)
 
     storage.delete(Thing)
 
-    # we are expecting the instances to stay in place
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
 
@@ -420,8 +433,39 @@ def test_save_update(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_persist_type_attributes(storage):
+def test_persist_attributes(storage):
+    """
+    Verify persisted attributes maintain their type when added to the
+    database.
+    """
+    storage._add_types(Thing)
 
+    query_str = """
+        START Thing = node:persistablemeta(name="Thing")
+        MATCH attr -[DECLAREDON]-> Thing
+        RETURN attr
+    """
+
+    rows = storage.query(query_str)
+    result = set([type(attr[0]) for attr in rows])
+
+    assert result == {
+        Uuid,
+        Bool,
+        Integer,
+        Float,
+        String,
+        Decimal,
+        DateTime,
+        Choice
+    }
+
+
+@pytest.mark.usefixtures('storage')
+def test_persist_type_attributes(storage):
+    """
+    Verify that attributes are persisted to the database when a type is added.
+    """
     storage._add_types(Thing)
 
     query_str = """

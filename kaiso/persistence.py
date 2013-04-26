@@ -556,15 +556,33 @@ class Storage(object):
         Args:
             obj: The object to delete.
         """
-
         if isinstance(obj, Relationship):
-            query = 'START {}, {} MATCH n1 -[rel]-> n2 DELETE rel'.format(
+            query = """
+                START {}, {}
+                MATCH n1 -[rel]-> n2
+                DELETE rel
+            """.format(
                 get_start_clause(obj.start, 'n1'),
                 get_start_clause(obj.end, 'n2'),
             )
+        elif isinstance(obj, PersistableMeta):
+            query = """
+                START {}
+                MATCH attr -[:DECLAREDON]-> obj
+                DELETE attr
+                MATCH obj -[rel]- ()
+                DELETE obj, rel
+            """.format(
+                get_start_clause(obj, 'obj')
+            )
         else:
-            query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
-                get_start_clause(obj, 'obj'))
+            query = """
+                START {}
+                MATCH obj -[rel]- ()
+                DELETE obj, rel
+            """.format(
+                get_start_clause(obj, 'obj')
+            )
 
         # TODO: delete node/rel from indexes
 
