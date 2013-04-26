@@ -1,3 +1,6 @@
+import pytest
+
+from kaiso.exceptions import DeserialisationError
 from kaiso.persistence import(
     object_to_dict, dict_to_object, get_type_relationships)
 from kaiso.relationships import Relationship, InstanceOf, IsA
@@ -70,6 +73,11 @@ def test_base_types():
 
     obj = dict_to_object(dct)
     assert isinstance(obj, object)
+
+
+def test_missing_info():
+    with pytest.raises(DeserialisationError):
+        dict_to_object({})
 
 
 def test_type_relationships():

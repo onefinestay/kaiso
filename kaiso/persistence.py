@@ -3,7 +3,7 @@ from py2neo import cypher, neo4j
 from kaiso.connection import get_connection
 from kaiso.descriptors import (
     get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import UniqueConstraintError
+from kaiso.exceptions import UniqueConstraintError, DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.attributes import Outgoing, Incoming
@@ -77,7 +77,11 @@ def dict_to_object(properties):
         A persistable object.
     """
 
-    type_name = properties['__type__']
+    try:
+        type_name = properties['__type__']
+    except KeyError:
+        raise DeserialisationError(
+            'properties "{}" missing __type__ key'.format(properties))
     descriptor = get_descriptor_by_name(type_name)
 
     cls = descriptor.cls
@@ -351,11 +355,18 @@ class Storage(object):
         key, value = index_filter.items()[0]
 
         index_name = descriptor.get_index_name_for_attribute(key)
-        node = self._conn.get_indexed_node(index_name, key, value)
-        if node is None:
+
+        if issubclass(cls, Relationship):
+            node_or_rel = self._conn.get_indexed_relationship(
+                index_name, key, value)
+
+        else:
+            node_or_rel = self._conn.get_indexed_node(index_name, key, value)
+
+        if node_or_rel is None:
             return None
 
-        obj = self._convert_value(node)
+        obj = self._convert_value(node_or_rel)
         return obj
 
     def _get_by_unique(self, obj):
