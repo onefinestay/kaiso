@@ -180,9 +180,6 @@ class PersistableMeta(type, Persistable):
         register_type(cls)
         return cls
 
-    def __init__(cls, name, bases, dct):
-        super(PersistableMeta, cls).__init__(name, bases, dct)
-
 
 def _is_attribute(obj):
     return isinstance(obj, Attribute)
@@ -201,6 +198,14 @@ class Attribute(Persistable):
     @staticmethod
     def to_db(value):
         return value
+
+
+class DefaultableAttribute(Attribute):
+    # TODO: should it live in types.py?
+
+    def __init__(self, default=None, unique=False):
+        super(DefaultableAttribute, self).__init__(unique)
+        self.default = default
 
 
 class AttributedBase(Persistable):
@@ -250,9 +255,3 @@ class Relationship(AttributedBase):
         self.end = end
 
 
-class DefaultableAttribute(Attribute):
-    # TODO: should it live in types.py?
-
-    def __init__(self, default=None, unique=False):
-        super(DefaultableAttribute, self).__init__(unique)
-        self.default = default

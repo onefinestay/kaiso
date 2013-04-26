@@ -1,15 +1,39 @@
-from kaiso.attributes import Outgoing, Incoming
+from __future__ import absolute_import
+
+from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
-from kaiso.types import Persistable, PersistableMeta, Entity, Relationship, \
-    Attribute, get_descriptor, get_descriptor_by_name, get_indexes, get_index_name, \
-    is_indexable
+from kaiso.types import (
+    Persistable, PersistableMeta, Relationship, Attribute,
+    AttributedBase,
+    get_descriptor, get_descriptor_by_name, get_indexes, get_index_name,
+    is_indexable)
 from py2neo import cypher, neo4j
 
+
+class TypeSystem(AttributedBase):
+    id = String(unique=True)
+    version = Uuid()
+
+
+class Defines(Relationship):
+    pass
+
+
+def join_lines(*lines, **kwargs):
+    rows = []
+    sep = kwargs.get('sep', '\n')
+
+    for lne in lines:
+        if isinstance(lne, tuple):
+            (lne, s) = lne
+            lne = '    ' + join_lines(sep=s+'\n    ', *lne)
+        rows.append(lne)
+    return sep.join(rows)
 
 
 def object_to_dict(obj):
@@ -182,7 +206,7 @@ def get_start_clause(obj, name):
     return query
 
 
-def get_create_types_query(obj):
+def get_create_types_query(obj, root):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
@@ -195,37 +219,51 @@ def get_create_types_query(obj):
         (cypher query, objects to create nodes for, the object names).
     """
     lines = []
-    objects = {'Entity': Entity}
+    objects = {}
 
     query_args = {
+        'root_id': root.id,
         'IsA_props': object_to_dict(IsA(None, None)),
+        'Defines_props': object_to_dict(Defines(None, None)),
+        'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
         'DeclaredOn_props': object_to_dict(DeclaredOn(None, None))
     }
 
-    for obj1, rel_cls, obj2 in get_type_relationships(obj):
+    is_first = True
+    for cls1, rel_cls, cls2 in get_type_relationships(obj):
         # this filters out the types that we don't want to persist
-        if issubclass(obj2, Entity):
-            name1 = obj1.__name__
+        if issubclass(cls2, AttributedBase):
+            name1 = cls1.__name__
 
             if name1 in objects:
                 abstr1 = name1
             else:
                 abstr1 = '(%s {%s_props})' % (name1, name1)
 
-            name2 = obj2.__name__
+            objects[name1] = cls1
 
-            objects[name1] = obj1
-            objects[name2] = obj2
+            if is_first:
+                is_first = False
+                ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
+            else:
+                name2 = cls2.__name__
+                objects[name2] = cls2
 
-            rel_name = rel_cls.__name__
-            rel_type = rel_name.upper()
+                rel_name = rel_cls.__name__
+                rel_type = rel_name.upper()
 
-            ln = '%s -[:%s {%s_props}]-> %s' % (
-                abstr1, rel_type, rel_name, name2)
+                ln = '%s -[:%s {%s_props}]-> %s' % (
+                    abstr1, rel_type, rel_name, name2)
             lines.append(ln)
 
-            # create obj1's attributes
-            descriptor = get_descriptor(obj1)
+            # TODO: really?
+            if cls1 is type(root):
+                ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
+                    cls1.__name__)
+                lines.append(ln)
+
+            # create cls1's attributes
+            descriptor = get_descriptor(cls1)
 
             for attr_name, attr in descriptor.declared_attributes.iteritems():
                 key = "%s_%s" % (name1, attr_name)
@@ -241,20 +279,18 @@ def get_create_types_query(obj):
     for key, obj in objects.iteritems():
         query_args['%s_props' % key] = object_to_dict(obj)
 
-    query = (
-        'START Entity=node:%s(name="Entity")' % get_index_name(type(Entity)),
-        'CREATE UNIQUE'
+    query = join_lines(
+        'START root=node:%s(id={root_id})' % get_index_name(type(root)),
+        'CREATE UNIQUE',
+        (lines, ','),
+        'RETURN %s' % ', '.join(objects.keys())
     )
-    query += ('    ' + ',\n    '.join(lines),)
-    query += ('RETURN %s' % ', '.join(objects.keys()),)
-    query = '\n'.join(query)
-
     return query, objects.values(), query_args
 
 
 def get_create_relationship_query(rel):
     rel_props = object_to_dict(rel)
-    query = 'START %s, %s CREATE n1 -[r:%s {rel_props}]-> n2 RETURN r'
+    query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (
         get_start_clause(rel.start, 'n1'),
@@ -303,6 +339,7 @@ class Storage(object):
             connection_uri: A URI used to connect to the graph database.
         """
         self._conn = get_connection(connection_uri)
+        self.type_system = TypeSystem(id='TypeSystem')
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -314,6 +351,8 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
+        print '-------------------'
+        print query.format(**params)
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
@@ -346,39 +385,23 @@ class Storage(object):
         for value in row:
             yield self._convert_value(value)
 
-    def _ensure_type_index_exists(self):
-        """ Creates PersistableMeta node index if it doesn't already exist.
-        """
-        self._conn.get_or_create_index(
-            neo4j.Node, get_index_name(PersistableMeta))
-
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
                 index_type = neo4j.Relationship
-                index = self._conn.get_or_create_index(index_type, index_name)
             else:
                 index_type = neo4j.Node
-                index = self._conn.get_index(index_type, index_name)
 
+            index = self._conn.get_or_create_index(index_type, index_name)
             index.add(key, value, node_or_rel)
 
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
     def _add_types(self, cls):
-        self._ensure_type_index_exists()
-
-        if cls is Entity:
-            query = 'CREATE (n {props}) RETURN n'
-            query_args = {'props': object_to_dict(Entity)}
-            objects = [cls]
-        else:
-            # we have to make sure our root of the types exists
-            self.save(Entity)
-
-            query, objects, query_args = get_create_types_query(cls)
+        query, objects, query_args = get_create_types_query(
+            cls, self.type_system)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -398,14 +421,21 @@ class Storage(object):
         It will automatically generate the type relationships
         for the the object as required and store the object itself.
         """
-        if isinstance(obj, Relationship):
-            # object is a relationship
-            query = get_create_relationship_query(obj)
-            query_args = {'rel_props': object_to_dict(obj)}
 
-        elif isinstance(obj, PersistableMeta):
+        query_args = {}
+
+        if isinstance(obj, PersistableMeta):
             # object is a type; create the type and its hierarchy
             return self._add_types(obj)
+
+        elif obj is self.type_system:
+            query = 'CREATE (n {props}) RETURN n'
+        elif isinstance(obj, Relationship):
+            # object is a relationship
+            obj_type = type(obj)
+            self._add_types(obj_type)
+            query = get_create_relationship_query(obj)
+
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
@@ -415,19 +445,24 @@ class Storage(object):
             idx_name = get_index_name(type(obj_type))
             query = (
                 'START cls=node:%s(name={type_name}) '
-                'CREATE (n {node_props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
             ) % idx_name
 
             query_args = {
                 'type_name': obj_type.__name__,
-                'node_props': object_to_dict(obj),
                 'rel_props': object_to_dict(InstanceOf(None, None)),
             }
+
+        query_args['props'] = object_to_dict(obj)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
         self._index_object(obj, node_or_rel)
+
+        # TODO: really?
+        if obj is self.type_system:
+            self._add_types(type(obj))
 
         return obj
 
@@ -438,8 +473,6 @@ class Storage(object):
         """
         if not can_add(persistable):
             raise TypeError('cannot persist %s' % persistable)
-
-        self._ensure_type_index_exists()
 
         existing = self.get(type(persistable), **get_index_filter(persistable))
 
@@ -463,11 +496,11 @@ class Storage(object):
 
         set_clauses = ', '.join(['n.%s={%s}' % (key, key) for key in changes])
 
-        query = '\n'.join((
+        query = join_lines(
             'START %s' % start_clause,
             'SET %s' % set_clauses,
             'RETURN n'
-        ))
+        )
 
         result = self._execute(query, **changes)
         return next(result)[0]
@@ -500,17 +533,17 @@ class Storage(object):
             for key, value in indexes:
                 idx_where.append('n.%s? = {%s}' % (key, key))
                 query_args[key] = value
-
             idx_where = ' or '.join(idx_where)
 
-            idx_name = get_index_name(PersistableMeta)
-            query = (
-                'START tpe=node:%s(name={idx_value}) '
-                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> tpe '
-                'WHERE %s '
-                'RETURN n'
-            ) % (idx_name, idx_where)
-            query_args['idx_value'] = 'Entity'
+            idx_name = get_index_name(TypeSystem)
+            query = join_lines(
+                'START root=node:%s(id={idx_value})' % idx_name,
+                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> () <-[:DEFINES]- root',
+                'WHERE %s' % idx_where,
+                'RETURN n',
+            )
+
+            query_args['idx_value'] = self.type_system.id
 
         found = [node for (node,) in self._execute(query, **query_args)]
 
@@ -557,30 +590,30 @@ class Storage(object):
             obj: The object to delete.
         """
         if isinstance(obj, Relationship):
-            query = """
-                START {}, {}
-                MATCH n1 -[rel]-> n2
-                DELETE rel
-            """.format(
+            query = join_lines(
+                'START {}, {}',
+                'MATCH n1 -[rel]-> n2',
+                'DELETE rel'
+            ).format(
                 get_start_clause(obj.start, 'n1'),
                 get_start_clause(obj.end, 'n2'),
             )
         elif isinstance(obj, PersistableMeta):
-            query = """
-                START {}
-                MATCH attr -[:DECLAREDON]-> obj
-                DELETE attr
-                MATCH obj -[rel]- ()
-                DELETE obj, rel
-            """.format(
+            query = join_lines(
+                'START {}',
+                'MATCH attr -[:DECLAREDON]-> obj',
+                'DELETE attr',
+                'MATCH obj -[rel]- ()',
+                'DELETE obj, rel'
+            ).format(
                 get_start_clause(obj, 'obj')
             )
         else:
-            query = """
-                START {}
-                MATCH obj -[rel]- ()
-                DELETE obj, rel
-            """.format(
+            query = join_lines(
+                'START {}',
+                'MATCH obj -[rel]- ()',
+                'DELETE obj, rel'
+            ).format(
                 get_start_clause(obj, 'obj')
             )
 
@@ -612,6 +645,11 @@ class Storage(object):
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
+
+    def initialize(self):
+        idx_name = get_index_name(TypeSystem)
+        self._conn.get_or_create_index(neo4j.Node, idx_name)
+        self.save(self.type_system)
 
 
 def can_add(obj):

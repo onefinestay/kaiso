@@ -2,12 +2,12 @@ from kaiso.attributes import Uuid, Bool, Integer, Float, String, Decimal, \
     DateTime, Choice
 from kaiso.relationships import Relationship
 from kaiso.types import PersistableMeta, Entity
+from kaiso.persistence import TypeSystem
+
 from py2neo import cypher
 import decimal
 import iso8601
 import pytest
-
-
 
 
 class Thing(Entity):
@@ -61,8 +61,10 @@ def test_add_persistable_only_adds_single_node(storage):
 
     storage.save(Entity)
 
-    result = list(storage.query('START n=node(*) RETURN n'))
-    assert result == [(Entity,)]
+    result = list(storage.query(
+        'START n=node:persistablemeta("name:*") RETURN n')
+    )
+    assert result == [(TypeSystem,), (Entity,)]
 
 
 @pytest.mark.usefixtures('storage')
@@ -71,8 +73,10 @@ def test_only_adds_entity_once(storage):
     storage.save(Entity)
     storage.save(Entity)
 
-    result = list(storage.query('START n=node(*) RETURN n'))
-    assert result == [(Entity,)]
+    result = list(storage.query(
+        'START n=node:persistablemeta("name:*") RETURN n')
+    )
+    assert result == [(TypeSystem,), (Entity,)]
 
 
 @pytest.mark.usefixtures('storage')
@@ -83,14 +87,11 @@ def test_only_adds_types_once(storage):
     storage.save(thing1)
     storage.save(thing2)
 
-    rows = storage.query("""
-        START n=node(*)
-        MATCH n-[:ISA|INSTANCEOF]->m
-        RETURN COALESCE(n.id?, n)""")
+    (count,) = next(storage.query(
+        'START n=node:persistablemeta(name="Thing") '
+        'RETURN count(n)'))
 
-    result = set(item for (item,) in rows)
-
-    assert result == {Thing, str(thing1.id), str(thing2.id)}
+    assert count == 1
 
 
 @pytest.mark.usefixtures('storage')
@@ -145,7 +146,7 @@ def test_delete_instance_types_remain(storage):
 
     # we are expecting the type to stay in place
     rows = storage.query("""
-        START n=node(*)
+        START n=node:persistablemeta("name:*")
         MATCH n-[:ISA|INSTANCEOF]->m
         RETURN n""")
     result = set(item for (item,) in rows)
@@ -196,11 +197,11 @@ def test_delete_class(storage):
     storage.save(thing)
 
     storage.delete(Thing)
+    storage.delete(TypeSystem)
 
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
-
-    assert result == {Entity, str(thing.id)}
+    assert result == {'TypeSystem', Entity, str(thing.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -326,7 +327,8 @@ def test_type_hierarchy_object(storage):
 
     assert result == {
         (Thing, 'IsA', Entity),
-        (str(obj.id), 'InstanceOf', Thing)
+        (str(obj.id), 'InstanceOf', Thing),
+        ('TypeSystem', 'InstanceOf', TypeSystem)
     }
 
 
@@ -367,6 +369,7 @@ def test_type_hierarchy_diamond(storage):
         (Beetroot, 'IsA', Colouring),
         (str(beetroot.id), 'InstanceOf', Beetroot),
         (str(carmine.id), 'InstanceOf', Carmine),
+        ('TypeSystem', 'InstanceOf', TypeSystem)
     }
 
 
