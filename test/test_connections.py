@@ -59,8 +59,7 @@ class TestTempConnectionProcesses():
                 assert conn1 == conn2
                 assert not get_info.called  # we should be reusing existing db
 
-
-def test_temp_connection_timeout():
-    with patch.object(kaiso.connection, 'TIMEOUT', 0):
-        with pytest.raises(TempConnectionError):
-            get_connection('temp://8888')
+    def test_temp_connection_timeout(self):
+        with patch.object(kaiso.connection, 'TIMEOUT', 0):
+            with pytest.raises(TempConnectionError):
+                get_connection('temp://8888')
