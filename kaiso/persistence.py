@@ -5,11 +5,10 @@ from kaiso.exceptions import UniqueConstraintError, DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
-from kaiso.types import Persistable, PersistableMeta, Entity, Relationship, \
-    Attribute, get_descriptor, get_descriptor_by_name, get_indexes, get_index_name, \
-    is_indexable
+from kaiso.types import (Persistable, PersistableMeta, Entity, Relationship,
+    Attribute, get_descriptor, get_descriptor_by_name, get_indexes,
+    get_index_name, is_indexable)
 from py2neo import cypher, neo4j
-
 
 
 def object_to_dict(obj):

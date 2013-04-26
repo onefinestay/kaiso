@@ -8,8 +8,6 @@ import iso8601
 import pytest
 
 
-
-
 class Thing(Entity):
     id = Uuid(unique=True)
     bool_attr = Bool()

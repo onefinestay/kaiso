@@ -1,6 +1,6 @@
 from kaiso.exceptions import MultipleObjectsFound, NoResultFound
 from kaiso.references import get_store_for_object
-
+from kaiso.types import Attribute
 
 _attribute_types = {}
 
@@ -62,3 +62,9 @@ class RelationshipReference(object):
 
     def get_manager(self, obj):
         return RelationshipManager(obj, self)
+
+
+class DefaultableAttribute(Attribute):
+    def __init__(self, default=None, **kwargs):
+        super(DefaultableAttribute, self).__init__(**kwargs)
+        self.default = default

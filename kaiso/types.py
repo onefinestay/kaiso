@@ -191,8 +191,9 @@ def _is_attribute(obj):
 class Attribute(Persistable):
     __metaclass__ = PersistableMeta
 
-    def __init__(self, unique=False):
+    def __init__(self, unique=False, required=False):
         self.unique = unique
+        self.required = required
 
     @staticmethod
     def to_python(value):
@@ -248,11 +249,3 @@ class Relationship(AttributedBase):
 
         self.start = start
         self.end = end
-
-
-class DefaultableAttribute(Attribute):
-    # TODO: should it live in types.py?
-
-    def __init__(self, default=None, unique=False):
-        super(DefaultableAttribute, self).__init__(unique)
-        self.default = default

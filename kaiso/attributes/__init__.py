@@ -3,8 +3,9 @@ import uuid
 import datetime
 import iso8601
 
-from kaiso.attributes.bases import RelationshipReference, wraps_type
-from kaiso.types import Attribute, DefaultableAttribute
+from kaiso.attributes.bases import (RelationshipReference, wraps_type,
+                                    DefaultableAttribute)
+from kaiso.types import Attribute
 
 
 class Outgoing(RelationshipReference):
