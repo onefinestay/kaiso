@@ -127,7 +127,7 @@ def temp_neo4j_instance(uri):
     _temporary_databases[port] = neo4j_process
 
     # terminate subprocess at exit
-    def terminate():
+    def terminate():  # pragma: no cover
         try:
             neo4j_process.terminate()
         except OSError:
