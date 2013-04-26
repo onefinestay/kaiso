@@ -124,11 +124,15 @@ def temp_neo4j_instance(uri):
     # start the subprocess
     neo4j_process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
-
     _temporary_databases[port] = neo4j_process
 
     # terminate subprocess at exit
-    atexit.register(neo4j_process.terminate)
+    def terminate():
+        try:
+            neo4j_process.terminate()
+        except OSError:
+            pass  # already terminated
+    atexit.register(terminate)
 
     # the startup process is async so we monitor the http interface to know
     # when to allow the test runner to continue
