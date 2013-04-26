@@ -1,6 +1,6 @@
 import pytest
 
-from kaiso.types import PersistableMeta, Entity, get_descriptor
+from kaiso.types import PersistableMeta, Entity
 from kaiso.exceptions import UnknownType
 
 
@@ -8,17 +8,18 @@ class Foo(Entity):
     pass
 
 
-def test_type_names():
-    descr = get_descriptor(PersistableMeta)
-    assert descr.type_name == 'PersistableMeta'
+def test_type_ids():
+    descr = PersistableMeta.get_descriptor(PersistableMeta)
+    assert descr.type_id == 'PersistableMeta'
 
-    descr = get_descriptor(Entity)
-    assert descr.type_name == 'Entity'
+    descr = PersistableMeta.get_descriptor(Entity)
+    assert descr.type_id == 'Entity'
 
-    descr = get_descriptor(Foo)
-    assert descr.type_name == 'Foo'
+    descr = PersistableMeta.get_descriptor(Foo)
+    assert descr.type_id == 'Foo'
 
 
 def test_unknown_type():
     with pytest.raises(UnknownType):
-        get_descriptor(UnknownType)
+        PersistableMeta.get_descriptor(UnknownType)
+

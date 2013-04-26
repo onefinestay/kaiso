@@ -1,16 +1,15 @@
-from __future__ import absolute_import
-
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.connection import get_connection
-from kaiso.exceptions import UniqueConstraintError, DeserialisationError
+from kaiso.exceptions import (
+    UniqueConstraintError, DeserialisationError, UnknownType)
 from kaiso.iter_helpers import unique
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
 from kaiso.types import (
+    Descriptor,
     Persistable, PersistableMeta, Relationship, Attribute,
-    AttributedBase,
-    get_descriptor, get_descriptor_by_name, get_indexes, get_index_name,
+    AttributedBase, get_indexes, get_index_name,
     is_indexable)
 from py2neo import cypher, neo4j
 
@@ -40,10 +39,10 @@ def object_to_dict(obj):
     """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value will
-    be the type_name as given by the descriptor for type(obj).
+    be the type_id as given by the descriptor for type(obj).
 
     If the object is a class a name key-value pair will be
-    added to the generated dict, with the value being the type_name given
+    added to the generated dict, with the value being the type_id given
     by the descriptor for the object.
 
     For any other object all the attributes as given by the object's
@@ -63,25 +62,28 @@ def object_to_dict(obj):
     """
     obj_type = type(obj)
 
-    descr = get_descriptor(obj_type)
-
     properties = {
-        '__type__': descr.type_name,
+        '__type__': Descriptor(obj_type).type_id,
     }
 
     if isinstance(obj, type):
-        properties['name'] = get_descriptor(obj).type_name
+        properties['id'] = Descriptor(obj).type_id
+
     elif isinstance(obj, Attribute):
         properties['unique'] = obj.unique
+
     else:
+        descr = Descriptor(obj_type)
+
         for name, attr in descr.attributes.items():
             value = attr.to_db(getattr(obj, name))
             if value is not None:
                 properties[name] = value
+
     return properties
 
 
-def dict_to_object(properties):
+def dict_to_object(properties, dynamic_type=None):
     """ Converts a dict into a persistable object.
 
     The properties dict needs at least a __type__ key containing the name of
@@ -104,25 +106,32 @@ def dict_to_object(properties):
     """
 
     try:
-        type_name = properties['__type__']
+        type_id = properties['__type__']
     except KeyError:
         raise DeserialisationError(
             'properties "{}" missing __type__ key'.format(properties))
 
-    descriptor = get_descriptor_by_name(type_name)
+    try:
+        cls_or_meta = PersistableMeta.get_class_by_id(type_id)
+    except UnknownType:
+        cls_or_meta = dynamic_type.get_class_by_id(type_id)
 
-    cls = descriptor.cls
+    if issubclass(cls_or_meta, PersistableMeta):
+        obj = cls_or_meta.get_class_by_id(properties['id'])
 
-    if issubclass(cls, type):
-        obj = get_descriptor_by_name(properties['name']).cls
+    elif issubclass(cls_or_meta, type):
+        obj = PersistableMeta.get_class_by_id(properties['id'])
+
     else:
-        obj = cls.__new__(cls)
+        obj = cls_or_meta.__new__(cls_or_meta)
 
-        if issubclass(cls, Attribute):
+        if isinstance(obj, Attribute):
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
-            for attr_name, attr in descriptor.attributes.items():
+            descr = Descriptor(cls_or_meta)
+
+            for attr_name, attr in descr.attributes.items():
                 try:
                     value = properties[attr_name]
                 except KeyError:
@@ -257,13 +266,13 @@ def get_create_types_query(obj, root):
             lines.append(ln)
 
             # TODO: really?
-            if cls1 is type(root):
-                ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
-                    cls1.__name__)
-                lines.append(ln)
+            # if cls1 is type(root):
+            #     ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
+            #         cls1.__name__)
+            #     lines.append(ln)
 
             # create cls1's attributes
-            descriptor = get_descriptor(cls1)
+            descriptor = Descriptor(cls1)
 
             for attr_name, attr in descriptor.declared_attributes.iteritems():
                 key = "%s_%s" % (name1, attr_name)
@@ -340,6 +349,7 @@ class Storage(object):
         """
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
+        self.dynamic_type = type('DynamicType', (PersistableMeta,), {})
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -371,7 +381,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties)
+            obj = dict_to_object(properties, self.dynamic_type)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -430,6 +440,7 @@ class Storage(object):
 
         elif obj is self.type_system:
             query = 'CREATE (n {props}) RETURN n'
+
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
@@ -444,13 +455,13 @@ class Storage(object):
 
             idx_name = get_index_name(type(obj_type))
             query = (
-                'START cls=node:%s(name={type_name}) '
+                'START cls=node:%s(id={type_id}) '
                 'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
             ) % idx_name
 
             query_args = {
-                'type_name': obj_type.__name__,
+                'type_id': obj_type.__name__,
                 'rel_props': object_to_dict(InstanceOf(None, None)),
             }
 
@@ -461,8 +472,8 @@ class Storage(object):
         self._index_object(obj, node_or_rel)
 
         # TODO: really?
-        if obj is self.type_system:
-            self._add_types(type(obj))
+        #if obj is self.type_system:
+        #    self._add_types(type(obj))
 
         return obj
 
@@ -522,6 +533,7 @@ class Storage(object):
                 self._conn.get_or_create_index(neo4j.Relationship, idx_name)
                 start_func = 'relationship'
             else:
+                self._conn.get_or_create_index(neo4j.Node, idx_name)
                 start_func = 'node'
 
             query = 'START nr = %s:%s(%s={idx_value}) RETURN nr' % (
