@@ -1,8 +1,9 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError
-from kaiso.persistence import get_type_relationships
 from kaiso.relationships import Relationship, InstanceOf, IsA
+from kaiso.serialize import (
+    get_type_relationships, object_to_dict, dict_to_object)
 from kaiso.types import (
     Persistable, MetaMeta, PersistableMeta, Entity, AttributedBase, Attribute)
 
@@ -15,64 +16,58 @@ class Bar(Attribute):
     pass
 
 
-@pytest.mark.usefixtures('storage')
-def test_classes_to_dict(storage):
-    dct = storage.object_to_dict(Entity)
+def test_classes_to_dict():
+    dct = object_to_dict(Entity)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Entity'}
 
-    obj = storage.dict_to_object(dct)
+    obj = dict_to_object(dct)
     assert obj is Entity
 
-    dct = storage.object_to_dict(Foo)
+    dct = object_to_dict(Foo)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Foo'}
 
-    obj = storage.dict_to_object(dct)
+    obj = dict_to_object(dct)
     assert obj is Foo
 
 
-@pytest.mark.usefixtures('storage')
-def test_objects(storage):
-    dct = storage.object_to_dict(Entity())
+def test_objects():
+    dct = object_to_dict(Entity())
     assert dct == {'__type__': 'Entity'}
 
-    obj = storage.dict_to_object(dct)
+    obj = dict_to_object(dct)
     assert isinstance(obj, Entity)
 
-    dct = storage.object_to_dict(Foo())
+    dct = object_to_dict(Foo())
     assert dct == {'__type__': 'Foo'}
 
-    obj = storage.dict_to_object(dct)
+    obj = dict_to_object(dct)
     assert isinstance(obj, Foo)
 
 
-@pytest.mark.usefixtures('storage')
-def test_attribute(storage):
+def test_attribute():
     attr = Bar(unique=True)
-    dct = storage.object_to_dict(attr)
+    dct = object_to_dict(attr)
     assert dct == {'__type__': 'Bar', 'unique': True}
 
-    obj = storage.dict_to_object({'__type__': 'Bar', 'unique': True})
+    obj = dict_to_object({'__type__': 'Bar', 'unique': True})
     assert isinstance(obj, Bar)
     assert obj.unique is True
 
 
-@pytest.mark.usefixtures('storage')
-def test_relationship(storage):
-    dct = storage.object_to_dict(Relationship(None, None))
+def test_relationship():
+    dct = object_to_dict(Relationship(None, None))
     assert dct == {'__type__': 'Relationship'}
 
-    obj = storage.dict_to_object(dct)
+    obj = dict_to_object(dct)
     assert isinstance(obj, Relationship)
 
 
-@pytest.mark.usefixtures('storage')
-def test_missing_info(storage):
+def test_missing_info():
     with pytest.raises(DeserialisationError):
-        storage.dict_to_object({})
+        dict_to_object({})
 
 
-@pytest.mark.usefixtures('storage')
-def test_IsA_and_InstanceOf_type_relationships(storage):
+def test_IsA_and_InstanceOf_type_relationships():
     """ Testing type hierarchy creation.
 
     We don't want to test all the types in their relationships,

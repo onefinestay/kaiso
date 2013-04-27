@@ -36,3 +36,5 @@ class DeclaredOn(Relationship):
     """
 
 
+class Defines(Relationship):
+    pass

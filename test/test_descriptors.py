@@ -22,4 +22,3 @@ def test_type_ids():
 def test_unknown_type():
     with pytest.raises(UnknownType):
         PersistableMeta.get_descriptor(UnknownType)
-
