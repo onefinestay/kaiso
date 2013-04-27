@@ -95,6 +95,22 @@ def test_dynamic_typed_object():
     assert obj.id == foo.id
 
 
+def test_dynamic_typed_object_same_type():
+    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+
+    attrs = {'id': String()}
+    DynEntity = DynamicType('Entity', (AttributedBase,), attrs)
+
+    foo = DynEntity(id='spam')
+    dct = object_to_dict(foo)
+
+    assert dct == {'__type__': 'Entity', 'id': 'spam'}
+
+    obj = dict_to_object(dct, DynamicType)
+    assert isinstance(obj, Entity)
+    assert obj.id == foo.id
+
+
 def test_missing_info():
     with pytest.raises(DeserialisationError):
         dict_to_object({})

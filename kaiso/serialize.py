@@ -178,8 +178,6 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
             except UnknownType:
                 descr = PersistableMeta.get_descriptor_by_id(cls_id)
 
-            descr = Descriptor(cls)
-
             for attr_name, attr in descr.attributes.items():
                 try:
                     value = properties[attr_name]
