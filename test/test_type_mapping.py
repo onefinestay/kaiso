@@ -1,6 +1,7 @@
 import pytest
 
-from kaiso.exceptions import DeserialisationError
+from kaiso.exceptions import DeserialisationError, UnknownType
+from kaiso.attributes import String
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, object_to_dict, dict_to_object)
@@ -60,6 +61,38 @@ def test_relationship():
 
     obj = dict_to_object(dct)
     assert isinstance(obj, Relationship)
+
+
+def test_dynamic_type():
+    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+
+    Foobar = DynamicType('Foobar', (Entity,), {})
+
+    dct = object_to_dict(Foobar)
+    assert dct == {'__type__': 'PersistableMeta', 'id': 'Foobar'}
+
+    # since Foobar is only registered with DynamicType
+    with pytest.raises(UnknownType):
+        obj = dict_to_object(dct)
+
+    obj = dict_to_object(dct, DynamicType)
+    assert obj is Foobar
+
+
+def test_dynamic_typed_object():
+    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+
+    attrs = {'id': String()}
+    Foobar = DynamicType('Foobar', (Entity,), attrs)
+
+    foo = Foobar(id='spam')
+    dct = object_to_dict(foo)
+
+    assert dct == {'__type__': 'Foobar', 'id': 'spam'}
+
+    obj = dict_to_object(dct, DynamicType)
+    assert isinstance(obj, Foobar)
+    assert obj.id == foo.id
 
 
 def test_missing_info():
