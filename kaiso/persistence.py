@@ -40,118 +40,6 @@ def join_lines(*lines, **kwargs):
     return sep.join(rows)
 
 
-def object_to_dict(obj):
-    """ Converts a persistable object to a dict.
-
-    The generated dict will contain a __type__ key, for which the value will
-    be the type_id as given by the descriptor for type(obj).
-
-    If the object is a class a name key-value pair will be
-    added to the generated dict, with the value being the type_id given
-    by the descriptor for the object.
-
-    For any other object all the attributes as given by the object's
-    type descriptpr will be added to the dict and encoded as required.
-
-    Args:
-        obj: A persistable  object.
-
-    Returns:
-        Dictionary with attributes encoded in basic types
-        and type information for deserialization.
-        e.g.
-        {
-            '__type__': 'Entity',
-            'attr1' : 1234
-        }
-    """
-    obj_type = type(obj)
-
-    properties = {
-        '__type__': Descriptor(obj_type).type_id,
-    }
-
-    if isinstance(obj, type):
-        properties['id'] = Descriptor(obj).type_id
-
-    elif isinstance(obj, Attribute):
-        properties['unique'] = obj.unique
-
-    else:
-        descr = Descriptor(obj_type)
-
-        for name, attr in descr.attributes.items():
-            value = attr.to_db(getattr(obj, name))
-            if value is not None:
-                properties[name] = value
-
-    return properties
-
-
-def dict_to_object(properties, dynamic_type=PersistableMeta):
-    """ Converts a dict into a persistable object.
-
-    The properties dict needs at least a __type__ key containing the name of
-    any registered class.
-    The type key defines the type of the object to return.
-
-    If the registered class for the __type__ is a meta-class,
-    i.e. a subclass of <type>, a name key is assumed to be present and
-    the registered class idendified by it's value is returned.
-
-    If the registered class for the __type__ is standard class,
-    i.e. an instance of <type>, and object of that class will be created
-    with attributes as defined by the remaining key-value pairs.
-
-    Args:
-        properties: A dict like object.
-
-    Returns:
-        A persistable object.
-    """
-
-    try:
-        type_id = properties['__type__']
-    except KeyError:
-        raise DeserialisationError(
-            'properties "{}" missing __type__ key'.format(properties))
-
-    if type_id == Descriptor(PersistableMeta).type_id:
-        # we are looking at a class object
-        cls_id = properties['id']
-    else:
-        # we are looking at an instance object
-        cls_id = type_id
-
-    try:
-        cls = dynamic_type.get_class_by_id(cls_id)
-    except UnknownType:
-        cls = PersistableMeta.get_class_by_id(cls_id)
-
-    if cls_id != type_id:
-        return cls
-    else:
-        obj = cls.__new__(cls)
-
-        if isinstance(obj, Attribute):
-            for attr_name, value in properties.iteritems():
-                setattr(obj, attr_name, value)
-        else:
-            descr = Descriptor(cls)
-
-            for attr_name, attr in descr.attributes.items():
-                try:
-                    value = properties[attr_name]
-                except KeyError:
-                    value = attr.default
-                else:
-                    value = attr.to_python(value)
-
-                setattr(obj, attr_name, value)
-
-    return obj
-
-
 def object_to_db_value(obj):
     try:
         attr_cls = get_attibute_for_type(type(obj))
@@ -223,101 +111,6 @@ def get_start_clause(obj, name):
     return query
 
 
-def get_create_types_query(obj, root):
-    """ Returns a CREATE UNIQUE query for an entire type hierarchy.
-
-    Includes statements that create each type's attributes.
-
-    Args:
-        obj: An object to create a type hierarchy for.
-
-    Returns:
-        A tuple containing:
-        (cypher query, objects to create nodes for, the object names).
-    """
-    lines = []
-    objects = {}
-
-    query_args = {
-        'root_id': root.id,
-        'IsA_props': object_to_dict(IsA(None, None)),
-        'Defines_props': object_to_dict(Defines(None, None)),
-        'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
-        'DeclaredOn_props': object_to_dict(DeclaredOn(None, None))
-    }
-
-    is_first = True
-    for cls1, rel_cls, cls2 in get_type_relationships(obj):
-        # this filters out the types that we don't want to persist
-        if issubclass(cls2, AttributedBase):
-            name1 = cls1.__name__
-
-            if name1 in objects:
-                abstr1 = name1
-            else:
-                abstr1 = '(%s {%s_props})' % (name1, name1)
-
-            objects[name1] = cls1
-
-            if is_first:
-                is_first = False
-                ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
-            else:
-                name2 = cls2.__name__
-                objects[name2] = cls2
-
-                rel_name = rel_cls.__name__
-                rel_type = rel_name.upper()
-
-                ln = '%s -[:%s {%s_props}]-> %s' % (
-                    abstr1, rel_type, rel_name, name2)
-            lines.append(ln)
-
-            # TODO: really?
-            # if cls1 is type(root):
-            #     ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
-            #         cls1.__name__)
-            #     lines.append(ln)
-
-            # create cls1's attributes
-            descriptor = Descriptor(cls1)
-
-            for attr_name, attr in descriptor.declared_attributes.iteritems():
-                key = "%s_%s" % (name1, attr_name)
-                ln = '({%s}) -[:DECLAREDON {%s_props}]-> %s' % (
-                    key, DeclaredOn.__name__, name1
-                )
-                lines.append(ln)
-
-                attr_dict = object_to_dict(attr)
-                attr_dict['name'] = attr_name
-                query_args[key] = attr_dict
-
-    for key, obj in objects.iteritems():
-        query_args['%s_props' % key] = object_to_dict(obj)
-
-    query = join_lines(
-        'START root=node:%s(id={root_id})' % get_index_name(type(root)),
-        'CREATE UNIQUE',
-        (lines, ','),
-        'RETURN %s' % ', '.join(objects.keys())
-    )
-    return query, objects.values(), query_args
-
-
-def get_create_relationship_query(rel):
-    rel_props = object_to_dict(rel)
-    query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
-
-    query = query % (
-        get_start_clause(rel.start, 'n1'),
-        get_start_clause(rel.end, 'n2'),
-        rel_props['__type__'].upper(),
-    )
-
-    return query
-
-
 def _get_changes(old, new):
     """Return a changes dictionary containing the key/values in new that are
        different from old. Any key in old that is not in new will have a None
@@ -377,6 +170,116 @@ class Storage(object):
         for row in rows:
             yield row
 
+    def object_to_dict(self, obj):
+        """ Converts a persistable object to a dict.
+
+        The generated dict will contain a __type__ key, for which the value
+        will be the type_id as given by the descriptor for type(obj).
+
+        If the object is a class a name key-value pair will be
+        added to the generated dict, with the value being the type_id given
+        by the descriptor for the object.
+
+        For any other object all the attributes as given by the object's
+        type descriptpr will be added to the dict and encoded as required.
+
+        Args:
+            obj: A persistable  object.
+
+        Returns:
+            Dictionary with attributes encoded in basic types
+            and type information for deserialization.
+            e.g.
+            {
+                '__type__': 'Entity',
+                'attr1' : 1234
+            }
+        """
+        obj_type = type(obj)
+
+        properties = {
+            '__type__': Descriptor(obj_type).type_id,
+        }
+
+        if isinstance(obj, type):
+            properties['id'] = Descriptor(obj).type_id
+
+        elif isinstance(obj, Attribute):
+            properties['unique'] = obj.unique
+
+        else:
+            descr = Descriptor(obj_type)
+
+            for name, attr in descr.attributes.items():
+                value = attr.to_db(getattr(obj, name))
+                if value is not None:
+                    properties[name] = value
+
+        return properties
+
+    def dict_to_object(self, properties):
+        """ Converts a dict into a persistable object.
+
+        The properties dict needs at least a __type__ key containing the name
+        of any registered class.
+        The type key defines the type of the object to return.
+
+        If the registered class for the __type__ is a meta-class,
+        i.e. a subclass of <type>, a name key is assumed to be present and
+        the registered class idendified by it's value is returned.
+
+        If the registered class for the __type__ is standard class,
+        i.e. an instance of <type>, and object of that class will be created
+        with attributes as defined by the remaining key-value pairs.
+
+        Args:
+            properties: A dict like object.
+
+        Returns:
+            A persistable object.
+        """
+
+        try:
+            type_id = properties['__type__']
+        except KeyError:
+            raise DeserialisationError(
+                'properties "{}" missing __type__ key'.format(properties))
+
+        if type_id == Descriptor(PersistableMeta).type_id:
+            # we are looking at a class object
+            cls_id = properties['id']
+        else:
+            # we are looking at an instance object
+            cls_id = type_id
+
+        try:
+            cls = self.dynamic_type.get_class_by_id(cls_id)
+        except UnknownType:
+            cls = PersistableMeta.get_class_by_id(cls_id)
+
+        if cls_id != type_id:
+            return cls
+        else:
+            obj = cls.__new__(cls)
+
+            if isinstance(obj, Attribute):
+                for attr_name, value in properties.iteritems():
+                    setattr(obj, attr_name, value)
+            else:
+                descr = Descriptor(cls)
+
+                for attr_name, attr in descr.attributes.items():
+                    try:
+                        value = properties[attr_name]
+                    except KeyError:
+                        value = attr.default
+                    else:
+                        value = attr.to_python(value)
+
+                    setattr(obj, attr_name, value)
+
+        return obj
+
     def _convert_value(self, value):
         """ Converts a py2neo primitive(Node, Relationship, basic object)
         to an equvalent python object.
@@ -390,7 +293,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties, self.dynamic_type)
+            obj = self.dict_to_object(properties)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -403,6 +306,102 @@ class Storage(object):
     def _convert_row(self, row):
         for value in row:
             yield self._convert_value(value)
+
+    def get_create_types_query(self, obj):
+        """ Returns a CREATE UNIQUE query for an entire type hierarchy.
+
+        Includes statements that create each type's attributes.
+
+        Args:
+            obj: An object to create a type hierarchy for.
+
+        Returns:
+            A tuple containing:
+            (cypher query, objects to create nodes for, the object names).
+        """
+        lines = []
+        objects = {}
+        root = self.type_system
+
+        query_args = {
+            'root_id': root.id,
+            'IsA_props': self.object_to_dict(IsA(None, None)),
+            'Defines_props': self.object_to_dict(Defines(None, None)),
+            'InstanceOf_props': self.object_to_dict(InstanceOf(None, None)),
+            'DeclaredOn_props': self.object_to_dict(DeclaredOn(None, None))
+        }
+
+        is_first = True
+        for cls1, rel_cls, cls2 in get_type_relationships(obj):
+            # this filters out the types that we don't want to persist
+            if issubclass(cls2, AttributedBase):
+                name1 = cls1.__name__
+
+                if name1 in objects:
+                    abstr1 = name1
+                else:
+                    abstr1 = '(%s {%s_props})' % (name1, name1)
+
+                objects[name1] = cls1
+
+                if is_first:
+                    is_first = False
+                    ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
+                else:
+                    name2 = cls2.__name__
+                    objects[name2] = cls2
+
+                    rel_name = rel_cls.__name__
+                    rel_type = rel_name.upper()
+
+                    ln = '%s -[:%s {%s_props}]-> %s' % (
+                        abstr1, rel_type, rel_name, name2)
+                lines.append(ln)
+
+                # TODO: really?
+                # if cls1 is type(root):
+                #     ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
+                #         cls1.__name__)
+                #     lines.append(ln)
+
+                # create cls1's attributes
+                descriptor = Descriptor(cls1)
+
+                attributes = descriptor.declared_attributes
+                for attr_name, attr in attributes.iteritems():
+                    key = "%s_%s" % (name1, attr_name)
+                    ln = '({%s}) -[:DECLAREDON {%s_props}]-> %s' % (
+                        key, DeclaredOn.__name__, name1
+                    )
+                    lines.append(ln)
+
+                    attr_dict = self.object_to_dict(attr)
+                    # TODO: why does the attribute not have a name property?
+                    attr_dict['name'] = attr_name
+                    query_args[key] = attr_dict
+
+        for key, obj in objects.iteritems():
+            query_args['%s_props' % key] = self.object_to_dict(obj)
+
+        query = join_lines(
+            'START root=node:%s(id={root_id})' % get_index_name(type(root)),
+            'CREATE UNIQUE',
+            (lines, ','),
+            'RETURN %s' % ', '.join(objects.keys())
+        )
+        return query, objects.values(), query_args
+
+    def get_create_relationship_query(self, rel):
+        rel_props = self.object_to_dict(rel)
+        query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
+
+        query = query % (
+            get_start_clause(rel.start, 'n1'),
+            get_start_clause(rel.end, 'n2'),
+            rel_props['__type__'].upper(),
+        )
+
+        return query
 
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
@@ -419,8 +418,7 @@ class Storage(object):
             set_store_for_object(obj, self)
 
     def _add_types(self, cls):
-        query, objects, query_args = get_create_types_query(
-            cls, self.type_system)
+        query, objects, query_args = self.get_create_types_query(cls)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -454,7 +452,7 @@ class Storage(object):
             # object is a relationship
             obj_type = type(obj)
             self._add_types(obj_type)
-            query = get_create_relationship_query(obj)
+            query = self.get_create_relationship_query(obj)
 
         else:
             # object is an instance; create its type, its hierarchy and then
@@ -471,10 +469,10 @@ class Storage(object):
 
             query_args = {
                 'type_id': obj_type.__name__,
-                'rel_props': object_to_dict(InstanceOf(None, None)),
+                'rel_props': self.object_to_dict(InstanceOf(None, None)),
             }
 
-        query_args['props'] = object_to_dict(obj)
+        query_args['props'] = self.object_to_dict(obj)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
@@ -499,8 +497,8 @@ class Storage(object):
         if existing is None:
             return self._add(persistable)
 
-        existing_props = object_to_dict(existing)
-        props = object_to_dict(persistable)
+        existing_props = self.object_to_dict(existing)
+        props = self.object_to_dict(persistable)
 
         if existing_props == props:
             # no changes

@@ -34,3 +34,5 @@ class DeclaredOn(Relationship):
     """ Describes the relationship between a type and the properties that
     instances of that type can have.
     """
+
+
