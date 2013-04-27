@@ -83,7 +83,7 @@ def object_to_dict(obj):
     return properties
 
 
-def dict_to_object(properties, dynamic_type=None):
+def dict_to_object(properties, dynamic_type=PersistableMeta):
     """ Converts a dict into a persistable object.
 
     The properties dict needs at least a __type__ key containing the name of
@@ -111,25 +111,28 @@ def dict_to_object(properties, dynamic_type=None):
         raise DeserialisationError(
             'properties "{}" missing __type__ key'.format(properties))
 
-    try:
-        cls_or_meta = PersistableMeta.get_class_by_id(type_id)
-    except UnknownType:
-        cls_or_meta = dynamic_type.get_class_by_id(type_id)
-
-    if issubclass(cls_or_meta, PersistableMeta):
-        obj = cls_or_meta.get_class_by_id(properties['id'])
-
-    elif issubclass(cls_or_meta, type):
-        obj = PersistableMeta.get_class_by_id(properties['id'])
-
+    if type_id == Descriptor(PersistableMeta).type_id:
+        # we are looking at a class object
+        cls_id = properties['id']
     else:
-        obj = cls_or_meta.__new__(cls_or_meta)
+        # we are looking at an instance object
+        cls_id = type_id
+
+    try:
+        cls = dynamic_type.get_class_by_id(cls_id)
+    except UnknownType:
+        cls = PersistableMeta.get_class_by_id(cls_id)
+
+    if cls_id != type_id:
+        return cls
+    else:
+        obj = cls.__new__(cls)
 
         if isinstance(obj, Attribute):
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
-            descr = Descriptor(cls_or_meta)
+            descr = Descriptor(cls)
 
             for attr_name, attr in descr.attributes.items():
                 try:
@@ -349,7 +352,9 @@ class Storage(object):
         """
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
-        self.dynamic_type = type('DynamicType', (PersistableMeta,), {})
+
+        self.dynamic_type = type(
+            PersistableMeta.__name__, (PersistableMeta,), {})
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
