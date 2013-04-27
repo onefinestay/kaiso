@@ -1,3 +1,7 @@
+from logging import getLogger
+
+from py2neo import cypher, neo4j
+
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.connection import get_connection
@@ -11,7 +15,8 @@ from kaiso.types import (
     Persistable, PersistableMeta, Relationship, Attribute,
     AttributedBase, get_indexes, get_index_name,
     is_indexable)
-from py2neo import cypher, neo4j
+
+log = getLogger(__name__)
 
 
 class TypeSystem(AttributedBase):
@@ -366,8 +371,7 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
-        print '-------------------'
-        print query.format(**params)
+        log.debug('running query %s', query)
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:

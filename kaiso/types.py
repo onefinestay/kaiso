@@ -135,7 +135,6 @@ class PersistableMeta(type, Persistable):
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
         mcs.register(cls)
-        print id(mcs), cls
         return cls
 
     @classmethod
