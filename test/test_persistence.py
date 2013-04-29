@@ -1,11 +1,15 @@
-from kaiso.attributes import Uuid, Bool, Integer, Float, String, Decimal, \
-    DateTime, Choice
-from kaiso.relationships import Relationship
-from kaiso.types import PersistableMeta, Entity
-from py2neo import cypher
 import decimal
 import iso8601
+
 import pytest
+
+from py2neo import cypher
+
+from kaiso.attributes import (
+    Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
+from kaiso.relationships import Relationship
+from kaiso.types import PersistableMeta, Entity
+from kaiso.persistence import TypeSystem
 
 
 class Thing(Entity):
@@ -59,7 +63,9 @@ def test_add_persistable_only_adds_single_node(storage):
 
     storage.save(Entity)
 
-    result = list(storage.query('START n=node(*) RETURN n'))
+    result = list(storage.query(
+        'START n=node:persistablemeta("id:*") RETURN n')
+    )
     assert result == [(Entity,)]
 
 
@@ -69,7 +75,9 @@ def test_only_adds_entity_once(storage):
     storage.save(Entity)
     storage.save(Entity)
 
-    result = list(storage.query('START n=node(*) RETURN n'))
+    result = list(storage.query(
+        'START n=node:persistablemeta("id:*") RETURN n')
+    )
     assert result == [(Entity,)]
 
 
@@ -81,14 +89,11 @@ def test_only_adds_types_once(storage):
     storage.save(thing1)
     storage.save(thing2)
 
-    rows = storage.query("""
-        START n=node(*)
-        MATCH n-[:ISA|INSTANCEOF]->m
-        RETURN COALESCE(n.id?, n)""")
+    (count,) = next(storage.query(
+        'START n=node:persistablemeta(id="Thing") '
+        'RETURN count(n)'))
 
-    result = set(item for (item,) in rows)
-
-    assert result == {Thing, str(thing1.id), str(thing2.id)}
+    assert count == 1
 
 
 @pytest.mark.usefixtures('storage')
@@ -96,7 +101,7 @@ def test_simple_add_and_get_type(storage):
 
     storage.save(Thing)
 
-    result = storage.get(PersistableMeta, name='Thing')
+    result = storage.get(PersistableMeta, id='Thing')
 
     assert result is Thing
 
@@ -143,7 +148,7 @@ def test_delete_instance_types_remain(storage):
 
     # we are expecting the type to stay in place
     rows = storage.query("""
-        START n=node(*)
+        START n=node:persistablemeta("id:*")
         MATCH n-[:ISA|INSTANCEOF]->m
         RETURN n""")
     result = set(item for (item,) in rows)
@@ -194,11 +199,11 @@ def test_delete_class(storage):
     storage.save(thing)
 
     storage.delete(Thing)
+    storage.delete(TypeSystem)
 
     rows = storage.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
-
-    assert result == {Entity, str(thing.id)}
+    assert result == {'TypeSystem', 'Entity', str(thing.id)}
 
 
 @pytest.mark.usefixtures('storage')
@@ -323,8 +328,8 @@ def test_type_hierarchy_object(storage):
     result = set(rows)
 
     assert result == {
-        (Thing, 'IsA', Entity),
-        (str(obj.id), 'InstanceOf', Thing)
+        ('Thing', 'IsA', Entity),
+        (str(obj.id), 'InstanceOf', Thing),
     }
 
 
@@ -357,14 +362,14 @@ def test_type_hierarchy_diamond(storage):
     result = set(rows)
 
     assert result == {
-        (Thing, 'IsA', Entity),
-        (Flavouring, 'IsA', Thing),
-        (Colouring, 'IsA', Thing),
-        (Carmine, 'IsA', Colouring),
-        (Beetroot, 'IsA', Flavouring),
-        (Beetroot, 'IsA', Colouring),
+        ('Thing', 'IsA', Entity),
+        ('Flavouring', 'IsA', Thing),
+        ('Colouring', 'IsA', Thing),
+        ('Carmine', 'IsA', Colouring),
+        ('Beetroot', 'IsA', Flavouring),
+        ('Beetroot', 'IsA', Colouring),
         (str(beetroot.id), 'InstanceOf', Beetroot),
-        (str(carmine.id), 'InstanceOf', Carmine),
+        (str(carmine.id), 'InstanceOf', Carmine)
     }
 
 
@@ -379,12 +384,12 @@ def test_add_type_creates_index(storage):
 
 
 def count(storage, type_):
-    type_name = type_.__name__
+    type_id = type_.__name__
     query = """
-        START Thing=node:persistablemeta(name="{}")
+        START Thing=node:persistablemeta(id="{}")
         MATCH (n)-[:INSTANCEOF]->Thing
         RETURN count(n);
-        """.format(type_name)
+        """.format(type_id)
     rows = storage.query(query)
     (count,) = next(rows)
     return count
@@ -439,7 +444,7 @@ def test_persist_attributes(storage):
     storage._add_types(Thing)
 
     query_str = """
-        START Thing = node:persistablemeta(name="Thing")
+        START Thing = node:persistablemeta(id="Thing")
         MATCH attr -[DECLAREDON]-> Thing
         RETURN attr
     """
@@ -467,7 +472,7 @@ def test_persist_type_attributes(storage):
     storage._add_types(Thing)
 
     query_str = """
-        START Thing = node:persistablemeta(name="Thing")
+        START Thing = node:persistablemeta(id="Thing")
         MATCH attr -[DECLAREDON]-> Thing
         RETURN attr.__type__, attr.name, attr.unique
     """

@@ -2,8 +2,6 @@ from inspect import getmembers, getmro
 
 from kaiso.exceptions import UnknownType
 
-_descriptors = {}
-
 
 def get_declaring_class(cls, attr_name):
     """ Returns the class in the type heirarchy of ``cls`` that defined
@@ -24,6 +22,15 @@ def get_declaring_class(cls, attr_name):
     return declaring_class
 
 
+def get_meta(cls):
+    if issubclass(cls, PersistableMeta):
+        meta_cls = cls
+    else:
+        meta_cls = type(cls)
+
+    return meta_cls
+
+
 def get_index_name(cls):
     """ Returns a cypher index name for a class.
 
@@ -33,7 +40,10 @@ def get_index_name(cls):
     Returns:
         An index name.
     """
-    return cls.__name__.lower()
+    if issubclass(cls, PersistableMeta):
+        return cls.index_name
+    else:
+        return cls.__name__.lower()
 
 
 def get_indexes(obj):
@@ -46,33 +56,17 @@ def get_indexes(obj):
         Generator yielding tuples (index_name, key, value)
     """
 
-    obj_type = type(obj)
+    meta_cls = get_meta(type(obj))
 
-    if isinstance(obj, type):
-        index_name = get_index_name(obj_type)
-        value = get_descriptor(obj).type_name
-        yield (index_name, 'name', value)
-    else:
-        descr = get_descriptor(obj_type)
-
-        for name, attr in descr.attributes.items():
-            if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name)
-
-                index_name = get_index_name(declaring_class)
-                key = name
-                value = attr.to_db(getattr(obj, name))
-
-                if value is not None:
-                    yield (index_name, key, value)
+    return meta_cls.get_indexes(obj)
 
 
 def is_indexable(cls):
     """ Returns True if the class ``cls`` has any indexable attributes.
     """
 
-    descr = get_descriptor(cls)
-    for attr in descr.declared_attributes.values():
+    descr = Descriptor(cls)
+    for name, attr in descr.attributes.items():
         if attr.unique:
             return True
 
@@ -87,91 +81,37 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
-        self.type_name = cls.__name__
 
-        self._attributes = None
-        self._declared_attributes = None
-        self._relationships = None
+    @property
+    def type_id(self):
+        cls = self.cls
+
+        if issubclass(cls, PersistableMeta):
+            return cls.type_id
+        else:
+            return cls.__name__
 
     @property
     def relationships(self):
         from kaiso.attributes.bases import _is_relationship_reference
-        relationships = self._relationships
-        if relationships is None:
-            relationships = dict(getmembers(
-                self.cls, _is_relationship_reference
-            ))
-            self._relationships = relationships
-
+        relationships = dict(getmembers(
+            self.cls, _is_relationship_reference
+        ))
         return relationships
 
     @property
     def attributes(self):
-        attributes = self._attributes
-        if attributes is None:
-            attributes = dict(getmembers(self.cls, _is_attribute))
-            self._attributes = attributes
-
+        attributes = dict(getmembers(self.cls, _is_attribute))
         return attributes
 
     @property
     def declared_attributes(self):
-        declared = self._declared_attributes
-        if declared is None:
-            declared = {}
-            for name, attr in self.attributes.items():
-                if get_declaring_class(self.cls, name) == self.cls:
-                    declared[name] = attr
-            self._declared_attributes = declared
+        declared = {}
+        for name, attr in getmembers(self.cls, _is_attribute):
+            if get_declaring_class(self.cls, name) == self.cls:
+                declared[name] = attr
 
         return declared
-
-
-def register_type(cls):
-    """ Registers a class for type introspection.
-
-    This function can be used as a class decorator to register a class.
-
-    Args:
-        A class to be registered.
-
-    Returns:
-        cls
-    """
-    descriptor = Descriptor(cls)
-    _descriptors[cls.__name__] = descriptor
-    return cls
-
-
-def get_descriptor(cls):
-    """ Returns a descriptor for a registered class.
-
-    Args:
-        cls: A registered class.
-
-    Returns:
-        A Descriptor object.
-    """
-    return get_descriptor_by_name(cls.__name__)
-
-
-def get_descriptor_by_name(name):
-    """ Returns a descriptor given it's registered name.
-
-    Args:
-        name: The registered name of a class.
-
-    Returns:
-        A Descriptor object.
-    """
-    try:
-        return _descriptors[name]
-    except KeyError:
-        raise UnknownType('Unknown type "{}"'.format(name))
-
-
-register_type(type)
-register_type(object)
 
 
 class Persistable(object):
@@ -182,15 +122,75 @@ class Persistable(object):
     '''
 
 
-@register_type
+class MetaMeta(type):
+    def __init__(cls, name, bases, dct):
+        super(MetaMeta, cls).__init__(cls)
+        cls.descriptors = {}
+        cls.register(cls)
+
+
 class PersistableMeta(type, Persistable):
+    __metaclass__ = MetaMeta
+
+    index_name = 'persistablemeta'
+    type_id = 'PersistableMeta'
+
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
-        register_type(cls)
+        mcs.register(cls)
         return cls
 
-    def __init__(cls, name, bases, dct):
-        super(PersistableMeta, cls).__init__(name, bases, dct)
+    @classmethod
+    def register(mcs, cls):
+        mcs.descriptors[cls.__name__] = Descriptor(cls)
+
+    @classmethod
+    def get_class_by_id(mcs, cls_id):
+        try:
+            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
+                return PersistableMeta.get_class_by_id(cls_id)
+        except UnknownType:
+            pass
+
+        return mcs.get_descriptor_by_id(cls_id).cls
+
+    @classmethod
+    def get_descriptor(mcs, cls):
+        name = cls.__name__
+        return mcs.get_descriptor_by_id(name)
+
+    @classmethod
+    def get_descriptor_by_id(mcs, cls_id):
+        try:
+            return mcs.descriptors[cls_id]
+        except KeyError:
+            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
+                return PersistableMeta.get_descriptor_by_id(cls_id)
+
+            raise UnknownType('Unknown type "{}"'.format(cls_id))
+
+    @classmethod
+    def get_indexes(mcs, obj):
+        if isinstance(obj, type):
+            yield (mcs.index_name, 'id', obj.__name__)
+        else:
+            obj_type = type(obj)
+            descr = mcs.get_descriptor(obj_type)
+
+            for name, attr in descr.attributes.items():
+                if attr.unique:
+                    declaring_class = get_declaring_class(descr.cls, name)
+
+                    index_name = get_index_name(declaring_class)
+                    key = name
+                    value = attr.to_db(getattr(obj, name))
+
+                    if value is not None:
+                        yield (index_name, key, value)
+
+
+PersistableMeta.register(type)
+PersistableMeta.register(object)
 
 
 def _is_attribute(obj):
@@ -215,6 +215,14 @@ class Attribute(Persistable):
         return value
 
 
+class DefaultableAttribute(Attribute):
+    default = None
+
+    def __init__(self, default=None, unique=False):
+        super(DefaultableAttribute, self).__init__(unique)
+        self.default = default
+
+
 class AttributedBase(Persistable):
     """ The base class for objects that can have Attributes.
 
@@ -228,7 +236,7 @@ class AttributedBase(Persistable):
         obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
         # setup default values for attributes
-        descriptor = get_descriptor(cls)
+        descriptor = type(cls).get_descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
@@ -245,7 +253,7 @@ class AttributedBase(Persistable):
 class Entity(AttributedBase):
     def __getattribute__(self, name):
         cls = type(self)
-        descriptor = get_descriptor(cls)
+        descriptor = type(cls).get_descriptor(cls)
         try:
             rel_reference = descriptor.relationships[name]
         except KeyError:

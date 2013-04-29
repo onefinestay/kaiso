@@ -1,6 +1,11 @@
 import os
 import pytest
 
+# import logging
+
+# logging.basicConfig(level=logging.DEBUG)
+# logging.getLogger('py2neo').setLevel(logging.ERROR)
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -28,4 +33,5 @@ def storage(request):
     neo4j_uri = request.config.getoption('neo4j_uri')
     storage = Storage(neo4j_uri)
     storage.delete_all_data()
+    storage.initialize()
     return storage

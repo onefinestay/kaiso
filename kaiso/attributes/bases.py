@@ -63,10 +63,3 @@ class RelationshipReference(object):
     def get_manager(self, obj):
         return RelationshipManager(obj, self)
 
-
-class DefaultableAttribute(Attribute):
-    default = None
-
-    def __init__(self, default=None, **kwargs):
-        super(DefaultableAttribute, self).__init__(**kwargs)
-        self.default = default
