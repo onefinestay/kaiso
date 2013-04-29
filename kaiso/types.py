@@ -5,13 +5,23 @@ from kaiso.exceptions import UnknownType
 _descriptors = {}
 
 
-def get_declaring_class(cls, attr_name, attr):
-    """ Returns the top class in the type heirarchhy of ``cls`` that defined
-        the attribute ``attr`` with name ``attr_name``.
+def get_declaring_class(cls, attr_name):
+    """ Returns the class in the type heirarchy of ``cls`` that defined
+        an attribute with name ``attr_name``.
     """
+    declaring_class = None
+    declared_attr = None
+
+    # Start at the top of the hierarchy and determine which of the MRO have
+    # the attribute. Return the lowest class that defines (or overloads) the
+    # attribute.
     for base in reversed(getmro(cls)):
-        if getattr(base, attr_name, None) == attr:
-            return base
+        attr = getattr(base, attr_name, False)
+        if attr and declared_attr is not attr:
+            declaring_class = base
+            declared_attr = attr
+
+    return declaring_class
 
 
 def get_index_name(cls):
@@ -47,7 +57,7 @@ def get_indexes(obj):
 
         for name, attr in descr.attributes.items():
             if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name, attr)
+                declaring_class = get_declaring_class(descr.cls, name)
 
                 index_name = get_index_name(declaring_class)
                 key = name
@@ -110,7 +120,7 @@ class Descriptor(object):
         if declared is None:
             declared = {}
             for name, attr in self.attributes.items():
-                if get_declaring_class(self.cls, name, attr) == self.cls:
+                if get_declaring_class(self.cls, name) == self.cls:
                     declared[name] = attr
             self._declared_attributes = declared
 
