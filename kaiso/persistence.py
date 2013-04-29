@@ -49,7 +49,7 @@ def object_to_dict(obj):
     elif isinstance(obj, Attribute):
         properties['unique'] = obj.unique
         properties['required'] = obj.required
-        if isinstance(obj, DefaultableAttribute):
+        if isinstance(obj, DefaultableAttribute) and obj.default is not None:
             properties['default'] = obj.default
     else:
         for name, attr in descr.attributes.items():
@@ -97,6 +97,8 @@ def dict_to_object(properties):
         obj = cls.__new__(cls)
 
         if issubclass(cls, Attribute):
+            if issubclass(cls, DefaultableAttribute):
+                setattr(obj, 'default', None)
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
