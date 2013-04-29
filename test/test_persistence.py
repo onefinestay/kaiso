@@ -473,8 +473,8 @@ def test_persist_type_attributes(storage):
 
     query_str = """
         START Thing = node:persistablemeta(id="Thing")
-        MATCH attr -[DECLAREDON]-> Thing
-        RETURN attr.__type__, attr.name, attr.unique
+        MATCH attr -[r:DECLAREDON]-> Thing
+        RETURN attr.__type__, r.name, attr.unique
     """
 
     rows = storage.query(query_str)

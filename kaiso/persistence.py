@@ -296,8 +296,8 @@ class Storage(object):
 
             query = join_lines(
                 'START cls=node:%s(id={type_id})' % idx_name,
-                'MATCH attr -[:DECLAREDON]-> cls',
-                'RETURN cls, attr.name'
+                'MATCH () -[r:DECLAREDON]-> cls',
+                'RETURN cls, r.name'
             )
 
             rows = self.query(query, **query_args)

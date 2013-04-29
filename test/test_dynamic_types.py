@@ -53,7 +53,7 @@ def test_add_attr_to_type(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def _test_remove_attr_from_type(storage):
+def test_remove_attr_from_type(storage):
     attrs = {'id': String(unique=True), 'ham': String()}
     Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
     storage.save(Foobar)
@@ -70,7 +70,7 @@ def _test_remove_attr_from_type(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def _test_add_attr_to_type_via_2nd_storage(storage):
+def test_add_attr_to_type_via_2nd_storage(storage):
 
     attrs = {'id': String(unique=True)}
     Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
