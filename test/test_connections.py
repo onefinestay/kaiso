@@ -11,7 +11,7 @@ from kaiso.connection import get_connection, TempConnectionError
 @pytest.mark.slow
 class TestTempConnectionProcesses():
     """ Test spinning up temporary neo4j processes.
-    
+
     We mock out ``py2neo.neo4j.GraphDatabaseService`` because:
         a) it's a library and we're not testing its behaviour directly
         b) the first thing GraphDatabaseService does is generate a
