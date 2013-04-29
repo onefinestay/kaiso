@@ -5,8 +5,7 @@ from kaiso.attributes import String, Uuid
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes,
-    object_to_dict, dict_to_object,
-    dict_to_db_values_dict)
+    object_to_dict, dict_to_object, dict_to_db_values_dict)
 from kaiso.types import (
     Persistable, MetaMeta, PersistableMeta, Entity, AttributedBase, Attribute)
 

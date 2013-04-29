@@ -26,7 +26,7 @@ class TypeSystem(AttributedBase):
 
 def get_index_filter(obj):
     indexes = get_indexes(obj)
-    index_filter = {key: value for _, key, value in indexes}
+    index_filter = dict((key, value) for _, key, value in indexes)
     return index_filter
 
 
@@ -49,8 +49,8 @@ class Storage(object):
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
 
-        self.dynamic_type = type(
-            PersistableMeta.__name__, (PersistableMeta,), {})
+        type_name = 'Storage_{}_PersistableType'.format(id(self))
+        self.dynamic_type = type(type_name, (PersistableMeta,), {})
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.

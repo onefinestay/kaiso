@@ -1,5 +1,5 @@
 from kaiso.attributes.bases import get_attibute_for_type
-from kaiso.exceptions import UnknownType, DeserialisationError
+from kaiso.exceptions import DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.relationships import InstanceOf, IsA
 from kaiso.types import (
@@ -170,12 +170,7 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
         # we are looking at an instance object
         cls_id = type_id
 
-    try:
-        # TODO: should just ask dynamic_type
-        #        and pass in that we prefer the declared type
-        cls = PersistableMeta.get_class_by_id(cls_id)
-    except UnknownType:
-        cls = dynamic_type.get_class_by_id(cls_id)
+    cls = dynamic_type.get_class_by_id(cls_id)
 
     if cls_id != type_id:
         return cls

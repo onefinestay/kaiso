@@ -72,11 +72,18 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
-        self.type_id = cls.__name__
-
         self._attributes = None
         self._declared_attributes = None
         self._relationships = None
+
+    @property
+    def type_id(self):
+        cls = self.cls
+
+        if issubclass(cls, PersistableMeta):
+            return cls.type_id
+        else:
+            return cls.__name__
 
     @property
     def relationships(self):
@@ -131,6 +138,7 @@ class PersistableMeta(type, Persistable):
     __metaclass__ = MetaMeta
 
     index_name = 'persistablemeta'
+    type_id = 'PersistableMeta'
 
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
@@ -143,6 +151,12 @@ class PersistableMeta(type, Persistable):
 
     @classmethod
     def get_class_by_id(mcs, cls_id):
+        try:
+            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
+                return PersistableMeta.get_class_by_id(cls_id)
+        except UnknownType:
+            pass
+
         return mcs.get_descriptor_by_id(cls_id).cls
 
     @classmethod
