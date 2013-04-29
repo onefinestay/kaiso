@@ -65,6 +65,8 @@ class RelationshipReference(object):
 
 
 class DefaultableAttribute(Attribute):
+    default = None
+
     def __init__(self, default=None, **kwargs):
         super(DefaultableAttribute, self).__init__(**kwargs)
         self.default = default

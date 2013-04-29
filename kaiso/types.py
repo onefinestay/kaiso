@@ -189,6 +189,8 @@ def _is_attribute(obj):
 
 class Attribute(Persistable):
     __metaclass__ = PersistableMeta
+    unique = None
+    required = None
 
     def __init__(self, unique=False, required=False):
         self.unique = unique

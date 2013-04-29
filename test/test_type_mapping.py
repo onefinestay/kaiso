@@ -6,6 +6,7 @@ from kaiso.persistence import(
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.types import (
     Persistable, PersistableMeta, Entity, AttributedBase, Attribute)
+from kaiso.attributes import DefaultableAttribute
 
 
 class Foo(Entity):
@@ -13,6 +14,10 @@ class Foo(Entity):
 
 
 class Bar(Attribute):
+    pass
+
+
+class Baz(DefaultableAttribute):
     pass
 
 
@@ -53,13 +58,57 @@ def test_objects():
 
 
 def test_attribute():
+    """ Verify (de)serialization of Attributes.
+    """
+    # Attribute dicts always contain both ``unique`` and ``required`` keys.
     attr = Bar(unique=True)
     dct = object_to_dict(attr)
-    assert dct == {'__type__': 'Bar', 'unique': True}
+    assert dct == {'__type__': 'Bar', 'unique': True, 'required': False}
 
+    # Attribute objects have default values of ``None`` for ``unique``
+    # and ``required``.
     obj = dict_to_object({'__type__': 'Bar', 'unique': True})
     assert isinstance(obj, Bar)
     assert obj.unique is True
+    assert obj.required is None
+
+
+def test_defaultable_attribute():
+    """ Verify (de)serialization of DefaultableAttributes.
+    """
+    # DefaultableAttribute dicts always contain ``unique`` and ``required``
+    # keys, but don't contain a ``default`` key unless it has a value.
+    attr = Baz(required=True)
+    dct = object_to_dict(attr)
+    assert dct == {'__type__': 'Baz', 'unique': False, 'required': True}
+
+    # DefaultableAttribute objects also have a ``default`` attribute, equal to
+    # ``None`` if unset.
+    obj = dict_to_object({'__type__': 'Baz', 'required': True})
+    assert isinstance(obj, Baz)
+    assert obj.unique is None
+    assert obj.required is True
+    assert obj.default is None
+
+
+def test_defaultable_attribute_with_value():
+    """ Verify (de)serialization of DefaultableAttributes with values.
+    """
+    # DefaultableAttributes dicts always contain ``unique`` and ``required``
+    # keys, and will contain a ``default`` key if it has a value.
+    value = "foo"
+    attr = Baz(default=value)
+    dct = object_to_dict(attr)
+    assert dct == {'__type__': 'Baz', 'unique': False, 'required': False,
+                   'default': value}
+
+    # DefaultableAttribute objects must have a ``default`` attribute
+    obj = dict_to_object({'__type__': 'Baz', 'default': 'foo',
+                          'unique': False, 'required': False, })
+    assert isinstance(obj, Baz)
+    assert obj.unique is False
+    assert obj.required is False
+    assert obj.default == value
 
 
 def test_relationship():
