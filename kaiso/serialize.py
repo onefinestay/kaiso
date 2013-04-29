@@ -2,7 +2,8 @@ from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.exceptions import UnknownType, DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import Attribute, Descriptor, PersistableMeta
+from kaiso.types import (
+    Attribute, DefaultableAttribute, Descriptor, PersistableMeta)
 
 
 def get_changes(old, new):
@@ -21,7 +22,8 @@ def get_changes(old, new):
     # will remove it in neo
     for key in old.keys():
         if key not in new:
-            changes[key] = None
+            raise KeyError('missing key: {}'.format(key))
+            # changes[key] = None
 
     return changes
 
@@ -73,10 +75,10 @@ def object_to_db_value(obj):
 
 
 def dict_to_db_values_dict(data):
-    return {k: object_to_db_value(v) for k, v in data.items()}
+    return dict((k, object_to_db_value(v)) for k, v in data.items())
 
 
-def object_to_dict(obj, dynamic_type=PersistableMeta):
+def object_to_dict(obj, dynamic_type=PersistableMeta, include_none=True):
     """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value
@@ -114,11 +116,20 @@ def object_to_dict(obj, dynamic_type=PersistableMeta):
         properties['unique'] = obj.unique
 
     else:
-        descr = Descriptor(obj_type)
+        descr = dynamic_type.get_descriptor(obj_type)
 
         for name, attr in descr.attributes.items():
-            value = attr.to_db(getattr(obj, name))
-            if value is not None:
+            try:
+                value = attr.to_db(getattr(obj, name))
+            except AttributeError:
+                # if we are dealing with an extended type, we may not
+                # have the attribute set on the instance
+                if isinstance(attr, DefaultableAttribute):
+                    value = attr.default
+                else:
+                    value = None
+
+            if value is not None or include_none:
                 properties[name] = value
 
     return properties
@@ -160,6 +171,8 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
         cls_id = type_id
 
     try:
+        # TODO: should just ask dynamic_type
+        #        and pass in that we prefer the declared type
         cls = PersistableMeta.get_class_by_id(cls_id)
     except UnknownType:
         cls = dynamic_type.get_class_by_id(cls_id)
@@ -173,19 +186,15 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
-            try:
-                descr = dynamic_type.get_descriptor_by_id(cls_id)
-            except UnknownType:
-                descr = PersistableMeta.get_descriptor_by_id(cls_id)
+            descr = dynamic_type.get_descriptor_by_id(cls_id)
 
             for attr_name, attr in descr.attributes.items():
                 try:
                     value = properties[attr_name]
                 except KeyError:
-                    value = attr.default
+                    pass
                 else:
                     value = attr.to_python(value)
-
-                setattr(obj, attr_name, value)
+                    setattr(obj, attr_name, value)
 
     return obj

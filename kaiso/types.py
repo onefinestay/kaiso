@@ -155,6 +155,9 @@ class PersistableMeta(type, Persistable):
         try:
             return mcs.descriptors[cls_id]
         except KeyError:
+            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
+                return PersistableMeta.get_descriptor_by_id(cls_id)
+
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
     @classmethod

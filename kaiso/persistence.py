@@ -145,7 +145,7 @@ class Storage(object):
             # object is a relationship
             obj_type = type(obj)
             self._add_types(obj_type)
-            query = get_create_relationship_query(obj, self.type_system)
+            query = get_create_relationship_query(obj, self.dynamic_type)
 
         else:
             # object is an instance; create its type, its hierarchy and then
@@ -166,7 +166,7 @@ class Storage(object):
                     InstanceOf(None, None), self.dynamic_type),
             }
 
-        query_args['props'] = object_to_dict(obj, self.dynamic_type)
+        query_args['props'] = object_to_dict(obj, self.dynamic_type, False)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 

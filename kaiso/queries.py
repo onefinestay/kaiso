@@ -119,7 +119,7 @@ def get_create_types_query(obj, root, dynamic_type):
 
 
 def get_create_relationship_query(rel, dynamic_type):
-    rel_props = object_to_dict(rel, dynamic_type)
+    rel_props = object_to_dict(rel, dynamic_type, include_none=False)
     query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (

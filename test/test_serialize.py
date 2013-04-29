@@ -1,10 +1,12 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError, UnknownType
-from kaiso.attributes import String
+from kaiso.attributes import String, Uuid
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
-    get_type_relationships, object_to_dict, dict_to_object)
+    get_type_relationships, get_changes,
+    object_to_dict, dict_to_object,
+    dict_to_db_values_dict)
 from kaiso.types import (
     Persistable, MetaMeta, PersistableMeta, Entity, AttributedBase, Attribute)
 
@@ -15,6 +17,11 @@ class Foo(Entity):
 
 class Bar(Attribute):
     pass
+
+
+class Spam(Entity):
+    id = String()
+    ham = String(default='eggs')
 
 
 def test_classes_to_dict():
@@ -63,6 +70,25 @@ def test_relationship():
     assert isinstance(obj, Relationship)
 
 
+def test_obj_with_attrs():
+    spam = Spam(id=None)
+
+    dct = object_to_dict(spam, include_none=False)
+    assert dct == {'__type__': 'Spam', 'ham': 'eggs'}
+
+    dct = object_to_dict(spam, include_none=True)
+    assert dct == {'__type__': 'Spam', 'id': None, 'ham': 'eggs'}
+
+    obj = dict_to_object(dct)
+    assert obj.id == spam.id
+    assert obj.ham == spam.ham
+
+    dct.pop('ham')  # removing an attr with defaults
+    obj = dict_to_object(dct)
+    assert obj.id == spam.id
+    assert obj.ham == spam.ham
+
+
 def test_dynamic_type():
     DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
 
@@ -86,7 +112,7 @@ def test_dynamic_typed_object():
     Foobar = DynamicType('Foobar', (Entity,), attrs)
 
     foo = Foobar(id='spam')
-    dct = object_to_dict(foo)
+    dct = object_to_dict(foo, DynamicType)
 
     assert dct == {'__type__': 'Foobar', 'id': 'spam'}
 
@@ -95,20 +121,62 @@ def test_dynamic_typed_object():
     assert obj.id == foo.id
 
 
-def test_dynamic_typed_object_same_type():
+def test_extended_declared_type_using_dynamic_type():
     DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
 
-    attrs = {'id': String()}
+    attrs = {'id': Uuid()}
     DynEntity = DynamicType('Entity', (AttributedBase,), attrs)
 
-    foo = DynEntity(id='spam')
-    dct = object_to_dict(foo)
+    foo = DynEntity()
+    dct = object_to_dict(foo, DynamicType)
 
-    assert dct == {'__type__': 'Entity', 'id': 'spam'}
+    assert dct == {'__type__': 'Entity', 'id': str(foo.id)}
 
     obj = dict_to_object(dct, DynamicType)
     assert isinstance(obj, Entity)
+    assert not isinstance(obj, DynEntity)
     assert obj.id == foo.id
+
+
+def test_extended_declared_type_using_declared_type():
+    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+
+    attrs = {'id': String()}
+    DynamicType('Entity', (AttributedBase,), attrs)
+
+    dct = object_to_dict(Entity(), DynamicType)
+    assert dct == {'__type__': 'Entity', 'id': None}
+
+
+def test_extended_declared_type_with_default_using_declared_type():
+    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+
+    attrs = {
+        'id': String(default='foobar'),
+        'spam': Uuid()
+    }
+    DynamicType('Entity', (AttributedBase,), attrs)
+
+    dct = object_to_dict(Entity(), DynamicType)
+    assert dct == {'__type__': 'Entity', 'id': 'foobar', 'spam': None}
+
+
+def test_changes():
+    a = {'a': 12, 'b': '34'}
+    b = {'a': 1, 'b': '34'}
+
+    changes = get_changes(a, b)
+    assert changes == {'a': 1}
+
+    with pytest.raises(KeyError):
+        get_changes(a, {})
+
+
+def test_attribute_types():
+    uid = Uuid().default
+    dct = dict_to_db_values_dict({'foo': uid, 'bar': 123})
+
+    assert dct == {'foo': str(uid), 'bar': 123}
 
 
 def test_missing_info():
