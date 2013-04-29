@@ -5,11 +5,12 @@ from kaiso.exceptions import UnknownType
 _descriptors = {}
 
 
-def get_declaring_class(cls, attr_name):
-    """ Returns the class in the type heirarchhy of ``cls`` defined attribute
-    ``attr_name``. """
+def get_declaring_class(cls, attr_name, attr):
+    """ Returns the top class in the type heirarchhy of ``cls`` that defined
+        the attribute ``attr`` with name ``attr_name``.
+    """
     for base in reversed(getmro(cls)):
-        if hasattr(base, attr_name):
+        if getattr(base, attr_name, None) == attr:
             return base
 
 
@@ -46,7 +47,7 @@ def get_indexes(obj):
 
         for name, attr in descr.attributes.items():
             if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name)
+                declaring_class = get_declaring_class(descr.cls, name, attr)
 
                 index_name = get_index_name(declaring_class)
                 key = name
@@ -61,11 +62,9 @@ def is_indexable(cls):
     """
 
     descr = get_descriptor(cls)
-    for name, attr in descr.attributes.items():
+    for attr in descr.declared_attributes.values():
         if attr.unique:
-            declaring_class = get_declaring_class(descr.cls, name)
-            if declaring_class is cls:
-                return True
+            return True
 
     return False
 
@@ -73,7 +72,7 @@ def is_indexable(cls):
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
-    It's main purpose is to provide type names and attributes information of
+    Its main purpose is to provide type names and attributes information of
     persistable types(classes).
     """
     def __init__(self, cls):
@@ -111,7 +110,7 @@ class Descriptor(object):
         if declared is None:
             declared = {}
             for name, attr in self.attributes.items():
-                if get_declaring_class(self.cls, name) == self.cls:
+                if get_declaring_class(self.cls, name, attr) == self.cls:
                     declared[name] = attr
             self._declared_attributes = declared
 
