@@ -1,4 +1,4 @@
-from kaiso.attributes import Outgoing, Incoming
+from kaiso.attributes import Outgoing, Incoming, DefaultableAttribute
 from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, DeserialisationError
@@ -48,6 +48,9 @@ def object_to_dict(obj):
         properties['name'] = get_descriptor(obj).type_name
     elif isinstance(obj, Attribute):
         properties['unique'] = obj.unique
+        properties['required'] = obj.required
+        if isinstance(obj, DefaultableAttribute):
+            properties['default'] = obj.default
     else:
         for name, attr in descr.attributes.items():
             value = attr.to_db(getattr(obj, name))
