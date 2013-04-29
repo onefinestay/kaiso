@@ -10,7 +10,15 @@ from kaiso.connection import get_connection, TempConnectionError
 
 @pytest.mark.slow
 class TestTempConnectionProcesses():
-
+    """ Test spinning up temporary neo4j processes.
+    
+    We mock out ``py2neo.neo4j.GraphDatabaseService`` because:
+        a) it's a library and we're not testing its behaviour directly
+        b) the first thing GraphDatabaseService does is generate a
+           GET request (the same one we do in ``get_connection``)
+           whch sometimes results in a SocketError. This is possibly
+           a bug in neo4j, but it shouldn't influence these tests.
+    """
     temp_data_dir = '/tmp/foo'
 
     def teardown_method(self, method):
