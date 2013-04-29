@@ -1,6 +1,11 @@
 import os
 import pytest
 
+# import logging
+
+# logging.basicConfig(level=logging.DEBUG)
+# logging.getLogger('py2neo').setLevel(logging.ERROR)
+
 
 def pytest_addoption(parser):
     parser.addoption(

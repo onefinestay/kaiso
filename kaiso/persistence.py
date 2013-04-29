@@ -46,6 +46,7 @@ class Storage(object):
         Args:
             connection_uri: A URI used to connect to the graph database.
         """
+        self._conn_uri = connection_uri
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
 
@@ -102,6 +103,10 @@ class Storage(object):
                 index_type = neo4j.Relationship
             else:
                 index_type = neo4j.Node
+
+            log.debug(
+                'indexing %s for %s using index %s',
+                obj, node_or_rel, index_name)
 
             index = self._conn.get_or_create_index(index_type, index_name)
             index.add(key, value, node_or_rel)
@@ -186,33 +191,33 @@ class Storage(object):
         if not can_add(persistable):
             raise TypeError('cannot persist %s' % persistable)
 
-        existing = self.get(type(persistable), **get_index_filter(persistable))
+        existing, changes = self.get_diff(persistable)
 
         if existing is None:
-            return self._add(persistable)
+            self._add(persistable)
+            return persistable
+        elif not changes:
+            return persistable
 
-        existing_props = object_to_dict(existing, self.dynamic_type)
-        props = object_to_dict(persistable, self.dynamic_type)
-
-        if existing_props == props:
-            # no changes
-            return existing
-
-        changes = get_changes(old=existing_props, new=props)
         for (_, index_attr, _) in get_indexes(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
 
-        start_clause = get_start_clause(existing, 'n')
+        if isinstance(persistable, type):
+            self._add_types(persistable)
+            return persistable
+        else:
+            start_clause = get_start_clause(existing, 'n')
 
-        set_clauses = ', '.join(['n.%s={%s}' % (key, key) for key in changes])
+            set_clauses = ', '.join(
+                ['n.%s={%s}' % (key, key) for key in changes])
 
-        query = join_lines(
-            'START %s' % start_clause,
-            'SET %s' % set_clauses,
-            'RETURN n'
-        )
+            query = join_lines(
+                'START %s' % start_clause,
+                'SET %s' % set_clauses,
+                'RETURN n'
+            )
 
         result = self._execute(query, **changes)
         return next(result)[0]
@@ -273,6 +278,62 @@ class Storage(object):
 
         obj = self._convert_value(first)
         return obj
+
+    def get_diff(self, persistable):
+        changes = {}
+        existing = None
+
+        if isinstance(persistable, PersistableMeta):
+            # this is a class, we need to get it and it's attrs
+            meta = type(persistable)
+            idx_name = meta.index_name
+            self._conn.get_or_create_index(neo4j.Node, idx_name)
+
+            type_id = meta.get_descriptor(persistable).type_id
+            query_args = {
+                'type_id': type_id
+            }
+
+            query = join_lines(
+                'START cls=node:%s(id={type_id})' % idx_name,
+                'MATCH attr -[:DECLAREDON]-> cls',
+                'RETURN cls, attr.name'
+            )
+
+            rows = self.query(query, **query_args)
+
+            modified_attrs = {}
+            attrs = set()
+
+            for (cls, name) in rows:
+                if existing is None:
+                    existing = cls
+                    changes = {}  # TODO: changes to the class id/type
+
+                attrs.add(name)
+
+            descr = meta.get_descriptor(persistable)
+
+            for name, attr in descr.declared_attributes.items():
+                if name not in attrs:
+                    modified_attrs[name] = attr
+
+            if modified_attrs:
+                changes['attributes'] = modified_attrs
+        else:
+            existing = self.get(
+                type(persistable), **get_index_filter(persistable))
+
+            if existing is not None:
+                existing_props = object_to_dict(existing, self.dynamic_type)
+                props = object_to_dict(persistable, self.dynamic_type)
+
+                if existing_props == props:
+                    return existing, {}
+
+                changes = get_changes(old=existing_props, new=props)
+
+        return existing, changes
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 

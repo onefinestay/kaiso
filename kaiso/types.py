@@ -72,9 +72,6 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
-        self._attributes = None
-        self._declared_attributes = None
-        self._relationships = None
 
     @property
     def type_id(self):
@@ -88,33 +85,22 @@ class Descriptor(object):
     @property
     def relationships(self):
         from kaiso.attributes.bases import _is_relationship_reference
-        relationships = self._relationships
-        if relationships is None:
-            relationships = dict(getmembers(
-                self.cls, _is_relationship_reference
-            ))
-            self._relationships = relationships
-
+        relationships = dict(getmembers(
+            self.cls, _is_relationship_reference
+        ))
         return relationships
 
     @property
     def attributes(self):
-        attributes = self._attributes
-        if attributes is None:
-            attributes = dict(getmembers(self.cls, _is_attribute))
-            self._attributes = attributes
-
+        attributes = dict(getmembers(self.cls, _is_attribute))
         return attributes
 
     @property
     def declared_attributes(self):
-        declared = self._declared_attributes
-        if declared is None:
-            declared = {}
-            for name, attr in self.attributes.items():
-                if get_declaring_class(self.cls, name) == self.cls:
-                    declared[name] = attr
-            self._declared_attributes = declared
+        declared = {}
+        for name, attr in getmembers(self.cls, _is_attribute):
+            if get_declaring_class(self.cls, name) == self.cls:
+                declared[name] = attr
 
         return declared
 
@@ -219,7 +205,6 @@ class Attribute(Persistable):
 
 class DefaultableAttribute(Attribute):
     # TODO: should it live in types.py?
-
     def __init__(self, default=None, unique=False):
         super(DefaultableAttribute, self).__init__(unique)
         self.default = default
