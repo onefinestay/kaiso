@@ -63,7 +63,7 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
-        log.debug('running query %s', query)
+        log.debug('running query:\n%s', query)
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
@@ -114,7 +114,7 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _add_types(self, cls):
+    def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
             cls, self.type_system, self.dynamic_type)
 
@@ -141,7 +141,7 @@ class Storage(object):
 
         if isinstance(obj, PersistableMeta):
             # object is a type; create the type and its hierarchy
-            return self._add_types(obj)
+            return self._update_types(obj)
 
         elif obj is self.type_system:
             query = 'CREATE (n {props}) RETURN n'
@@ -149,14 +149,14 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-            self._add_types(obj_type)
+            self._update_types(obj_type)
             query = get_create_relationship_query(obj, self.dynamic_type)
 
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
             obj_type = type(obj)
-            self._add_types(obj_type)
+            self._update_types(obj_type)
 
             idx_name = get_index_name(type(obj_type))
             query = (
@@ -179,7 +179,7 @@ class Storage(object):
 
         # TODO: really?
         #if obj is self.type_system:
-        #    self._add_types(type(obj))
+        #    self._update_types(type(obj))
 
         return obj
 
@@ -198,29 +198,69 @@ class Storage(object):
             return persistable
         elif not changes:
             return persistable
+        else:
+            return self._update(persistable, existing, changes)
 
-        for (_, index_attr, _) in get_indexes(existing):
+    def _update(self, persistable, existing, changes):
+
+        for (idx_name, index_attr, idx_value) in get_indexes(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
 
+        set_clauses = ', '.join([
+            'n.%s={%s}' % (key, key) for key, value in changes.items()
+            if not isinstance(value, dict)
+        ])
+
+        if set_clauses:
+            set_clauses = 'SET %s' % set_clauses
+        else:
+            set_clauses = ''
+
         if isinstance(persistable, type):
-            self._add_types(persistable)
-            return persistable
+            descr = self.dynamic_type.get_descriptor(persistable)
+
+            query_args = {'type_id': descr.type_id}
+
+            where = []
+
+            for attr_name in descr.declared_attributes.keys():
+                where.append('r.name = {attr_%s}' % attr_name)
+                query_args['attr_%s' % attr_name] = attr_name
+
+            if where:
+                where = ' OR '.join(where)
+                where = 'WHERE not(%s)' % where
+            else:
+                where = ''
+
+            query = join_lines(
+                'START n=node:%s(id={type_id})' % self.dynamic_type.index_name,
+                set_clauses,
+                'MATCH attr -[r:DECLAREDON]-> n',
+                where,
+                'DELETE attr, r',
+                'RETURN n',
+            )
+
+            self._update_types(persistable)
         else:
             start_clause = get_start_clause(existing, 'n')
 
-            set_clauses = ', '.join(
-                ['n.%s={%s}' % (key, key) for key in changes])
-
             query = join_lines(
                 'START %s' % start_clause,
-                'SET %s' % set_clauses,
+                set_clauses,
                 'RETURN n'
             )
+            query_args = changes
 
-        result = self._execute(query, **changes)
-        return next(result)[0]
+        try:
+            (result,) = next(self._execute(query, **query_args))
+        except StopIteration:
+            # this can happen, if no attributes where changed on a type
+            result = persistable
+        return result
 
     def get(self, cls, **index_filter):
         index_filter = dict_to_db_values_dict(index_filter)
@@ -296,8 +336,8 @@ class Storage(object):
 
             query = join_lines(
                 'START cls=node:%s(id={type_id})' % idx_name,
-                'MATCH attr -[:DECLAREDON]-> cls',
-                'RETURN cls, attr.name'
+                'MATCH () -[r:DECLAREDON]-> cls',
+                'RETURN cls, r.name'
             )
 
             rows = self.query(query, **query_args)
@@ -317,6 +357,13 @@ class Storage(object):
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr
+
+            del_attrs = set(attrs)
+            for name in dir(persistable):
+                del_attrs.discard(name)
+
+            for name in del_attrs:
+                modified_attrs[name] = None
 
             if modified_attrs:
                 changes['attributes'] = modified_attrs

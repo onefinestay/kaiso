@@ -441,7 +441,7 @@ def test_persist_attributes(storage):
     Verify persisted attributes maintain their type when added to the
     database.
     """
-    storage._add_types(Thing)
+    storage._update_types(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(id="Thing")
@@ -469,12 +469,12 @@ def test_persist_type_attributes(storage):
     """
     Verify that attributes are persisted to the database when a type is added.
     """
-    storage._add_types(Thing)
+    storage._update_types(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(id="Thing")
-        MATCH attr -[DECLAREDON]-> Thing
-        RETURN attr.__type__, attr.name, attr.unique
+        MATCH attr -[r:DECLAREDON]-> Thing
+        RETURN attr.__type__, r.name, attr.unique
     """
 
     rows = storage.query(query_str)
