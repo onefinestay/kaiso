@@ -1,20 +1,18 @@
-from logging import getLogger
-
-from py2neo import cypher, neo4j
-
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError
+from kaiso.queries import get_create_types_query, get_create_relationship_query, \
+    get_start_clause, join_lines
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
-from kaiso.serialize import (
-    dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
-from kaiso.types import (
-    Persistable, PersistableMeta, Relationship, AttributedBase,
-    get_indexes, get_index_name, is_indexable)
-from kaiso.queries import (
-    get_create_types_query, get_create_relationship_query, get_start_clause,
-    join_lines)
+from kaiso.serialize import dict_to_db_values_dict, dict_to_object, \
+    object_to_dict, get_changes
+from kaiso.types import Persistable, PersistableMeta, Relationship, \
+    AttributedBase, get_indexes, get_index_name, is_indexable
+from logging import getLogger
+from py2neo import cypher, neo4j
+
+
 
 log = getLogger(__name__)
 
@@ -178,7 +176,7 @@ class Storage(object):
         self._index_object(obj, node_or_rel)
 
         # TODO: really?
-        #if obj is self.type_system:
+        # if obj is self.type_system:
         #    self._update_types(type(obj))
 
         return obj
@@ -202,8 +200,7 @@ class Storage(object):
             return self._update(persistable, existing, changes)
 
     def _update(self, persistable, existing, changes):
-
-        for (idx_name, index_attr, idx_value) in get_indexes(existing):
+        for (_, index_attr, _) in get_indexes(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
