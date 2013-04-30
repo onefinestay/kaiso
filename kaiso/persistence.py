@@ -249,7 +249,7 @@ class Storage(object):
         else:
             idx_where = []
             for key, value in indexes:
-                idx_where.append('n.%s? = {%s}' % (key, key))
+                idx_where.append('n.%s! = {%s}' % (key, key))
                 query_args[key] = value
             idx_where = ' or '.join(idx_where)
 
