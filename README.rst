@@ -12,7 +12,9 @@ Neo4j visualization style
 The bookmarklet below adds Kaiso styles to the Neo4j data browser's
 visualizer.
 
-+[Apply kaiso-neo4j style](javascript:(function(){document.body.appendChild(document.createElement("script")).src="https://github.com/onefinestay/kaiso/tree/master/docs/neo4j-style.js"})())
+.. raw:: html
+
+    <a href="javascript:(function(){document.body.appendChild(document.createElement("script")).src="https://github.com/onefinestay/kaiso/tree/master/docs/neo4j-style.js"})()">Apply kaiso-neo4j styles</a>
 
 Add it to your bookmarks and load it when you're inside Neo's webadmin. A
 ``kaiso`` profile will become available under the Style button.
