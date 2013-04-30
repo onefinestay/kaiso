@@ -11,7 +11,6 @@ They may be used for querying and map to pyhton's issubclass()
 and isinstanceof() functionality.
 """
 from kaiso.types import Relationship
-from kaiso.attributes import String
 
 
 class IsA(Relationship):
@@ -35,11 +34,6 @@ class DeclaredOn(Relationship):
     """ Describes the relationship between a type and the properties that
     instances of that type can have.
     """
-    name = String()
-
-    def __init__(self, name, start=None, end=None):
-        super(DeclaredOn, self).__init__(start, end)
-        self.name = name
 
 
 class Defines(Relationship):

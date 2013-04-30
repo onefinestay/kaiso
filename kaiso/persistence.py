@@ -113,7 +113,7 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _get_changed(self, persistable):
+    def _get_changes(self, persistable):
         changes = {}
         existing = None
         obj_type = type(persistable)
@@ -130,21 +130,20 @@ class Storage(object):
 
             query = join_lines(
                 'START cls=node:%s(id={type_id})' % idx_name,
-                'MATCH () -[r:DECLAREDON]-> cls',
-                'RETURN cls, r.name'
+                'MATCH attr -[:DECLAREDON*0..]-> cls',
+                'RETURN cls, collect(attr.name?)'
             )
 
             rows = self.query(query, **query_args)
+            existing, attrs = next(rows, (None, None))
+
+            if existing is None:
+                # have not found the cls
+                return None, {}
+
+            attrs = set(attrs)
 
             modified_attrs = {}
-            attrs = set()
-
-            for (cls, name) in rows:
-                if existing is None:
-                    existing = cls
-                    changes = {}  # TODO: changes to the class id or type
-
-                attrs.add(name)
 
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
@@ -213,7 +212,7 @@ class Storage(object):
             where = []
 
             for attr_name in descr.declared_attributes.keys():
-                where.append('r.name = {attr_%s}' % attr_name)
+                where.append('attr.name = {attr_%s}' % attr_name)
                 query_args['attr_%s' % attr_name] = attr_name
 
             if where:
@@ -268,7 +267,7 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-            self._update_types(obj_type)
+            # self._update_types(obj_type)
             query = get_create_relationship_query(obj, self.dynamic_type)
 
         else:
@@ -305,10 +304,10 @@ class Storage(object):
         If a matching object (by unique keys) already exists, it will
         update it with the modified attributes.
         """
-        if not can_add(persistable):
+        if not isinstance(persistable, Persistable):
             raise TypeError('cannot persist %s' % persistable)
 
-        existing, changes = self._get_changed(persistable)
+        existing, changes = self._get_changes(persistable)
 
         if existing is None:
             self._add(persistable)
@@ -464,13 +463,3 @@ class Storage(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
-
-
-def can_add(obj):
-    """ Returns True if obj can be added to the db.
-
-        We can add instances of Entity or Relationship.
-        In addition it is also possible to add sub-classes of
-        Entity.
-    """
-    return isinstance(obj, Persistable)

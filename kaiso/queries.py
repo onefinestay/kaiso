@@ -59,6 +59,7 @@ def get_create_types_query(obj, root, dynamic_type):
         'IsA_props': object_to_dict(IsA(), dynamic_type),
         'Defines_props': object_to_dict(Defines(), dynamic_type),
         'InstanceOf_props': object_to_dict(InstanceOf(), dynamic_type),
+        'DeclaredOn_props': object_to_dict(DeclaredOn(), dynamic_type),
     }
 
     is_first = True
@@ -93,18 +94,16 @@ def get_create_types_query(obj, root, dynamic_type):
             attributes = descriptor.declared_attributes
             for attr_name, attr in attributes.iteritems():
                 key = "%s_%s" % (name1, attr_name)
-                decl_key = "%s_decl_props" % key
 
-                ln = '({%s}) -[:DECLAREDON {%s}]-> %s' % (
-                    key, decl_key, name1)
+                ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
+                    key, name1)
                 lines.append(ln)
 
                 attr_dict = object_to_dict(
                     attr, dynamic_type, include_none=False)
 
+                attr_dict['name'] = attr_name
                 query_args[key] = attr_dict
-                query_args[decl_key] = object_to_dict(
-                    DeclaredOn(name=attr_name), dynamic_type)
 
     for key, obj in objects.iteritems():
         query_args['%s_props' % key] = object_to_dict(obj, dynamic_type)
