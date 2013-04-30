@@ -114,7 +114,7 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _add_types(self, cls):
+    def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
             cls, self.type_system, self.dynamic_type)
 
@@ -141,7 +141,7 @@ class Storage(object):
 
         if isinstance(obj, PersistableMeta):
             # object is a type; create the type and its hierarchy
-            return self._add_types(obj)
+            return self._update_types(obj)
 
         elif obj is self.type_system:
             query = 'CREATE (n {props}) RETURN n'
@@ -149,14 +149,14 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-            self._add_types(obj_type)
+            self._update_types(obj_type)
             query = get_create_relationship_query(obj, self.dynamic_type)
 
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
             obj_type = type(obj)
-            self._add_types(obj_type)
+            self._update_types(obj_type)
 
             idx_name = get_index_name(type(obj_type))
             query = (
@@ -179,7 +179,7 @@ class Storage(object):
 
         # TODO: really?
         #if obj is self.type_system:
-        #    self._add_types(type(obj))
+        #    self._update_types(type(obj))
 
         return obj
 
@@ -205,7 +205,7 @@ class Storage(object):
                     "We currently don't support changing unique attributes")
 
         if isinstance(persistable, type):
-            self._add_types(persistable)
+            self._update_types(persistable)
             return persistable
         else:
             start_clause = get_start_clause(existing, 'n')
