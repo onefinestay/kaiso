@@ -1,6 +1,6 @@
 
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
-from kaiso.types import Descriptor, AttributedBase, get_indexes, get_index_name
+from kaiso.types import AttributedBase, get_indexes, get_index_name
 from kaiso.serialize import get_type_relationships, object_to_dict
 
 
@@ -51,12 +51,9 @@ def get_create_types_query(obj, root, dynamic_type):
 
     query_args = {
         'root_id': root.id,
-        'IsA_props': object_to_dict(IsA(None, None), dynamic_type),
-        'Defines_props': object_to_dict(
-            Defines(None, None), dynamic_type),
-        'InstanceOf_props': object_to_dict(
-            InstanceOf(None, None), dynamic_type),
-
+        'IsA_props': object_to_dict(IsA(), dynamic_type),
+        'Defines_props': object_to_dict(Defines(), dynamic_type),
+        'InstanceOf_props': object_to_dict(InstanceOf(), dynamic_type),
     }
 
     is_first = True
@@ -86,14 +83,7 @@ def get_create_types_query(obj, root, dynamic_type):
                     abstr1, rel_type, rel_name, name2)
             lines.append(ln)
 
-            # TODO: really?
-            # if cls1 is type(root):
-            #     ln = 'root -[:INSTANCEOF {InstanceOf_props}]-> %s' % (
-            #         cls1.__name__)
-            #     lines.append(ln)
-
-            # create cls1's attributes
-            descriptor = Descriptor(cls1)
+            descriptor = dynamic_type.get_descriptor(cls1)
 
             attributes = descriptor.declared_attributes
             for attr_name, attr in attributes.iteritems():
@@ -109,7 +99,7 @@ def get_create_types_query(obj, root, dynamic_type):
 
                 query_args[key] = attr_dict
                 query_args[decl_key] = object_to_dict(
-                    DeclaredOn(None, None, attr_name), dynamic_type)
+                    DeclaredOn(name=attr_name), dynamic_type)
 
     for key, obj in objects.iteritems():
         query_args['%s_props' % key] = object_to_dict(obj, dynamic_type)

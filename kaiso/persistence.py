@@ -114,6 +114,66 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
+    def _get_changed(self, persistable):
+        changes = {}
+        existing = None
+        obj_type = type(persistable)
+
+        if isinstance(persistable, PersistableMeta):
+            # this is a class, we need to get it and it's attrs
+            idx_name = obj_type.index_name
+            self._conn.get_or_create_index(neo4j.Node, idx_name)
+
+            descr = obj_type.get_descriptor(persistable)
+            query_args = {
+                'type_id': descr.type_id
+            }
+
+            query = join_lines(
+                'START cls=node:%s(id={type_id})' % idx_name,
+                'MATCH () -[r:DECLAREDON]-> cls',
+                'RETURN cls, r.name'
+            )
+
+            rows = self.query(query, **query_args)
+
+            modified_attrs = {}
+            attrs = set()
+
+            for (cls, name) in rows:
+                if existing is None:
+                    existing = cls
+                    changes = {}  # TODO: changes to the class id or type
+
+                attrs.add(name)
+
+            for name, attr in descr.declared_attributes.items():
+                if name not in attrs:
+                    modified_attrs[name] = attr
+
+            del_attrs = set(attrs)
+            for name in dir(persistable):
+                del_attrs.discard(name)
+
+            for name in del_attrs:
+                modified_attrs[name] = None
+
+            if modified_attrs:
+                changes['attributes'] = modified_attrs
+        else:
+            existing = self.get(obj_type, **get_index_filter(persistable))
+
+            if existing is not None:
+                existing_props = object_to_dict(existing, self.dynamic_type)
+                props = object_to_dict(persistable, self.dynamic_type)
+
+                if existing_props == props:
+                    return existing, {}
+
+                changes = get_changes(old=existing_props, new=props)
+
+        return existing, changes
+
     def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
             cls, self.type_system, self.dynamic_type)
@@ -130,80 +190,9 @@ class Storage(object):
 
         return cls
 
-    def _add(self, obj):
-        """ Adds an object to the data store.
-
-        It will automatically generate the type relationships
-        for the the object as required and store the object itself.
-        """
-
-        query_args = {}
-
-        if isinstance(obj, PersistableMeta):
-            # object is a type; create the type and its hierarchy
-            return self._update_types(obj)
-
-        elif obj is self.type_system:
-            query = 'CREATE (n {props}) RETURN n'
-
-        elif isinstance(obj, Relationship):
-            # object is a relationship
-            obj_type = type(obj)
-            self._update_types(obj_type)
-            query = get_create_relationship_query(obj, self.dynamic_type)
-
-        else:
-            # object is an instance; create its type, its hierarchy and then
-            # create the instance
-            obj_type = type(obj)
-            self._update_types(obj_type)
-
-            idx_name = get_index_name(type(obj_type))
-            query = (
-                'START cls=node:%s(id={type_id}) '
-                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
-                'RETURN n'
-            ) % idx_name
-
-            query_args = {
-                'type_id': obj_type.__name__,
-                'rel_props': object_to_dict(
-                    InstanceOf(None, None), self.dynamic_type),
-            }
-
-        query_args['props'] = object_to_dict(obj, self.dynamic_type, False)
-
-        (node_or_rel,) = next(self._execute(query, **query_args))
-
-        self._index_object(obj, node_or_rel)
-
-        # TODO: really?
-        #if obj is self.type_system:
-        #    self._update_types(type(obj))
-
-        return obj
-
-    def save(self, persistable):
-        """ Stores the given ``persistable`` in the graph database.
-        If a matching object (by unique keys) already exists, it will
-        update it with the modified attributes.
-        """
-        if not can_add(persistable):
-            raise TypeError('cannot persist %s' % persistable)
-
-        existing, changes = self.get_diff(persistable)
-
-        if existing is None:
-            self._add(persistable)
-            return persistable
-        elif not changes:
-            return persistable
-        else:
-            return self._update(persistable, existing, changes)
-
     def _update(self, persistable, existing, changes):
 
-        for (idx_name, index_attr, idx_value) in get_indexes(existing):
+        for (_, index_attr, _) in get_indexes(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
@@ -262,6 +251,75 @@ class Storage(object):
             result = persistable
         return result
 
+    def _add(self, obj):
+        """ Adds an object to the data store.
+
+        It will automatically generate the type relationships
+        for the the object as required and store the object itself.
+        """
+
+        query_args = {}
+
+        if isinstance(obj, PersistableMeta):
+            # object is a type; create the type and its hierarchy
+            return self._update_types(obj)
+
+        elif obj is self.type_system:
+            query = 'CREATE (n {props}) RETURN n'
+
+        elif isinstance(obj, Relationship):
+            # object is a relationship
+            obj_type = type(obj)
+            self._update_types(obj_type)
+            query = get_create_relationship_query(obj, self.dynamic_type)
+
+        else:
+            # object is an instance; create its type, its hierarchy and then
+            # create the instance
+            obj_type = type(obj)
+            obj_type_meta = type(obj_type)
+
+            self._update_types(obj_type)
+
+            idx_name = obj_type_meta.index_name
+            query = (
+                'START cls=node:%s(id={type_id}) '
+                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'RETURN n'
+            ) % idx_name
+
+            query_args = {
+                'type_id': obj_type.get_descriptor(obj_type).type_id,
+                'rel_props': object_to_dict(
+                    InstanceOf(None, None), self.dynamic_type),
+            }
+
+        query_args['props'] = object_to_dict(obj, self.dynamic_type, False)
+
+        (node_or_rel,) = next(self._execute(query, **query_args))
+
+        self._index_object(obj, node_or_rel)
+
+        return obj
+
+    def save(self, persistable):
+        """ Stores the given ``persistable`` in the graph database.
+        If a matching object (by unique keys) already exists, it will
+        update it with the modified attributes.
+        """
+        if not can_add(persistable):
+            raise TypeError('cannot persist %s' % persistable)
+
+        existing, changes = self._get_changed(persistable)
+
+        if existing is None:
+            self._add(persistable)
+            return persistable
+        elif not changes:
+            return persistable
+        else:
+            return self._update(persistable, existing, changes)
+
     def get(self, cls, **index_filter):
         index_filter = dict_to_db_values_dict(index_filter)
 
@@ -318,69 +376,6 @@ class Storage(object):
 
         obj = self._convert_value(first)
         return obj
-
-    def get_diff(self, persistable):
-        changes = {}
-        existing = None
-
-        if isinstance(persistable, PersistableMeta):
-            # this is a class, we need to get it and it's attrs
-            meta = type(persistable)
-            idx_name = meta.index_name
-            self._conn.get_or_create_index(neo4j.Node, idx_name)
-
-            type_id = meta.get_descriptor(persistable).type_id
-            query_args = {
-                'type_id': type_id
-            }
-
-            query = join_lines(
-                'START cls=node:%s(id={type_id})' % idx_name,
-                'MATCH () -[r:DECLAREDON]-> cls',
-                'RETURN cls, r.name'
-            )
-
-            rows = self.query(query, **query_args)
-
-            modified_attrs = {}
-            attrs = set()
-
-            for (cls, name) in rows:
-                if existing is None:
-                    existing = cls
-                    changes = {}  # TODO: changes to the class id/type
-
-                attrs.add(name)
-
-            descr = meta.get_descriptor(persistable)
-
-            for name, attr in descr.declared_attributes.items():
-                if name not in attrs:
-                    modified_attrs[name] = attr
-
-            del_attrs = set(attrs)
-            for name in dir(persistable):
-                del_attrs.discard(name)
-
-            for name in del_attrs:
-                modified_attrs[name] = None
-
-            if modified_attrs:
-                changes['attributes'] = modified_attrs
-        else:
-            existing = self.get(
-                type(persistable), **get_index_filter(persistable))
-
-            if existing is not None:
-                existing_props = object_to_dict(existing, self.dynamic_type)
-                props = object_to_dict(persistable, self.dynamic_type)
-
-                if existing_props == props:
-                    return existing, {}
-
-                changes = get_changes(old=existing_props, new=props)
-
-        return existing, changes
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 

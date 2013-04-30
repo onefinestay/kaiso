@@ -263,7 +263,7 @@ class Entity(AttributedBase):
 
 
 class Relationship(AttributedBase):
-    def __init__(self, start, end, **kwargs):
+    def __init__(self, start=None, end=None, **kwargs):
         super(Relationship, self).__init__(**kwargs)
 
         self.start = start

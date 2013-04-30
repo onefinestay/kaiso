@@ -68,7 +68,7 @@ def test_remove_attr_from_type(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_remove_attr_from_declared_type_does_not_remove_it(storage):
+def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     class Ham(Entity):
         egg = String
 

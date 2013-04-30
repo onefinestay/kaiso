@@ -37,7 +37,7 @@ class DeclaredOn(Relationship):
     """
     name = String()
 
-    def __init__(self, start, end, name):
+    def __init__(self, name, start=None, end=None):
         super(DeclaredOn, self).__init__(start, end)
         self.name = name
 
