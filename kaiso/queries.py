@@ -1,6 +1,7 @@
 
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
-from kaiso.types import AttributedBase, get_indexes, get_index_name
+from kaiso.types import (
+    AttributedBase, get_indexes, get_index_name, Relationship)
 from kaiso.serialize import get_type_relationships, object_to_dict
 
 
@@ -11,7 +12,7 @@ def join_lines(*lines, **kwargs):
     for lne in lines:
         if isinstance(lne, tuple):
             (lne, s) = lne
-            lne = '    ' + join_lines(sep=s+'\n    ', *lne)
+            lne = '    ' + join_lines(sep=s + '\n    ', *lne)
 
         if lne != '':
             rows.append(lne)
@@ -30,7 +31,11 @@ def get_start_clause(obj, name):
     """
 
     index = next(get_indexes(obj), None)
-    query = '{}=node:{}({}="{}")'.format(name, *index)
+    if isinstance(obj, Relationship):
+        index_type = "rel"
+    else:
+        index_type = "node"
+    query = '{}={}:{}({}="{}")'.format(name, index_type, *index)
     return query
 
 
