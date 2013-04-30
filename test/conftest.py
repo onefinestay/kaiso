@@ -1,10 +1,7 @@
 import os
 import pytest
 
-# import logging
-
-# logging.basicConfig(level=logging.DEBUG)
-# logging.getLogger('py2neo').setLevel(logging.ERROR)
+import logging
 
 
 def pytest_addoption(parser):
@@ -18,11 +15,21 @@ def pytest_addoption(parser):
         "--neo4j_cmd", action="store",
         help=("Location of neo4j script that provides installation 'info'"))
 
+    parser.addoption(
+        "--log-level", action="store",
+        default=None,
+        help=("The logging-level for the test run."))
+
 
 def pytest_configure(config):
     neo4j_cmd = config.getoption('neo4j_cmd')
     if neo4j_cmd:
         os.environ['NEO4J_CMD'] = neo4j_cmd
+
+    log_level = config.getoption('log_level')
+    if log_level is not None:
+        logging.basicConfig(level=getattr(logging, log_level))
+        logging.getLogger('py2neo').setLevel(logging.ERROR)
 
 
 @pytest.fixture

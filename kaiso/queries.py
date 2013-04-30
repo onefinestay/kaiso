@@ -12,7 +12,10 @@ def join_lines(*lines, **kwargs):
         if isinstance(lne, tuple):
             (lne, s) = lne
             lne = '    ' + join_lines(sep=s+'\n    ', *lne)
-        rows.append(lne)
+
+        if lne != '':
+            rows.append(lne)
+
     return sep.join(rows)
 
 

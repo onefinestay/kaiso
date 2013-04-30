@@ -63,7 +63,7 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
-        log.debug('running query %s', query)
+        log.debug('running query:\n%s', query)
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
@@ -198,29 +198,69 @@ class Storage(object):
             return persistable
         elif not changes:
             return persistable
+        else:
+            return self._update(persistable, existing, changes)
 
-        for (_, index_attr, _) in get_indexes(existing):
+    def _update(self, persistable, existing, changes):
+
+        for (idx_name, index_attr, idx_value) in get_indexes(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
 
+        set_clauses = ', '.join([
+            'n.%s={%s}' % (key, key) for key, value in changes.items()
+            if not isinstance(value, dict)
+        ])
+
+        if set_clauses:
+            set_clauses = 'SET %s' % set_clauses
+        else:
+            set_clauses = ''
+
         if isinstance(persistable, type):
+            descr = self.dynamic_type.get_descriptor(persistable)
+
+            query_args = {'type_id': descr.type_id}
+
+            where = []
+
+            for attr_name in descr.declared_attributes.keys():
+                where.append('r.name = {attr_%s}' % attr_name)
+                query_args['attr_%s' % attr_name] = attr_name
+
+            if where:
+                where = ' OR '.join(where)
+                where = 'WHERE not(%s)' % where
+            else:
+                where = ''
+
+            query = join_lines(
+                'START n=node:%s(id={type_id})' % self.dynamic_type.index_name,
+                set_clauses,
+                'MATCH attr -[r:DECLAREDON]-> n',
+                where,
+                'DELETE attr, r',
+                'RETURN n',
+            )
+
             self._update_types(persistable)
-            return persistable
         else:
             start_clause = get_start_clause(existing, 'n')
 
-            set_clauses = ', '.join(
-                ['n.%s={%s}' % (key, key) for key in changes])
-
             query = join_lines(
                 'START %s' % start_clause,
-                'SET %s' % set_clauses,
+                set_clauses,
                 'RETURN n'
             )
+            query_args = changes
 
-        result = self._execute(query, **changes)
-        return next(result)[0]
+        try:
+            (result,) = next(self._execute(query, **query_args))
+        except StopIteration:
+            # this can happen, if no attributes where changed on a type
+            result = persistable
+        return result
 
     def get(self, cls, **index_filter):
         index_filter = dict_to_db_values_dict(index_filter)
@@ -317,6 +357,13 @@ class Storage(object):
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr
+
+            del_attrs = set(attrs)
+            for name in dir(persistable):
+                del_attrs.discard(name)
+
+            for name in del_attrs:
+                modified_attrs[name] = None
 
             if modified_attrs:
                 changes['attributes'] = modified_attrs

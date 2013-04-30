@@ -95,7 +95,7 @@ def test_obj_with_attrs():
 
 
 def test_dynamic_type():
-    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+    DynamicType = type('DynamicType', (PersistableMeta,), {})
 
     Foobar = DynamicType('Foobar', (Entity,), {})
 
@@ -111,7 +111,7 @@ def test_dynamic_type():
 
 
 def test_dynamic_typed_object():
-    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+    DynamicType = type('DynamicType', (PersistableMeta,), {})
 
     attrs = {'id': String()}
     Foobar = DynamicType('Foobar', (Entity,), attrs)
@@ -127,7 +127,7 @@ def test_dynamic_typed_object():
 
 
 def test_extended_declared_type_using_dynamic_type():
-    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+    DynamicType = type('DynamicType', (PersistableMeta,), {})
 
     attrs = {'id': Uuid()}
     DynEntity = DynamicType('Entity', (AttributedBase,), attrs)
@@ -144,7 +144,7 @@ def test_extended_declared_type_using_dynamic_type():
 
 
 def test_extended_declared_type_using_declared_type():
-    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+    DynamicType = type('DynamicType', (PersistableMeta,), {})
 
     attrs = {'id': String()}
     DynamicType('Entity', (AttributedBase,), attrs)
@@ -154,7 +154,7 @@ def test_extended_declared_type_using_declared_type():
 
 
 def test_extended_declared_type_with_default_using_declared_type():
-    DynamicType = type(PersistableMeta.__name__, (PersistableMeta,), {})
+    DynamicType = type('DynamicType', (PersistableMeta,), {})
 
     attrs = {
         'id': String(default='foobar'),
