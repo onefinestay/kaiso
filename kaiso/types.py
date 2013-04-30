@@ -218,8 +218,8 @@ class Attribute(Persistable):
 class DefaultableAttribute(Attribute):
     default = None
 
-    def __init__(self, default=None, unique=False):
-        super(DefaultableAttribute, self).__init__(unique)
+    def __init__(self, default=None, **kwargs):
+        super(DefaultableAttribute, self).__init__(**kwargs)
         self.default = default
 
 
