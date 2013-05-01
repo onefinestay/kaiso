@@ -1,6 +1,11 @@
+from logging import getLogger
+import uuid
+
+from py2neo import cypher, neo4j
+
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
-from kaiso.exceptions import UniqueConstraintError
+from kaiso.exceptions import UniqueConstraintError, UnknownType
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query,
     get_start_clause, join_lines)
@@ -11,9 +16,6 @@ from kaiso.serialize import (
 from kaiso.types import (
     Persistable, PersistableMeta, Relationship,
     AttributedBase, get_indexes, get_index_name, is_indexable)
-from logging import getLogger
-from py2neo import cypher, neo4j
-
 
 log = getLogger(__name__)
 
@@ -48,9 +50,7 @@ class Storage(object):
         self._conn_uri = connection_uri
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
-
-        type_name = 'Storage_{}_PersistableType'.format(id(self))
-        self.dynamic_type = type(type_name, (PersistableMeta,), {})
+        self.dynamic_type = None
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -62,7 +62,7 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
-        log.debug('running query:\n%s', query)
+        log.debug('running query:\n%s', query.format(**params))
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
@@ -93,7 +93,10 @@ class Storage(object):
 
     def _convert_row(self, row):
         for value in row:
-            yield self._convert_value(value)
+            if isinstance(value, list):
+                yield [self._convert_value(v) for v in value]
+            else:
+                yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
         indexes = get_indexes(obj)
@@ -112,6 +115,37 @@ class Storage(object):
 
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
+
+    def _load_types(self):
+        query = join_lines(
+            'START ts=node:typesystem(id="TypeSystem")',
+            'MATCH',
+            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
+            '  tpe <-[:DECLAREDON*0..]- attr,',
+            '  tpe -[:ISA*0..1]-> base',
+            'RETURN tpe.id,  length(p) AS level,',
+            '  filter(b_id in collect(distinct base.id): b_id <> tpe.id),',
+            '  filter(a in collect(distinct attr): a.id? <> tpe.id)',
+            'ORDER BY level'
+        )
+
+        rows = self.query(query)
+
+        dyn_type = self.dynamic_type
+
+        for type_id, _, bases, attrs in rows:
+            try:
+                cls = dyn_type.get_class_by_id(type_id)
+
+                if type(cls) is not dyn_type:
+                    cls = None
+            except UnknownType:
+                cls = None
+
+            if cls is None:
+                bases = tuple(dyn_type.get_class_by_id(base) for base in bases)
+                attrs = dict((attr.name, attr) for attr in attrs)
+                self.dynamic_type(str(type_id), bases, attrs)
 
     def _get_changes(self, persistable):
         changes = {}
@@ -460,6 +494,11 @@ class Storage(object):
             self._conn.delete_index(neo4j.Relationship, index_name)
 
     def initialize(self):
+        type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
+        self.dynamic_type = type(type_name, (PersistableMeta,), {})
+
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
+
+        self._load_types()

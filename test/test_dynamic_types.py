@@ -90,20 +90,61 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_load_dynamic_types(storage):
+    Animal = storage.dynamic_type('Animal', (Entity,), {'id': String()})
+    Horse = storage.dynamic_type('Horse', (Animal,), {'hoof': String()})
+    Duck = storage.dynamic_type('Duck', (Animal,), {'beek': String()})
+    Beaver = storage.dynamic_type('Beaver', (Animal,), {'tail': String()})
+    Platypus = storage.dynamic_type(
+        'Platypus', (Duck, Beaver), {'egg': String()})
+
+    storage.save(Horse)
+    storage.save(Platypus)
+
+    # this is the same as creating a new storage
+    storage.initialize()
+
+    rows = storage.query(
+        '''
+        START ts=node:typesystem(id="TypeSystem")
+        MATCH p = (ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),
+            tpe <-[:DECLAREDON*0..]- attr,
+            tpe -[:ISA*0..1]-> base
+        RETURN tpe.id,  length(p) AS level,
+            filter(b_id in collect(distinct base.id): b_id <> tpe.id),
+            collect(distinct attr.name?)
+        ORDER BY level
+        ''')
+    result = list(rows)
+
+    assert result == [
+        ('Entity', 1, [], []),
+        ('Animal', 2, ['Entity'], ['id']),
+        ('Duck', 3, ['Animal'], ['beek']),
+        ('Beaver', 3, ['Animal'], ['tail']),
+        ('Horse', 3, ['Animal'], ['hoof']),
+        ('Platypus', 4, ['Duck', 'Beaver'], ['egg']),
+    ]
+
+
+
+@pytest.mark.usefixtures('storage')
 def _test_add_attr_to_type_via_2nd_storage(storage):
-
     attrs = {'id': String(unique=True)}
-    Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
+    Shrub = storage.dynamic_type('Shrub', (Entity,), attrs)
 
-    foo = Foobar(id='spam')
-    storage.save(foo)
+    shrub = Shrub(id='spam')
+    storage.save(shrub)
 
-    storage2 = Storage(storage._conn_uri)
+    # this is the same as creating a new storage using the same URL
+    storage.initialize()
     attrs = {'id': String(unique=True), 'ham': String(default='eggs')}
-    Foobar = storage2.dynamic_type('Foobar', (Entity,), attrs)
+    Shrub = storage.dynamic_type('Shrub', (Entity,), attrs)
+    storage.save(Shrub)
 
-    storage2.save(Foobar)
-    rows = storage.query('START n=node:foobar(id="spam") RETURN n')
+    # we want to query from an independent storage
+    storage.initialize()
+    rows = storage.query('START n=node:shrub(id="spam") RETURN n')
     (result,) = next(rows)
 
     assert result.ham == 'eggs'

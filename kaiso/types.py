@@ -129,6 +129,10 @@ class MetaMeta(type):
         cls.register(cls)
 
 
+class AttributeBase(object):
+    name = None
+
+
 class PersistableMeta(type, Persistable):
     __metaclass__ = MetaMeta
 
@@ -136,6 +140,10 @@ class PersistableMeta(type, Persistable):
     type_id = 'PersistableMeta'
 
     def __new__(mcs, name, bases, dct):
+        for attr_name, attr in dct.items():
+            if isinstance(attr, AttributeBase):
+                attr.name = attr_name
+
         cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
         mcs.register(cls)
         return cls
@@ -197,8 +205,9 @@ def _is_attribute(obj):
     return isinstance(obj, Attribute)
 
 
-class Attribute(Persistable):
+class Attribute(AttributeBase):
     __metaclass__ = PersistableMeta
+
     unique = None
     required = None
 

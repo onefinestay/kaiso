@@ -115,6 +115,9 @@ def object_to_dict(obj, dynamic_type=PersistableMeta, include_none=True):
     elif isinstance(obj, Attribute):
         # TODO: move logic to handle Attribute attrs into descriptor
         #       and let this code just treat them like any other persistable
+        if obj.name is not None or include_none:
+            properties['name'] = obj.name
+
         properties['unique'] = obj.unique
         properties['required'] = obj.required
 

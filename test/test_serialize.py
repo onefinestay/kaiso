@@ -57,14 +57,16 @@ def test_attribute():
     # Attribute dicts always contain both ``unique`` and ``required`` keys.
     attr = Bar(unique=True)
     dct = object_to_dict(attr)
-    assert dct == {'__type__': 'Bar', 'unique': True, 'required': False}
+    assert dct == {
+        '__type__': 'Bar', 'unique': True, 'required': False, 'name': None}
 
     # Attribute objects have default values of ``None`` for ``unique``
     # and ``required``.
-    obj = dict_to_object({'__type__': 'Bar', 'unique': True})
+    obj = dict_to_object({'__type__': 'Bar', 'unique': True, 'name': None})
     assert isinstance(obj, Bar)
     assert obj.unique is True
     assert obj.required is None
+    assert obj.name is None
 
 
 def test_relationship():
