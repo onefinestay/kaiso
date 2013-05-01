@@ -34,7 +34,7 @@ def test_get_start_clause_mutiple_uniques():
     )
 
     clause = get_start_clause(obj, "foo")
-    assert (clause == 'foo=node:indexablething(indexable_attr="bar")'  or
+    assert (clause == 'foo=node:indexablething(indexable_attr="bar")' or
             clause == 'foo=node:indexablething(also_unique="baz")')
 
 
