@@ -2,7 +2,6 @@ import pytest
 
 from kaiso.attributes import String
 from kaiso.types import Entity
-from kaiso.persistence import Storage
 
 
 @pytest.mark.usefixtures('storage')

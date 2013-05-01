@@ -1,15 +1,14 @@
-from kaiso.attributes import Uuid, Bool, Integer, Float, String, Decimal, \
-    DateTime, Choice
+import decimal
+
+import iso8601
+import pytest
+from py2neo import cypher
+
+from kaiso.attributes import (
+    Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship
 from kaiso.types import PersistableMeta, Entity
-from py2neo import cypher
-import decimal
-import iso8601
-import pytest
-
-
-
 
 
 class Thing(Entity):

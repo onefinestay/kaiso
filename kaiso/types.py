@@ -66,7 +66,7 @@ def is_indexable(cls):
     """
 
     descr = Descriptor(cls)
-    for name, attr in descr.attributes.items():
+    for _, attr in descr.attributes.items():
         if attr.unique:
             return True
 
@@ -122,9 +122,9 @@ class Persistable(object):
     '''
 
 
-class MetaMeta(type):
-    def __init__(cls, name, bases, dct):
-        super(MetaMeta, cls).__init__(cls)
+class DiscriptorType(type):
+    def __init__(cls, name, bases, dct):  # pylint:disable-msg=W0613
+        super(DiscriptorType, cls).__init__(cls)
         cls.descriptors = {}
         cls.register(cls)
 
@@ -134,7 +134,7 @@ class AttributeBase(object):
 
 
 class PersistableMeta(type, Persistable):
-    __metaclass__ = MetaMeta
+    __metaclass__ = DiscriptorType
 
     index_name = 'persistablemeta'
     type_id = 'PersistableMeta'
