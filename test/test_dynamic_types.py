@@ -136,8 +136,10 @@ def test_add_attr_to_type_via_2nd_storage(storage):
 
     # this is the same as creating a new storage using the same URL
     storage.initialize()
-    attrs = {'id': String(unique=True), 'ham': String(default='eggs')}
-    Shrub = storage.dynamic_type('Shrub', (Entity,), attrs)
+
+    (Shrub,) = next(storage.query(
+        'START cls=node:persistablemeta(id="Shrub") RETURN cls'))
+    Shrub.ham = String(default='eggs')
     storage.save(Shrub)
 
     # we want to query from an independent storage

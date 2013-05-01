@@ -1,6 +1,6 @@
 from inspect import getmembers, getmro
 
-from kaiso.exceptions import UnknownType
+from kaiso.exceptions import UnknownType, TypeAlreadyRegistered
 
 
 def get_declaring_class(cls, attr_name):
@@ -150,7 +150,10 @@ class PersistableMeta(type, Persistable):
 
     @classmethod
     def register(mcs, cls):
-        mcs.descriptors[cls.__name__] = Descriptor(cls)
+        name = cls.__name__
+        if name in mcs.descriptors:
+            raise TypeAlreadyRegistered(cls)
+        mcs.descriptors[name] = Descriptor(cls)
 
     @classmethod
     def get_class_by_id(mcs, cls_id):

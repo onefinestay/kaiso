@@ -39,6 +39,26 @@ class IndexedRelated(Relationship):
     id = Uuid(unique=True)
 
 
+class Flavouring(Thing):
+    natural = Bool()
+    veggie_friendly = Bool()
+    tastes_like = String()
+
+
+class Colouring(Thing):
+    natural = Bool()
+    veggie_friendly = Bool()
+    color = String()
+
+
+class Beetroot(Flavouring, Colouring):
+    natural = Bool(default=True)
+
+
+class Carmine(Colouring):
+    pass
+
+
 @pytest.mark.usefixtures('storage')
 def test_add_fails_on_non_persistable(storage):
 
@@ -334,18 +354,6 @@ def test_type_hierarchy_object(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_type_hierarchy_diamond(storage):
-    class Flavouring(Thing):
-        pass
-
-    class Colouring(Thing):
-        pass
-
-    class Carmine(Colouring):
-        pass
-
-    class Beetroot(Flavouring, Colouring):
-        pass
-
     beetroot = Beetroot()
     storage.save(beetroot)
 
@@ -498,19 +506,6 @@ def test_attribute_inheritance(storage):
     inheritence.
     """
 
-    class Flavouring(Entity):
-        natural = Bool()
-        veggie_friendly = Bool()
-        tastes_like = String()
-
-    class Colouring(Entity):
-        natural = Bool()
-        veggie_friendly = Bool()
-        color = String()
-
-    class Beetroot(Flavouring, Colouring):
-        natural = Bool(default=True)
-
     storage.save(Beetroot)
 
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
@@ -525,6 +520,14 @@ def test_attribute_inheritance(storage):
     result = set(rows)
 
     assert result == {
+        ('Thing', 'str_attr', 'String', None),
+        ('Thing', 'ch_attr', 'Choice', None),
+        ('Thing', 'dt_attr', 'DateTime', None),
+        ('Thing', 'int_attr', 'Integer', None),
+        ('Thing', 'id', 'Uuid', None),
+        ('Thing', 'bool_attr', 'Bool', None),
+        ('Thing', 'dec_attr', 'Decimal', None),
+        ('Thing', 'float_attr', 'Float', None),
         ('Flavouring', 'natural', 'Bool', None),
         ('Flavouring', 'veggie_friendly', 'Bool', None),
         ('Flavouring', 'tastes_like', 'String', None),
