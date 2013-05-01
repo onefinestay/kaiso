@@ -1,15 +1,15 @@
-import decimal
-import iso8601
-
-import pytest
-
-from py2neo import cypher
-
-from kaiso.attributes import (
-    Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
+from kaiso.attributes import Uuid, Bool, Integer, Float, String, Decimal, \
+    DateTime, Choice
+from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship
 from kaiso.types import PersistableMeta, Entity
-from kaiso.persistence import TypeSystem
+from py2neo import cypher
+import decimal
+import iso8601
+import pytest
+
+
+
 
 
 class Thing(Entity):
@@ -441,7 +441,7 @@ def test_persist_attributes(storage):
     Verify persisted attributes maintain their type when added to the
     database.
     """
-    storage._update_types(Thing)
+    storage.save(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(id="Thing")
@@ -465,11 +465,11 @@ def test_persist_attributes(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_persist_type_attributes(storage):
+def test_attribute_creation(storage):
     """
-    Verify that attributes are persisted to the database when a type is added.
+    Verify that attributes are added to the database when a type is added.
     """
-    storage._update_types(Thing)
+    storage.save(Thing)
 
     query_str = """
         START Thing = node:persistablemeta(id="Thing")
@@ -490,3 +490,56 @@ def test_persist_type_attributes(storage):
         ('DateTime', 'dt_attr', False),
         ('Choice', 'ch_attr', False),
     }
+
+
+@pytest.mark.usefixtures('storage')
+def test_attribute_inheritance(storage):
+    """
+    Verify that attributes are created correctly according to type
+    inheritence.
+    """
+
+    class Flavouring(Entity):
+        natural = Bool()
+        veggie_friendly = Bool()
+        tastes_like = String()
+
+    class Colouring(Entity):
+        natural = Bool()
+        veggie_friendly = Bool()
+        color = String()
+
+    class Beetroot(Flavouring, Colouring):
+        natural = Bool(default=True)
+
+    storage.save(Beetroot)
+
+    # ``natural`` on ``Beetroot`` will be found twice by this query, because
+    # there are two paths from it to ``Entity``.
+    query_str = """
+        START Entity = node:persistablemeta(id="Entity")
+        MATCH attr -[:DECLAREDON]-> type -[:ISA*]-> Entity
+        RETURN type.id, attr.name, attr.__type__, attr.default?
+    """
+
+    rows = storage.query(query_str)
+    result = set(rows)
+
+    assert result == {
+        ('Flavouring', 'natural', 'Bool', None),
+        ('Flavouring', 'veggie_friendly', 'Bool', None),
+        ('Flavouring', 'tastes_like', 'String', None),
+        ('Colouring', 'natural', 'Bool', None),
+        ('Colouring', 'veggie_friendly', 'Bool', None),
+        ('Colouring', 'color', 'String', None),
+        ('Beetroot', 'natural', 'Bool', True),
+    }
+
+    # ``natural`` on ``Beetroot`` should only be defined once
+    query_str = """
+        START Beetroot = node:persistablemeta(id="Beetroot")
+        MATCH attr -[:DECLAREDON]-> Beetroot
+        RETURN count(attr)
+    """
+    count = next(storage.query(query_str))[0]
+    assert count == 1

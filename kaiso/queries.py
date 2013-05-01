@@ -62,48 +62,56 @@ def get_create_types_query(obj, root, dynamic_type):
         'DeclaredOn_props': object_to_dict(DeclaredOn(), dynamic_type),
     }
 
-    is_first = True
+    # filter type relationships that we want to persist
+    type_relationships = []
     for cls1, rel_cls, cls2 in get_type_relationships(obj):
-        # this filters out the types that we don't want to persist
         if issubclass(cls2, AttributedBase):
-            name1 = cls1.__name__
+            type_relationships.append((cls1, rel_cls, cls2))
 
-            if name1 in objects:
-                abstr1 = name1
-            else:
-                abstr1 = '(%s {%s_props})' % (name1, name1)
+    # process type relationships
+    is_first = True
+    for cls1, rel_cls, cls2 in type_relationships:
 
-            objects[name1] = cls1
+        name1 = cls1.__name__
 
-            if is_first:
-                is_first = False
-                ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
-            else:
-                name2 = cls2.__name__
-                objects[name2] = cls2
+        if name1 in objects:
+            abstr1 = name1
+        else:
+            abstr1 = '(%s {%s_props})' % (name1, name1)
 
-                rel_name = rel_cls.__name__
-                rel_type = rel_name.upper()
+        objects[name1] = cls1
 
-                ln = '%s -[:%s {%s_props}]-> %s' % (
-                    abstr1, rel_type, rel_name, name2)
+        if is_first:
+            is_first = False
+            ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
+        else:
+            name2 = cls2.__name__
+            objects[name2] = cls2
+
+            rel_name = rel_cls.__name__
+            rel_type = rel_name.upper()
+
+            ln = '%s -[:%s {%s_props}]-> %s' % (
+                abstr1, rel_type, rel_name, name2)
+        lines.append(ln)
+
+    # process attributes
+    for name, cls in objects.items():
+
+        descriptor = dynamic_type.get_descriptor(cls)
+        attributes = descriptor.declared_attributes
+        for attr_name, attr in attributes.iteritems():
+            key = "%s_%s" % (name, attr_name)
+
+            ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
+                key, name)
             lines.append(ln)
 
-            descriptor = dynamic_type.get_descriptor(cls1)
+            attr_dict = object_to_dict(
+                attr, dynamic_type, include_none=False)
 
-            attributes = descriptor.declared_attributes
-            for attr_name, attr in attributes.iteritems():
-                key = "%s_%s" % (name1, attr_name)
-
-                ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
-                    key, name1)
-                lines.append(ln)
-
-                attr_dict = object_to_dict(
-                    attr, dynamic_type, include_none=False)
-
-                attr_dict['name'] = attr_name
-                query_args[key] = attr_dict
+            attr_dict['name'] = attr_name
+            query_args[key] = attr_dict
 
     for key, obj in objects.iteritems():
         query_args['%s_props' % key] = object_to_dict(obj, dynamic_type)
