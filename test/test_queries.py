@@ -3,11 +3,11 @@ from kaiso.queries import get_start_clause
 from kaiso.attributes import String
 
 
-class Thing(Entity):
+class IndexableThing(Entity):
     indexable_attr = String(unique=True)
 
 
-class TwoUniquesThing(Thing):
+class TwoUniquesThing(IndexableThing):
     also_unique = String(unique=True)
 
 
@@ -16,15 +16,15 @@ class Connects(Relationship):
 
 
 def test_get_start_clause_for_type():
-    clause = get_start_clause(Thing, "foo")
-    assert clause == 'foo=node:persistablemeta(id="Thing")'
+    clause = get_start_clause(IndexableThing, "foo")
+    assert clause == 'foo=node:persistablemeta(id="IndexableThing")'
 
 
 def test_get_start_clause_for_instance():
-    obj = Thing(indexable_attr="bar")
+    obj = IndexableThing(indexable_attr="bar")
 
     clause = get_start_clause(obj, "foo")
-    assert clause == 'foo=node:thing(indexable_attr="bar")'
+    assert clause == 'foo=node:indexablething(indexable_attr="bar")'
 
 
 def test_get_start_clause_mutiple_uniques():
@@ -34,8 +34,8 @@ def test_get_start_clause_mutiple_uniques():
     )
 
     clause = get_start_clause(obj, "foo")
-    assert (clause == 'foo=node:thing(indexable_attr="bar")'  or
-            clause == 'foo=node:thing(also_unique="baz")')
+    assert (clause == 'foo=node:indexablething(indexable_attr="bar")'  or
+            clause == 'foo=node:indexablething(also_unique="baz")')
 
 
 def test_get_start_clause_for_relationship_type():
@@ -44,8 +44,8 @@ def test_get_start_clause_for_relationship_type():
 
 
 def test_get_start_clause_for_relationship_instance():
-    a = Thing()
-    b = Thing()
+    a = IndexableThing()
+    b = IndexableThing()
 
     obj = Connects(start=a, end=b, indexable_attr="bar")
 
