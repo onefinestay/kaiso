@@ -125,6 +125,20 @@ def test_simple_add_and_get_instance(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_simple_add_and_get_instance_by_optional_attr(storage):
+    thing1 = Thing()
+    thing2 = Thing(str_attr="this is thing2")
+    storage.save(thing1)
+    storage.save(thing2)
+
+    queried_thing = storage.get(Thing, str_attr=thing2.str_attr)
+
+    assert type(queried_thing) == Thing
+    assert queried_thing.id == thing2.id
+    assert queried_thing.str_attr == thing2.str_attr
+
+
+@pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_relationship(storage):
     thing1 = Thing()
     thing2 = Thing()
