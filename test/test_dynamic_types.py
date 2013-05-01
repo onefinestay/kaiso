@@ -127,9 +127,8 @@ def test_load_dynamic_types(storage):
     ]
 
 
-
 @pytest.mark.usefixtures('storage')
-def _test_add_attr_to_type_via_2nd_storage(storage):
+def test_add_attr_to_type_via_2nd_storage(storage):
     attrs = {'id': String(unique=True)}
     Shrub = storage.dynamic_type('Shrub', (Entity,), attrs)
 
