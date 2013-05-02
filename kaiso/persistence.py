@@ -239,7 +239,7 @@ class Storage(object):
         return cls
 
     def _update(self, persistable, existing, changes):
-        for (_, index_attr, _) in get_index_entries(existing):
+        for _, index_attr, _ in get_index_entries(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
@@ -319,7 +319,7 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-            # self._update_types(obj_type)
+
             query = get_create_relationship_query(obj, self._dynamic_meta)
 
         else:
@@ -377,11 +377,12 @@ class Storage(object):
     def get(self, cls, **attr_filter):
         attr_filter = dict_to_db_values_dict(attr_filter)
 
+        if not attr_filter:
+            return None
+
         query_args = {}
 
         indexes = attr_filter.items()
-        if len(indexes) == 0:
-            return None
 
         if issubclass(cls, (Relationship, PersistableMeta)):
             idx_name = get_index_name(cls)
