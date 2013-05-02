@@ -14,7 +14,7 @@ from kaiso.relationships import InstanceOf
 from kaiso.serialize import (
     dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
 from kaiso.types import (
-    Persistable, PersistableMeta, Relationship,
+    Descriptor, Persistable, PersistableMeta, Relationship,
     AttributedBase, get_index_entries, get_index_name, is_indexable)
 
 log = getLogger(__name__)
@@ -199,7 +199,8 @@ class Storage(object):
                     modified_attrs[name] = attr
 
             del_attrs = set(attrs)
-            for name in dir(persistable):
+
+            for name in Descriptor(persistable).attributes.keys():
                 del_attrs.discard(name)
 
             for name in del_attrs:
@@ -270,8 +271,10 @@ class Storage(object):
             else:
                 where = ''
 
+            index_name = self._dynamic_meta.index_name
+
             query = join_lines(
-                'START n=node:%s(id={type_id})' % self._dynamic_meta.index_name,
+                'START n=node:%s(id={type_id})' % index_name,
                 set_clauses,
                 'MATCH attr -[r:DECLAREDON]-> n',
                 where,
