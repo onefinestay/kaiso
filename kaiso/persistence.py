@@ -131,7 +131,7 @@ class Storage(object):
             set_store_for_object(obj, self)
 
     def _load_types(self):
-        dyn_type = self.dynamic_type
+        dyn_type = self._dynamic_meta
 
         for type_id, bases, attrs in self.get_type_hierarchy():
             try:
