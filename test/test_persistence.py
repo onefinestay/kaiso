@@ -559,3 +559,15 @@ def test_attribute_inheritance(storage):
     """
     count = next(storage.query(query_str))[0]
     assert count == 1
+
+
+@pytest.mark.usefixtures('storage')
+def test_serialize_deserialize(storage):
+    """
+    Verify that serialize and deserialize are reversible
+    """
+    dct = storage.serialize(Entity)
+    assert dct == {'__type__': 'PersistableMeta', 'id': 'Entity'}
+
+    obj = storage.deserialize(dct)
+    assert obj is Entity
