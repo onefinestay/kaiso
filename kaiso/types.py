@@ -74,7 +74,7 @@ def is_indexable(cls):
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
-    Its main purpose is to provide type names and attributes information of
+    Its main purpose is to provide type names and attribute information of
     persistable types(classes).
     """
     def __init__(self, cls):
@@ -113,11 +113,11 @@ class Descriptor(object):
 
 
 class Persistable(object):
-    ''' The base of all persistable objects.
+    """ The base of all persistable objects.
 
     Any object stored in the db must inherit from this class.
     Any object having Persistable as it's base are considered persistable.
-    '''
+    """
 
 
 class DiscriptorType(type):
@@ -245,7 +245,6 @@ class AttributedBase(Persistable):
 
         obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
-        # setup default values for attributes
         descriptor = type(cls).get_descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
