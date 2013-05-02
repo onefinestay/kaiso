@@ -81,9 +81,8 @@ def object_to_dict(obj, type_registry, include_none=True):
     The generated dict will contain a __type__ key, for which the value
     will be the type_id as given by the descriptor for type(obj).
 
-    If the object is a class a name key-value pair will be
-    added to the generated dict, with the value being the type_id given
-    by the descriptor for the object.
+    If the object is a class, dict will contain an id-key with the value
+    being the type_id given by the descriptor for the object.
 
     For any other object all the attributes as given by the object's
     type descriptpr will be added to the dict and encoded as required.
