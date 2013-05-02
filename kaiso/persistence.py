@@ -1,275 +1,49 @@
+from logging import getLogger
+import uuid
+
 from py2neo import cypher, neo4j
 
+from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
-from kaiso.descriptors import (
-    get_descriptor, get_descriptor_by_name, get_indexes)
-from kaiso.exceptions import UniqueConstraintError, DeserialisationError
-from kaiso.iter_helpers import unique
+from kaiso.exceptions import UniqueConstraintError, UnknownType
+from kaiso.queries import (
+    get_create_types_query, get_create_relationship_query,
+    get_start_clause, join_lines)
 from kaiso.references import set_store_for_object
-from kaiso.attributes import Outgoing, Incoming
-from kaiso.attributes.bases import get_attibute_for_type
-from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import PersistableMeta, Entity, Relationship
+from kaiso.relationships import InstanceOf
+from kaiso.serialize import (
+    dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
+from kaiso.types import (
+    Descriptor, Persistable, PersistableMeta, Relationship,
+    AttributedBase, get_index_entries, get_index_name, is_indexable)
+
+log = getLogger(__name__)
 
 
-def object_to_dict(obj):
-    """ Converts a persistable object to a dict.
+class TypeSystem(AttributedBase):
+    """ ``TypeSystem`` is a node that represents the root
+    of the type hierarchy.
 
-    The generated dict will contain a __type__ key, for which the value will
-    be the type_name as given by the descriptor for type(obj).
+    The current version of the hierarchy is tracked using
+    its version attribute.
+    """
+    id = String(unique=True)
+    version = Uuid()
 
-    If the object is a class a name key-value pair will be
-    added to the generated dict, with the value being the type_name given
-    by the descriptor for the object.
 
-    For any other object all the attributes as given by the object's
-    type descriptpr will be added to the dict and encoded as required.
+def get_attr_filter(obj):
+    """ Generates a dictionary, that will identify the given ``obj``
+    based on it's unique attributes.
 
     Args:
-        obj: A persistable  object.
+        obj: An object to look up by index
 
     Returns:
-        Dictionary with attributes encoded in basic types
-        and type information for deserialization.
-        e.g.
-        {
-            '__type__': 'Entity',
-            'attr1' : 1234
-        }
+        A dictionary of key-value pairs to indentify an object by.
     """
-    obj_type = type(obj)
-
-    descr = get_descriptor(obj_type)
-
-    properties = {
-        '__type__': descr.type_name,
-    }
-
-    if isinstance(obj, type):
-        properties['name'] = get_descriptor(obj).type_name
-    else:
-        for name, attr in descr.members.items():
-            value = attr.to_db(getattr(obj, name))
-            if value is not None:
-                properties[name] = value
-    return properties
-
-
-def dict_to_object(properties):
-    """ Converts a dict into a persistable object.
-
-    The properties dict needs at least a __type__ key containing the name of
-    any registered class.
-    The type key defines the type of the object to return.
-
-    If the registered class for the __type__ is a meta-class,
-    i.e. a subclass of <type>, a name key is assumed to be present and
-    the registered class idendified by it's value is returned.
-
-    If the registered class for the __type__ is standard class,
-    i.e. an instance of <type>, and object of that class will be created
-    with attributes as defined by the remaining key-value pairs.
-
-    Args:
-        properties: A dict like object.
-
-    Returns:
-        A persistable object.
-    """
-
-    try:
-        type_name = properties['__type__']
-    except KeyError:
-        raise DeserialisationError(
-            'properties "{}" missing __type__ key'.format(properties))
-    descriptor = get_descriptor_by_name(type_name)
-
-    cls = descriptor.cls
-
-    if issubclass(cls, type):
-        obj = get_descriptor_by_name(properties['name']).cls
-    else:
-        obj = cls.__new__(cls)
-
-        for attr_name, attr in descriptor.members.items():
-            try:
-                value = properties[attr_name]
-            except KeyError:
-                value = attr.default
-            else:
-                value = attr.to_python(value)
-
-            setattr(obj, attr_name, value)
-
-    return obj
-
-
-def object_to_db_value(obj):
-    try:
-        attr_cls = get_attibute_for_type(type(obj))
-    except KeyError:
-        return obj
-    else:
-        return attr_cls.to_db(obj)
-
-
-def dict_to_db_values_dict(data):
-    return {k: object_to_db_value(v) for k, v in data.items()}
-
-
-@unique
-def get_type_relationships(obj):
-    """ Generates a list of the type relationships of an object.
-    e.g.
-        get_type_relationships(Entity())
-
-        (object, InstanceOf, type),
-        (type, IsA, object),
-        (type, InstanceOf, type),
-        (PersistableMeta, IsA, type),
-        (PersistableMeta, InstanceOf, type),
-        (Entity, IsA, object),
-        (Entity, InstanceOf, PersistableMeta),
-        (<Entity object>, InstanceOf, Entity)
-
-    Args:
-        obj:    An object to generate the type relationships for.
-
-    Returns:
-        A generator, generating tuples
-            (object, relatsionship type, related obj)
-    """
-    obj_type = type(obj)
-
-    if obj_type is not type:
-        for item in get_type_relationships(obj_type):
-            yield item
-
-    if isinstance(obj, type):
-        for base in obj.__bases__:
-            for item in get_type_relationships(base):
-                yield item
-            yield obj, IsA, base
-
-    yield obj, InstanceOf, obj_type
-
-
-def get_index_queries(obj, name=None):
-    """Returns a list of the possible
-       node lookups by index as used by the START clause.
-
-    Args:
-        obj: An object to create a index lookup.
-        name: The name of the object in the query.
-                If name is None obj.__name__ will be used.
-    Returns:
-        A list of strings  with index lookup of a cypher START clause.
-    """
-    queries = []
-
-    if name is None:
-        name = obj.__name__
-
-    if isinstance(obj, Relationship):
-        start_func = 'relationship'
-    else:
-        start_func = 'node'
-
-    indexes = get_indexes(obj)
-    for index_name, index_key, index_val in indexes:
-        if index_val is not None:
-            queries.append('{}={}:{}({}="{}")'.format(
-                name, start_func, index_name, index_key, index_val
-            ))
-
-    return queries
-
-
-def get_index_query(obj, name=None):
-    """ Returns a node lookup by index as used by the START clause.
-
-    Args:
-        obj: An object to create a index lookup.
-        name: The name of the object in the query.
-                If name is None obj.__name__ will be used.
-    Returns:
-        A string with index lookup of a cypher START clause.
-    """
-    queries = get_index_queries(obj, name)
-    return queries[0] if queries else None
-
-
-def get_create_types_query(obj):
-    """ Returns a CREATE UNIQUE query for an entire type hierarchy.
-
-    Args:
-        obj: An object to create a type hierarchy for.
-
-    Returns:
-        A tuple containing:
-        (cypher query, objects to create nodes for, the object names).
-    """
-
-    lines = []
-    objects = {'Entity': Entity}
-
-    for obj1, rel_cls, obj2 in get_type_relationships(obj):
-        # this filters out the types, which we don't want to persist
-        if issubclass(obj2, Entity):
-            if isinstance(obj1, type):
-                name1 = obj1.__name__
-            else:
-                name1 = 'new_obj'
-
-            if name1 in objects:
-                abstr1 = name1
-            else:
-                abstr1 = '(%s {%s_props})' % (name1, name1)
-
-            name2 = obj2.__name__
-
-            objects[name1] = obj1
-            objects[name2] = obj2
-
-            rel_name = rel_cls.__name__
-            rel_type = rel_name.upper()
-
-            ln = '%s -[:%s {%s_props}]-> %s' % (
-                abstr1, rel_type, rel_name, name2)
-
-            lines.append(ln)
-
-    keys, objects = zip(*objects.items())
-
-    query = (
-        'START %s' % get_index_query(Entity),
-        'CREATE UNIQUE')
-    query += ('    ' + ',\n    '.join(lines),)
-    query += ('RETURN %s' % ', '.join(keys),)
-    query = '\n'.join(query)
-
-    return query, objects, keys
-
-
-def _get_changes(old, new):
-    """Return a changes dictionary containing the key/values in new that are
-       different from old. Any key in old that is not in new will have a None
-       value in the resulting dictionary
-    """
-    changes = {}
-
-    # check for any keys that have changed, put their new value in
-    for key, value in new.items():
-        if old.get(key) != value:
-            changes[key] = value
-
-    # if a key has dissappeared in new, put a None in changes, which
-    # will remove it in neo
-    for key in old.keys():
-        if key not in new:
-            changes[key] = None
-
-    return changes
+    indexes = get_index_entries(obj)
+    index_filter = dict((key, value) for _, key, value in indexes)
+    return index_filter
 
 
 class Storage(object):
@@ -289,6 +63,8 @@ class Storage(object):
             connection_uri: A URI used to connect to the graph database.
         """
         self._conn = get_connection(connection_uri)
+        self.type_system = TypeSystem(id='TypeSystem')
+        self._dynamic_meta = None
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -300,6 +76,7 @@ class Storage(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
+        log.debug('running query:\n%s', query.format(**params))
 
         rows, _ = cypher.execute(self._conn, query, params)
         for row in rows:
@@ -318,7 +95,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties)
+            obj = dict_to_object(properties, self._dynamic_meta)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -330,129 +107,361 @@ class Storage(object):
 
     def _convert_row(self, row):
         for value in row:
-            yield self._convert_value(value)
+            if isinstance(value, list):
+                yield [self._convert_value(v) for v in value]
+            else:
+                yield self._convert_value(value)
 
-    def _root_exists(self):
+    def _index_object(self, obj, node_or_rel):
+        indexes = get_index_entries(obj)
+        for index_name, key, value in indexes:
+            if isinstance(obj, Relationship):
+                index_type = neo4j.Relationship
+            else:
+                index_type = neo4j.Node
+
+            log.debug(
+                'indexing %s for %s using index %s',
+                obj, node_or_rel, index_name)
+
+            index = self._conn.get_or_create_index(index_type, index_name)
+            index.add(key, value, node_or_rel)
+
+        if not isinstance(obj, Relationship):
+            set_store_for_object(obj, self)
+
+    def _load_types(self):
+        dyn_type = self._dynamic_meta
+
+        for type_id, bases, attrs in self.get_type_hierarchy():
+            try:
+                cls = dyn_type.get_class_by_id(type_id)
+
+                if type(cls) is not dyn_type:
+                    cls = None
+            except UnknownType:
+                cls = None
+
+            if cls is None:
+                bases = tuple(dyn_type.get_class_by_id(base) for base in bases)
+                attrs = dict((attr.name, attr) for attr in attrs)
+                self._dynamic_meta(str(type_id), bases, attrs)
+
+    def _get_changes(self, persistable):
+        changes = {}
+        existing = None
+        obj_type = type(persistable)
+
+        if isinstance(persistable, PersistableMeta):
+            # this is a class, we need to get it and it's attrs
+            idx_name = obj_type.index_name
+            self._conn.get_or_create_index(neo4j.Node, idx_name)
+
+            descr = obj_type.get_descriptor(persistable)
+            query_args = {
+                'type_id': descr.type_id
+            }
+
+            query = join_lines(
+                'START cls=node:%s(id={type_id})' % idx_name,
+                'MATCH attr -[:DECLAREDON*0..]-> cls',
+                'RETURN cls, collect(attr.name?)'
+            )
+
+            rows = self.query(query, **query_args)
+            existing, attrs = next(rows, (None, None))
+
+            if existing is None:
+                # have not found the cls
+                return None, {}
+
+            attrs = set(attrs)
+
+            modified_attrs = {}
+
+            for name, attr in descr.declared_attributes.items():
+                if name not in attrs:
+                    modified_attrs[name] = attr
+
+            del_attrs = set(attrs)
+
+            for name in Descriptor(persistable).attributes.keys():
+                del_attrs.discard(name)
+
+            for name in del_attrs:
+                modified_attrs[name] = None
+
+            if modified_attrs:
+                changes['attributes'] = modified_attrs
+        else:
+            existing = self.get(obj_type, **get_attr_filter(persistable))
+
+            if existing is not None:
+                existing_props = object_to_dict(existing, self._dynamic_meta)
+                props = object_to_dict(persistable, self._dynamic_meta)
+
+                if existing_props == props:
+                    return existing, {}
+
+                changes = get_changes(old=existing_props, new=props)
+
+        return existing, changes
+
+    def _update_types(self, cls):
+        query, objects, query_args = get_create_types_query(
+            cls, self.type_system, self._dynamic_meta)
+
+        nodes_or_rels = next(self._execute(query, **query_args))
+
+        for obj in objects:
+            if is_indexable(obj):
+                index_name = get_index_name(obj)
+                self._conn.get_or_create_index(neo4j.Node, index_name)
+
+        for obj, node_or_rel in zip(objects, nodes_or_rels):
+            self._index_object(obj, node_or_rel)
+
+        return cls
+
+    def _update(self, persistable, existing, changes):
+        for _, index_attr, _ in get_index_entries(existing):
+            if index_attr in changes:
+                raise NotImplementedError(
+                    "We currently don't support changing unique attributes")
+
+        set_clauses = ', '.join([
+            'n.%s={%s}' % (key, key) for key, value in changes.items()
+            if not isinstance(value, dict)
+        ])
+
+        if set_clauses:
+            set_clauses = 'SET %s' % set_clauses
+        else:
+            set_clauses = ''
+
+        if isinstance(persistable, type):
+            descr = self._dynamic_meta.get_descriptor(persistable)
+
+            query_args = {'type_id': descr.type_id}
+
+            where = []
+
+            for attr_name in descr.declared_attributes.keys():
+                where.append('attr.name = {attr_%s}' % attr_name)
+                query_args['attr_%s' % attr_name] = attr_name
+
+            if where:
+                where = ' OR '.join(where)
+                where = 'WHERE not(%s)' % where
+            else:
+                where = ''
+
+            index_name = self._dynamic_meta.index_name
+
+            query = join_lines(
+                'START n=node:%s(id={type_id})' % index_name,
+                set_clauses,
+                'MATCH attr -[r:DECLAREDON]-> n',
+                where,
+                'DELETE attr, r',
+                'RETURN n',
+            )
+
+            self._update_types(persistable)
+        else:
+            start_clause = get_start_clause(existing, 'n')
+
+            query = join_lines(
+                'START %s' % start_clause,
+                set_clauses,
+                'RETURN n'
+            )
+            query_args = changes
+
         try:
-            # we have to make sure we have a starting point for
-            # the type hierarchy, for now that is Entity
-            obj = self.get(PersistableMeta, name='Entity')
-            if obj is not Entity:
-                raise Exception("Db is broken")  # TODO: raise DbIsBroken()
+            (result,) = next(self._execute(query, **query_args))
+        except StopIteration:
+            # this can happen, if no attributes where changed on a type
+            result = persistable
+        return result
 
-            return True
-        except:  # (IndexDoesn'texistYet or None returned)
-            return False
+    def _add(self, obj):
+        """ Adds an object to the data store.
 
-    def get(self, cls, **index_filter):
-        index_filter = dict_to_db_values_dict(index_filter)
-        descriptor = get_descriptor(cls)
+        It will automatically generate the type relationships
+        for the the object as required and store the object itself.
+        """
 
-        # TODO: can we consider a different signature that avoids this assert?
-        # TODO: something like:
-        # TODO: def get(self, cls, (key, value)):
-        assert len(index_filter) == 1, "only one index allowed at a time"
-        key, value = index_filter.items()[0]
+        query_args = {}
 
-        index_name = descriptor.get_index_name_for_attribute(key)
+        if isinstance(obj, PersistableMeta):
+            # object is a type; create the type and its hierarchy
+            return self._update_types(obj)
 
-        if issubclass(cls, Relationship):
-            node_or_rel = self._conn.get_indexed_relationship(
-                index_name, key, value)
+        elif obj is self.type_system:
+            query = 'CREATE (n {props}) RETURN n'
+
+        elif isinstance(obj, Relationship):
+            # object is a relationship
+            obj_type = type(obj)
+
+            query = get_create_relationship_query(obj, self._dynamic_meta)
 
         else:
-            node_or_rel = self._conn.get_indexed_node(index_name, key, value)
+            # object is an instance; create its type, its hierarchy and then
+            # create the instance
+            obj_type = type(obj)
+            obj_type_meta = type(obj_type)
 
-        if node_or_rel is None:
-            return None
+            self._update_types(obj_type)
 
-        obj = self._convert_value(node_or_rel)
+            idx_name = obj_type_meta.index_name
+            query = (
+                'START cls=node:%s(id={type_id}) '
+                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'RETURN n'
+            ) % idx_name
+
+            query_args = {
+                'type_id': obj_type.get_descriptor(obj_type).type_id,
+                'rel_props': object_to_dict(
+                    InstanceOf(None, None), self._dynamic_meta),
+            }
+
+        query_args['props'] = object_to_dict(obj, self._dynamic_meta, False)
+
+        (node_or_rel,) = next(self._execute(query, **query_args))
+
+        self._index_object(obj, node_or_rel)
+
         return obj
 
-    def _get_by_unique(self, obj):
-        """Return a list of any existing data from the database that
-           matches any of the given objects' unique indexes.
-        """
-        found = []
+    def get_type_hierarchy(self):
+        """ Returns the entire type hierarchy defined in the database.
 
-        for clause in get_index_queries(obj, 'x'):
-            query = '''START {}
-                       RETURN x'''.format(clause)
-            try:
-                result = self._execute(query, node_props=object_to_dict(obj))
-                result = list(result)
-            except cypher.CypherError as exc:
-                if exc.exception != 'MissingIndexException':
-                    raise  # pragma: no cover
-                # MissingIndexException is ok, treat as no result
+        Returns: A generator yielding tuples of the form
+        ``(type_id, bases, attrs)`` where
+            - ``type_id`` identifies the type
+            - ``bases`` lists the type_ids of the type's bases
+            - ``attrs`` lists the attributes defined on the type
+        """
+        query = join_lines(
+            'START %s' % get_start_clause(self.type_system, 'ts'),
+            'MATCH',
+            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
+            '  tpe <-[:DECLAREDON*0..]- attr,',
+            '  tpe -[:ISA*0..1]-> base',
+            'RETURN tpe.id,  length(p) AS level,',
+            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),',
+            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
+            'ORDER BY level'
+        )
+
+        rows = self.query(query)
+        return ((type_id, bases, attrs) for type_id, _, bases, attrs in rows)
+
+    def serialize(self, obj):
+        """ Serialize ``obj`` to a dictionary.
+
+        Args:
+            obj: An object to serialize
+
+        Returns:
+            A dictionary describing the object
+        """
+        return object_to_dict(obj, self._dynamic_meta)
+
+    def deserialize(self, object_dict):
+        """ Deserialize ``object_dict`` to an object.
+
+        Args:
+            object_dict: A serialized object dictionary
+
+        Returns:
+            An object deserialized using the type registry
+        """
+        return dict_to_object(object_dict, self._dynamic_meta)
+
+    def create_type(self, name, bases, attrs):
+        """ Creates a new class given the name, bases and attrs given.
+        """
+        return self._dynamic_meta(name, bases, attrs)
+
+    def save(self, persistable):
+        """ Stores the given ``persistable`` in the graph database.
+        If a matching object (by unique keys) already exists, it will
+        update it with the modified attributes.
+        """
+        if not isinstance(persistable, Persistable):
+            raise TypeError('cannot persist %s' % persistable)
+
+        existing, changes = self._get_changes(persistable)
+
+        if existing is None:
+            self._add(persistable)
+            return persistable
+        elif not changes:
+            return persistable
+        else:
+            return self._update(persistable, existing, changes)
+
+    def get(self, cls, **attr_filter):
+        attr_filter = dict_to_db_values_dict(attr_filter)
+
+        if not attr_filter:
+            return None
+
+        query_args = {}
+
+        indexes = attr_filter.items()
+
+        if issubclass(cls, (Relationship, PersistableMeta)):
+            idx_name = get_index_name(cls)
+            idx_key, idx_value = indexes[0]
+
+            if issubclass(cls, Relationship):
+                self._conn.get_or_create_index(neo4j.Relationship, idx_name)
+                start_func = 'relationship'
             else:
-                if result:
-                    found.append(result[0][0])
+                self._conn.get_or_create_index(neo4j.Node, idx_name)
+                start_func = 'node'
+
+            query = 'START nr = %s:%s(%s={idx_value}) RETURN nr' % (
+                start_func, idx_name, idx_key)
+
+            query_args['idx_value'] = idx_value
+        else:
+            idx_where = []
+            for key, value in indexes:
+                idx_where.append('n.%s! = {%s}' % (key, key))
+                query_args[key] = value
+            idx_where = ' or '.join(idx_where)
+
+            idx_name = get_index_name(TypeSystem)
+            query = join_lines(
+                'START root=node:%s(id={idx_value})' % idx_name,
+                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> () <-[:DEFINES]- root',
+                'WHERE %s' % idx_where,
+                'RETURN n',
+            )
+
+            query_args['idx_value'] = self.type_system.id
+
+        found = [node for (node,) in self._execute(query, **query_args)]
 
         if not found:
-            return found
+            return None
 
         # all the nodes returned should be the same
         first = found[0]
         for node in found:
             if node.id != first.id:
                 raise UniqueConstraintError((
-                    "Multiple nodes ({}) found for unique object lookup for "
-                    "{}").format(found, obj))
+                    "Multiple nodes ({}) found for unique lookup for "
+                    "{}").format(found, cls))
 
         obj = self._convert_value(first)
         return obj
-
-    def _make_create_relationship_query(self, rel, unique=False):
-        rel_props = object_to_dict(rel)
-        maybe_unique = 'UNIQUE' if unique else ''
-        query = 'START %s, %s CREATE %s n1 -[r:%s {rel_props}]-> n2 RETURN r'
-        query = query % (
-            get_index_query(rel.start, 'n1'),
-            get_index_query(rel.end, 'n2'),
-            maybe_unique,
-            rel_props['__type__'].upper(),
-        )
-
-        return query
-
-    def save(self, persistable):
-        """Store the given persistable in the graph database. If a matching
-           object (by unique keys) already exists, replace it with the
-           given one
-        """
-        if not can_add(persistable):
-            raise TypeError('cannot persist %s' % persistable)
-
-        existing = self._get_by_unique(persistable)
-
-        if not existing:
-            return self._add(persistable)
-
-        existing_props = object_to_dict(existing)
-        props = object_to_dict(persistable)
-
-        if existing_props == props:
-            # no changes
-            return existing
-
-        changes = _get_changes(old=existing_props, new=props)
-        for (_, index_attr, _) in get_indexes(existing):
-            if index_attr in changes:
-                raise NotImplementedError(
-                    "We currently don't support changing unique attributes")
-
-        start_clause = get_index_query(existing, 'n')
-        set_clauses = [
-            'n.%s={%s}' % (key, key) for key in changes]
-        set_clause = ','.join(set_clauses)
-
-        query = '''START %s
-                   SET %s
-                   RETURN n''' % (start_clause, set_clause)
-
-        result = self._execute(query, **changes)
-        return next(result)[0]
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
@@ -467,7 +476,7 @@ class Storage(object):
         query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
 
         query = query.format(
-            idx_lookup=get_index_query(obj, 'n'),
+            idx_lookup=get_start_clause(obj, 'n'),
             rel_query=rel_query
         )
 
@@ -475,6 +484,50 @@ class Storage(object):
         related_objects = (related_obj for (related_obj,) in rows)
 
         return related_objects
+
+    def delete(self, obj):
+        """ Deletes an object from the store.
+
+        Args:
+            obj: The object to delete.
+
+        Returns:
+            A tuple: with (number of nodes removed, number of rels removed)
+        """
+        if isinstance(obj, Relationship):
+            query = join_lines(
+                'START {}, {}',
+                'MATCH n1 -[rel]-> n2',
+                'DELETE rel',
+                'RETURN 0, count(rel)'
+            ).format(
+                get_start_clause(obj.start, 'n1'),
+                get_start_clause(obj.end, 'n2'),
+            )
+        elif isinstance(obj, PersistableMeta):
+            query = join_lines(
+                'START {}',
+                'MATCH attr -[:DECLAREDON]-> obj',
+                'DELETE attr',
+                'MATCH obj -[rel]- ()',
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
+            ).format(
+                get_start_clause(obj, 'obj')
+            )
+        else:
+            query = join_lines(
+                'START {}',
+                'MATCH obj -[rel]- ()',
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
+            ).format(
+                get_start_clause(obj, 'obj')
+            )
+
+        # TODO: delete node/rel from indexes
+
+        return next(self._execute(query))
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
@@ -490,82 +543,6 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def _add(self, obj):
-        """ Adds an object to the data store.
-
-        It will automatically generate the type relationships
-        for the the object as required and store the object itself.
-
-        Args:
-            obj: The object to store.
-        """
-
-        if isinstance(obj, Relationship):
-            query = self._make_create_relationship_query(obj)
-            query_args = {'rel_props': object_to_dict(obj)}
-            objects = [obj]
-
-        elif obj is Entity:
-            if self._root_exists():
-                return
-            else:
-                # create the PersistableMeta node.
-                # if we had a standard start node, we would not need this
-                query = 'CREATE (n {props}) RETURN n'
-                query_args = {'props': object_to_dict(Entity)}
-                objects = [Entity]
-        else:
-            if not self._root_exists():
-                self._add(Entity)
-
-            query, objects, keys = get_create_types_query(obj)
-
-            query_args = {
-                'InstanceOf_props': object_to_dict(InstanceOf(None, None)),
-                'IsA_props': object_to_dict(IsA(None, None))
-            }
-
-            for key, obj in zip(keys, objects):
-                query_args['%s_props' % key] = object_to_dict(obj)
-
-        items = next(self._execute(query, **query_args))
-
-        # index all the created nodes or relationships
-        # note, that all nodes in the type-chain for the added object
-        # will be re-indexed if they already existed
-        for node_or_rel, obj in zip(items, objects):
-            indexes = get_indexes(obj)
-            for index_name, key, value in indexes:
-                if isinstance(obj, Relationship):
-                    index_type = neo4j.Relationship
-                else:
-                    index_type = neo4j.Node
-
-                index = self._conn.get_or_create_index(index_type, index_name)
-
-                index.add(key, value, node_or_rel)
-
-            if not isinstance(obj, Relationship):
-                set_store_for_object(obj, self)
-
-    def delete(self, obj):
-        """ Deletes an object from the store.
-
-        Args:
-            obj: The object to delete.
-        """
-
-        if isinstance(obj, Relationship):
-            query = 'START {}, {} MATCH n1 -[rel]-> n2 DELETE rel'.format(
-                get_index_query(obj.start, 'n1'),
-                get_index_query(obj.end, 'n2'),
-            )
-        else:
-            query = 'START {} MATCH obj -[rel]- () DELETE obj, rel'.format(
-                get_index_query(obj, 'obj'))
-
-        cypher.execute(self._conn, query)
-
     def delete_all_data(self):
         """ Removes all nodes, relationships and indexes in the store.
 
@@ -577,16 +554,12 @@ class Storage(object):
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
 
+    def initialize(self):
+        type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
+        self._dynamic_meta = type(type_name, (PersistableMeta,), {})
 
-def can_add(obj):
-    """ Returns True if obj can be added to the db.
+        idx_name = get_index_name(TypeSystem)
+        self._conn.get_or_create_index(neo4j.Node, idx_name)
+        self.save(self.type_system)
 
-        We can add instances of Entity or Relationship.
-        In addition it is also possible to add sub-classes of
-        Entity.
-    """
-    return (
-        (isinstance(obj, type) and issubclass(obj, Entity)) or
-        isinstance(obj, Entity) or
-        isinstance(obj, Relationship)
-    )
+        self._load_types()
