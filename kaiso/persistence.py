@@ -62,7 +62,6 @@ class Storage(object):
         Args:
             connection_uri: A URI used to connect to the graph database.
         """
-        self._conn_uri = connection_uri
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
         self._dynamic_meta = None
