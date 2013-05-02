@@ -369,7 +369,7 @@ class Storage(object):
         Returns:
             A dictionary describing the object
         """
-        return object_to_dict(obj, self.dynamic_type)
+        return object_to_dict(obj, self._dynamic_meta)
 
     def deserialize(self, object_dict):
         """ Deserialize ``object_dict`` to an object.
@@ -380,7 +380,7 @@ class Storage(object):
         Returns:
             An object deserialized using the type registry
         """
-        return dict_to_object(object_dict, self.dynamic_type)
+        return dict_to_object(object_dict, self._dynamic_meta)
 
     def create_type(self, name, bases, attrs):
         """ Creates a new class given the name, bases and attrs given.
