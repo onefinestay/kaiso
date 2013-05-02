@@ -348,6 +348,28 @@ class Storage(object):
 
         return obj
 
+    def serialize(self, obj):
+        """ Serialize ``obj`` to a dictionary.
+
+        Args:
+            obj: An object to serialize
+
+        Returns:
+            A dictionary describing the object
+        """
+        return object_to_dict(obj, self.dynamic_type)
+
+    def deserialize(self, object_dict):
+        """ Deserialize ``object_dict`` to an object.
+
+        Args:
+            object_dict: A serialized object dictionary
+
+        Returns:
+            An object deserialized using the type registry
+        """
+        return dict_to_object(object_dict, self.dynamic_type)
+
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
         If a matching object (by unique keys) already exists, it will
