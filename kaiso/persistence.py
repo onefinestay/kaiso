@@ -21,11 +21,26 @@ log = getLogger(__name__)
 
 
 class TypeSystem(AttributedBase):
+    """ ``TypeSystem`` is a node that represents the root
+    of the type hierarchy.
+
+    The current version of the hierarchy is tracked using
+    its version attribute.
+    """
     id = String(unique=True)
     version = Uuid()
 
 
 def get_index_filter(obj):
+    """ Generates a dictionary, that will identify the given ``obj``
+    in an index.
+
+    Args:
+        obj: An object to look up by index
+
+    Returns:
+        A dictionary of key-value pairs to match in the index
+    """
     indexes = get_indexes(obj)
     index_filter = dict((key, value) for _, key, value in indexes)
     return index_filter
