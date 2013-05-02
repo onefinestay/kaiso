@@ -39,7 +39,7 @@ def get_start_clause(obj, name):
     return query
 
 
-def get_create_types_query(obj, root, dynamic_type):
+def get_create_types_query(obj, root, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
@@ -56,10 +56,10 @@ def get_create_types_query(obj, root, dynamic_type):
 
     query_args = {
         'root_id': root.id,
-        'IsA_props': object_to_dict(IsA(), dynamic_type),
-        'Defines_props': object_to_dict(Defines(), dynamic_type),
-        'InstanceOf_props': object_to_dict(InstanceOf(), dynamic_type),
-        'DeclaredOn_props': object_to_dict(DeclaredOn(), dynamic_type),
+        'IsA_props': object_to_dict(IsA(), type_registry),
+        'Defines_props': object_to_dict(Defines(), type_registry),
+        'InstanceOf_props': object_to_dict(InstanceOf(), type_registry),
+        'DeclaredOn_props': object_to_dict(DeclaredOn(), type_registry),
     }
 
     # filter type relationships that we want to persist
@@ -98,7 +98,7 @@ def get_create_types_query(obj, root, dynamic_type):
     # process attributes
     for name, cls in objects.items():
 
-        descriptor = dynamic_type.get_descriptor(cls)
+        descriptor = type_registry.get_descriptor(cls)
         attributes = descriptor.declared_attributes
         for attr_name, attr in attributes.iteritems():
             key = "%s_%s" % (name, attr_name)
@@ -108,13 +108,13 @@ def get_create_types_query(obj, root, dynamic_type):
             lines.append(ln)
 
             attr_dict = object_to_dict(
-                attr, dynamic_type, include_none=False)
+                attr, type_registry, include_none=False)
 
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
     for key, obj in objects.iteritems():
-        query_args['%s_props' % key] = object_to_dict(obj, dynamic_type)
+        query_args['%s_props' % key] = object_to_dict(obj, type_registry)
 
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
@@ -125,8 +125,8 @@ def get_create_types_query(obj, root, dynamic_type):
     return query, objects.values(), query_args
 
 
-def get_create_relationship_query(rel, dynamic_type):
-    rel_props = object_to_dict(rel, dynamic_type, include_none=False)
+def get_create_relationship_query(rel, type_registry):
+    rel_props = object_to_dict(rel, type_registry, include_none=False)
     query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (
