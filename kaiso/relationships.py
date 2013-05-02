@@ -37,4 +37,6 @@ class DeclaredOn(Relationship):
 
 
 class Defines(Relationship):
-    pass
+    """ Relationship used by the ``TypeSystem`` to connect to the types
+    it defines.
+    """
