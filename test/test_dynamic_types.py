@@ -68,6 +68,14 @@ def test_remove_attr_from_type(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_removing_attr_from_declared_type_does_not_remove_it(storage):
+
+    # the use case:
+    # developer defines a partial type in code
+    # the type Ham gets updated in the DB at runtime
+    # then the code changes, removing an attribute from the class
+    # the type definition in the DB is not affected, nor
+    # the data gets back from the DB
+
     class Ham(Entity):
         egg = String
 
