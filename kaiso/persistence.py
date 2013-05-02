@@ -15,7 +15,7 @@ from kaiso.serialize import (
     dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
 from kaiso.types import (
     Persistable, PersistableMeta, Relationship,
-    AttributedBase, get_indexes, get_index_name, is_indexable)
+    AttributedBase, get_index_entries, get_index_name, is_indexable)
 
 log = getLogger(__name__)
 
@@ -41,7 +41,7 @@ def get_index_filter(obj):
     Returns:
         A dictionary of key-value pairs to match in the index
     """
-    indexes = get_indexes(obj)
+    indexes = get_index_entries(obj)
     index_filter = dict((key, value) for _, key, value in indexes)
     return index_filter
 
@@ -114,7 +114,7 @@ class Storage(object):
                 yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
-        indexes = get_indexes(obj)
+        indexes = get_index_entries(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
                 index_type = neo4j.Relationship
@@ -238,7 +238,7 @@ class Storage(object):
         return cls
 
     def _update(self, persistable, existing, changes):
-        for (_, index_attr, _) in get_indexes(existing):
+        for (_, index_attr, _) in get_index_entries(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")

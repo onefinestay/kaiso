@@ -1,7 +1,7 @@
 
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
-    AttributedBase, get_indexes, get_index_name, Relationship)
+    AttributedBase, get_index_entries, get_index_name, Relationship)
 from kaiso.serialize import get_type_relationships, object_to_dict
 
 
@@ -30,7 +30,7 @@ def get_start_clause(obj, name):
         A string with index lookup of a cypher START clause.
     """
 
-    index = next(get_indexes(obj), None)
+    index = next(get_index_entries(obj), None)
     if isinstance(obj, Relationship):
         index_type = "rel"
     else:

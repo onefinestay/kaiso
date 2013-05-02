@@ -46,8 +46,10 @@ def get_index_name(cls):
         return cls.__name__.lower()
 
 
-def get_indexes(obj):
-    """ Returns indexes for a persistable object.
+def get_index_entries(obj):
+    """ Returns tuples of (index-name, key, value) for a persistable object.
+
+    It can be used to create queryies with index lookups.
 
     Args:
         obj: A persistable object.
@@ -58,7 +60,7 @@ def get_indexes(obj):
 
     meta_cls = get_meta(type(obj))
 
-    return meta_cls.get_indexes(obj)
+    return meta_cls.get_index_entries(obj)
 
 
 def is_indexable(cls):
@@ -181,7 +183,7 @@ class PersistableMeta(type, Persistable):
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
     @classmethod
-    def get_indexes(mcs, obj):
+    def get_index_entries(mcs, obj):
         if isinstance(obj, type):
             yield (mcs.index_name, 'id', obj.__name__)
         else:
