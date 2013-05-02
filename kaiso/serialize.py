@@ -18,12 +18,9 @@ def get_changes(old, new):
         if old.get(key) != value:
             changes[key] = value
 
-    # if a key has dissappeared in new, put a None in changes, which
-    # will remove it in neo
     for key in old.keys():
         if key not in new:
             raise KeyError('missing key: {}'.format(key))
-            # changes[key] = None
 
     return changes
 

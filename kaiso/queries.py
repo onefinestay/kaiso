@@ -1,4 +1,3 @@
-
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
     AttributedBase, get_index_entries, get_index_name, Relationship)
