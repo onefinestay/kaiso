@@ -31,15 +31,15 @@ class TypeSystem(AttributedBase):
     version = Uuid()
 
 
-def get_index_filter(obj):
+def get_attr_filter(obj):
     """ Generates a dictionary, that will identify the given ``obj``
-    in an index.
+    based on it's unique attributes.
 
     Args:
         obj: An object to look up by index
 
     Returns:
-        A dictionary of key-value pairs to match in the index
+        A dictionary of key-value pairs to indentify an object by.
     """
     indexes = get_index_entries(obj)
     index_filter = dict((key, value) for _, key, value in indexes)
@@ -139,8 +139,8 @@ class Storage(object):
             '  tpe <-[:DECLAREDON*0..]- attr,',
             '  tpe -[:ISA*0..1]-> base',
             'RETURN tpe.id,  length(p) AS level,',
-            '  filter(b_id in collect(distinct base.id): b_id <> tpe.id),',
-            '  filter(a in collect(distinct attr): a.id? <> tpe.id)',
+            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),',
+            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
             'ORDER BY level'
         )
 
@@ -208,7 +208,7 @@ class Storage(object):
             if modified_attrs:
                 changes['attributes'] = modified_attrs
         else:
-            existing = self.get(obj_type, **get_index_filter(persistable))
+            existing = self.get(obj_type, **get_attr_filter(persistable))
 
             if existing is not None:
                 existing_props = object_to_dict(existing, self.dynamic_type)
@@ -366,12 +366,12 @@ class Storage(object):
         else:
             return self._update(persistable, existing, changes)
 
-    def get(self, cls, **index_filter):
-        index_filter = dict_to_db_values_dict(index_filter)
+    def get(self, cls, **attr_filter):
+        attr_filter = dict_to_db_values_dict(attr_filter)
 
         query_args = {}
 
-        indexes = index_filter.items()
+        indexes = attr_filter.items()
         if len(indexes) == 0:
             return None
 
