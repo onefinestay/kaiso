@@ -1,7 +1,6 @@
-
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
-    AttributedBase, get_indexes, get_index_name, Relationship)
+    AttributedBase, get_index_entries, get_index_name, Relationship)
 from kaiso.serialize import get_type_relationships, object_to_dict
 
 
@@ -30,7 +29,7 @@ def get_start_clause(obj, name):
         A string with index lookup of a cypher START clause.
     """
 
-    index = next(get_indexes(obj), None)
+    index = next(get_index_entries(obj), None)
     if isinstance(obj, Relationship):
         index_type = "rel"
     else:
@@ -39,32 +38,32 @@ def get_start_clause(obj, name):
     return query
 
 
-def get_create_types_query(obj, root, dynamic_type):
+def get_create_types_query(cls, root, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
 
     Args:
-        obj: An object to create a type hierarchy for.
+        cls: An object to create a type hierarchy for.
 
     Returns:
         A tuple containing:
-        (cypher query, objects to create nodes for, the object names).
+        (cypher query, classes to create nodes for, the object names).
     """
     lines = []
-    objects = {}
+    classes = {}
 
     query_args = {
         'root_id': root.id,
-        'IsA_props': object_to_dict(IsA(), dynamic_type),
-        'Defines_props': object_to_dict(Defines(), dynamic_type),
-        'InstanceOf_props': object_to_dict(InstanceOf(), dynamic_type),
-        'DeclaredOn_props': object_to_dict(DeclaredOn(), dynamic_type),
+        'IsA_props': object_to_dict(IsA(), type_registry),
+        'Defines_props': object_to_dict(Defines(), type_registry),
+        'InstanceOf_props': object_to_dict(InstanceOf(), type_registry),
+        'DeclaredOn_props': object_to_dict(DeclaredOn(), type_registry),
     }
 
     # filter type relationships that we want to persist
     type_relationships = []
-    for cls1, rel_cls, cls2 in get_type_relationships(obj):
+    for cls1, rel_cls, cls2 in get_type_relationships(cls):
         if issubclass(cls2, AttributedBase):
             type_relationships.append((cls1, rel_cls, cls2))
 
@@ -74,19 +73,19 @@ def get_create_types_query(obj, root, dynamic_type):
 
         name1 = cls1.__name__
 
-        if name1 in objects:
+        if name1 in classes:
             abstr1 = name1
         else:
             abstr1 = '(%s {%s_props})' % (name1, name1)
 
-        objects[name1] = cls1
+        classes[name1] = cls1
 
         if is_first:
             is_first = False
             ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
         else:
             name2 = cls2.__name__
-            objects[name2] = cls2
+            classes[name2] = cls2
 
             rel_name = rel_cls.__name__
             rel_type = rel_name.upper()
@@ -96,9 +95,9 @@ def get_create_types_query(obj, root, dynamic_type):
         lines.append(ln)
 
     # process attributes
-    for name, cls in objects.items():
+    for name, cls in classes.items():
 
-        descriptor = dynamic_type.get_descriptor(cls)
+        descriptor = type_registry.get_descriptor(cls)
         attributes = descriptor.declared_attributes
         for attr_name, attr in attributes.iteritems():
             key = "%s_%s" % (name, attr_name)
@@ -108,25 +107,25 @@ def get_create_types_query(obj, root, dynamic_type):
             lines.append(ln)
 
             attr_dict = object_to_dict(
-                attr, dynamic_type, include_none=False)
+                attr, type_registry, include_none=False)
 
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
-    for key, obj in objects.iteritems():
-        query_args['%s_props' % key] = object_to_dict(obj, dynamic_type)
+    for key, cls in classes.iteritems():
+        query_args['%s_props' % key] = object_to_dict(cls, type_registry)
 
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
         'CREATE UNIQUE',
         (lines, ','),
-        'RETURN %s' % ', '.join(objects.keys())
+        'RETURN %s' % ', '.join(classes.keys())
     )
-    return query, objects.values(), query_args
+    return query, classes.values(), query_args
 
 
-def get_create_relationship_query(rel, dynamic_type):
-    rel_props = object_to_dict(rel, dynamic_type, include_none=False)
+def get_create_relationship_query(rel, type_registry):
+    rel_props = object_to_dict(rel, type_registry, include_none=False)
     query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (

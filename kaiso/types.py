@@ -22,15 +22,6 @@ def get_declaring_class(cls, attr_name):
     return declaring_class
 
 
-def get_meta(cls):
-    if issubclass(cls, PersistableMeta):
-        meta_cls = cls
-    else:
-        meta_cls = type(cls)
-
-    return meta_cls
-
-
 def get_index_name(cls):
     """ Returns a cypher index name for a class.
 
@@ -46,8 +37,10 @@ def get_index_name(cls):
         return cls.__name__.lower()
 
 
-def get_indexes(obj):
-    """ Returns indexes for a persistable object.
+def get_index_entries(obj):
+    """ Returns tuples of (index-name, key, value) for a persistable object.
+
+    It can be used to create queryies with index lookups.
 
     Args:
         obj: A persistable object.
@@ -56,9 +49,14 @@ def get_indexes(obj):
         Generator yielding tuples (index_name, key, value)
     """
 
-    meta_cls = get_meta(type(obj))
+    cls = type(obj)
 
-    return meta_cls.get_indexes(obj)
+    if issubclass(cls, PersistableMeta):
+        meta_cls = cls
+    else:
+        meta_cls = type(cls)
+
+    return meta_cls.get_index_entries(obj)
 
 
 def is_indexable(cls):
@@ -76,7 +74,7 @@ def is_indexable(cls):
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
-    Its main purpose is to provide type names and attributes information of
+    Its main purpose is to provide type names and attribute information of
     persistable types(classes).
     """
     def __init__(self, cls):
@@ -115,11 +113,11 @@ class Descriptor(object):
 
 
 class Persistable(object):
-    ''' The base of all persistable objects.
+    """ The base of all persistable objects.
 
     Any object stored in the db must inherit from this class.
     Any object having Persistable as it's base are considered persistable.
-    '''
+    """
 
 
 class DiscriptorType(type):
@@ -181,7 +179,7 @@ class PersistableMeta(type, Persistable):
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
     @classmethod
-    def get_indexes(mcs, obj):
+    def get_index_entries(mcs, obj):
         if isinstance(obj, type):
             yield (mcs.index_name, 'id', obj.__name__)
         else:
@@ -247,7 +245,6 @@ class AttributedBase(Persistable):
 
         obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
-        # setup default values for attributes
         descriptor = type(cls).get_descriptor(cls)
 
         for name, attr in descriptor.attributes.items():

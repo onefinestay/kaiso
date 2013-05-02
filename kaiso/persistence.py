@@ -14,8 +14,8 @@ from kaiso.relationships import InstanceOf
 from kaiso.serialize import (
     dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
 from kaiso.types import (
-    Persistable, PersistableMeta, Relationship,
-    AttributedBase, get_indexes, get_index_name, is_indexable)
+    Descriptor, Persistable, PersistableMeta, Relationship,
+    AttributedBase, get_index_entries, get_index_name, is_indexable)
 
 log = getLogger(__name__)
 
@@ -31,17 +31,17 @@ class TypeSystem(AttributedBase):
     version = Uuid()
 
 
-def get_index_filter(obj):
+def get_attr_filter(obj):
     """ Generates a dictionary, that will identify the given ``obj``
-    in an index.
+    based on it's unique attributes.
 
     Args:
         obj: An object to look up by index
 
     Returns:
-        A dictionary of key-value pairs to match in the index
+        A dictionary of key-value pairs to indentify an object by.
     """
-    indexes = get_indexes(obj)
+    indexes = get_index_entries(obj)
     index_filter = dict((key, value) for _, key, value in indexes)
     return index_filter
 
@@ -62,10 +62,9 @@ class Storage(object):
         Args:
             connection_uri: A URI used to connect to the graph database.
         """
-        self._conn_uri = connection_uri
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
-        self.dynamic_type = None
+        self._dynamic_meta = None
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -96,7 +95,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties, self.dynamic_type)
+            obj = dict_to_object(properties, self._dynamic_meta)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -114,7 +113,7 @@ class Storage(object):
                 yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
-        indexes = get_indexes(obj)
+        indexes = get_index_entries(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
                 index_type = neo4j.Relationship
@@ -146,7 +145,7 @@ class Storage(object):
             if cls is None:
                 bases = tuple(dyn_type.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                self.dynamic_type(str(type_id), bases, attrs)
+                self._dynamic_meta(str(type_id), bases, attrs)
 
     def _get_changes(self, persistable):
         changes = {}
@@ -185,7 +184,8 @@ class Storage(object):
                     modified_attrs[name] = attr
 
             del_attrs = set(attrs)
-            for name in dir(persistable):
+
+            for name in Descriptor(persistable).attributes.keys():
                 del_attrs.discard(name)
 
             for name in del_attrs:
@@ -194,11 +194,11 @@ class Storage(object):
             if modified_attrs:
                 changes['attributes'] = modified_attrs
         else:
-            existing = self.get(obj_type, **get_index_filter(persistable))
+            existing = self.get(obj_type, **get_attr_filter(persistable))
 
             if existing is not None:
-                existing_props = object_to_dict(existing, self.dynamic_type)
-                props = object_to_dict(persistable, self.dynamic_type)
+                existing_props = object_to_dict(existing, self._dynamic_meta)
+                props = object_to_dict(persistable, self._dynamic_meta)
 
                 if existing_props == props:
                     return existing, {}
@@ -209,7 +209,7 @@ class Storage(object):
 
     def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
-            cls, self.type_system, self.dynamic_type)
+            cls, self.type_system, self._dynamic_meta)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -224,7 +224,7 @@ class Storage(object):
         return cls
 
     def _update(self, persistable, existing, changes):
-        for (_, index_attr, _) in get_indexes(existing):
+        for _, index_attr, _ in get_index_entries(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
@@ -240,7 +240,7 @@ class Storage(object):
             set_clauses = ''
 
         if isinstance(persistable, type):
-            descr = self.dynamic_type.get_descriptor(persistable)
+            descr = self._dynamic_meta.get_descriptor(persistable)
 
             query_args = {'type_id': descr.type_id}
 
@@ -256,8 +256,10 @@ class Storage(object):
             else:
                 where = ''
 
+            index_name = self._dynamic_meta.index_name
+
             query = join_lines(
-                'START n=node:%s(id={type_id})' % self.dynamic_type.index_name,
+                'START n=node:%s(id={type_id})' % index_name,
                 set_clauses,
                 'MATCH attr -[r:DECLAREDON]-> n',
                 where,
@@ -302,8 +304,8 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-            # self._update_types(obj_type)
-            query = get_create_relationship_query(obj, self.dynamic_type)
+
+            query = get_create_relationship_query(obj, self._dynamic_meta)
 
         else:
             # object is an instance; create its type, its hierarchy and then
@@ -323,10 +325,10 @@ class Storage(object):
             query_args = {
                 'type_id': obj_type.get_descriptor(obj_type).type_id,
                 'rel_props': object_to_dict(
-                    InstanceOf(None, None), self.dynamic_type),
+                    InstanceOf(None, None), self._dynamic_meta),
             }
 
-        query_args['props'] = object_to_dict(obj, self.dynamic_type, False)
+        query_args['props'] = object_to_dict(obj, self._dynamic_meta, False)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
@@ -344,14 +346,14 @@ class Storage(object):
             - ``attrs`` lists the attributes defined on the type
         """
         query = join_lines(
-            'START ts=node:typesystem(id="TypeSystem")',
+            'START %s' % get_start_clause(self.type_system, 'ts'),
             'MATCH',
             '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
             '  tpe <-[:DECLAREDON*0..]- attr,',
             '  tpe -[:ISA*0..1]-> base',
             'RETURN tpe.id,  length(p) AS level,',
-            '  filter(b_id in collect(distinct base.id): b_id <> tpe.id),',
-            '  filter(a in collect(distinct attr): a.id? <> tpe.id)',
+            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),',
+            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
             'ORDER BY level'
         )
 
@@ -380,6 +382,11 @@ class Storage(object):
         """
         return dict_to_object(object_dict, self.dynamic_type)
 
+    def create_type(self, name, bases, attrs):
+        """ Creates a new class given the name, bases and attrs given.
+        """
+        return self._dynamic_meta(name, bases, attrs)
+
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
         If a matching object (by unique keys) already exists, it will
@@ -398,14 +405,15 @@ class Storage(object):
         else:
             return self._update(persistable, existing, changes)
 
-    def get(self, cls, **index_filter):
-        index_filter = dict_to_db_values_dict(index_filter)
+    def get(self, cls, **attr_filter):
+        attr_filter = dict_to_db_values_dict(attr_filter)
+
+        if not attr_filter:
+            return None
 
         query_args = {}
 
-        indexes = index_filter.items()
-        if len(indexes) == 0:
-            return None
+        indexes = attr_filter.items()
 
         if issubclass(cls, (Relationship, PersistableMeta)):
             idx_name = get_index_name(cls)
@@ -482,12 +490,16 @@ class Storage(object):
 
         Args:
             obj: The object to delete.
+
+        Returns:
+            A tuple: with (number of nodes removed, number of rels removed)
         """
         if isinstance(obj, Relationship):
             query = join_lines(
                 'START {}, {}',
                 'MATCH n1 -[rel]-> n2',
-                'DELETE rel'
+                'DELETE rel',
+                'RETURN 0, count(rel)'
             ).format(
                 get_start_clause(obj.start, 'n1'),
                 get_start_clause(obj.end, 'n2'),
@@ -498,7 +510,8 @@ class Storage(object):
                 'MATCH attr -[:DECLAREDON]-> obj',
                 'DELETE attr',
                 'MATCH obj -[rel]- ()',
-                'DELETE obj, rel'
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
             ).format(
                 get_start_clause(obj, 'obj')
             )
@@ -506,14 +519,15 @@ class Storage(object):
             query = join_lines(
                 'START {}',
                 'MATCH obj -[rel]- ()',
-                'DELETE obj, rel'
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
             ).format(
                 get_start_clause(obj, 'obj')
             )
 
         # TODO: delete node/rel from indexes
 
-        cypher.execute(self._conn, query)
+        return next(self._execute(query))
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
@@ -542,7 +556,7 @@ class Storage(object):
 
     def initialize(self):
         type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
-        self.dynamic_type = type(type_name, (PersistableMeta,), {})
+        self._dynamic_meta = type(type_name, (PersistableMeta,), {})
 
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
