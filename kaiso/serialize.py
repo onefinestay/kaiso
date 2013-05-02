@@ -78,7 +78,7 @@ def dict_to_db_values_dict(data):
     return dict((k, object_to_db_value(v)) for k, v in data.items())
 
 
-def object_to_dict(obj, dynamic_type=PersistableMeta, include_none=True):
+def object_to_dict(obj, type_registry, include_none=True):
     """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value
@@ -126,7 +126,7 @@ def object_to_dict(obj, dynamic_type=PersistableMeta, include_none=True):
                 properties['default'] = obj.default
 
     else:
-        descr = dynamic_type.get_descriptor(obj_type)
+        descr = type_registry.get_descriptor(obj_type)
 
         for name, attr in descr.attributes.items():
             try:
@@ -145,7 +145,7 @@ def object_to_dict(obj, dynamic_type=PersistableMeta, include_none=True):
     return properties
 
 
-def dict_to_object(properties, dynamic_type=PersistableMeta):
+def dict_to_object(properties, type_registry):
     """ Converts a dict into a persistable object.
 
     The properties dict needs at least a __type__ key containing the name
@@ -180,7 +180,7 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
         # we are looking at an instance object
         cls_id = type_id
 
-    cls = dynamic_type.get_class_by_id(cls_id)
+    cls = type_registry.get_class_by_id(cls_id)
 
     if cls_id != type_id:
         return cls
@@ -191,7 +191,7 @@ def dict_to_object(properties, dynamic_type=PersistableMeta):
             for attr_name, value in properties.iteritems():
                 setattr(obj, attr_name, value)
         else:
-            descr = dynamic_type.get_descriptor_by_id(cls_id)
+            descr = type_registry.get_descriptor_by_id(cls_id)
 
             for attr_name, attr in descr.attributes.items():
                 try:

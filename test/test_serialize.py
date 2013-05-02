@@ -25,30 +25,30 @@ class Spam(Entity):
 
 
 def test_classes_to_dict():
-    dct = object_to_dict(Entity)
+    dct = object_to_dict(Entity, PersistableMeta)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Entity'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert obj is Entity
 
-    dct = object_to_dict(Foo)
+    dct = object_to_dict(Foo, PersistableMeta)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Foo'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert obj is Foo
 
 
 def test_objects():
-    dct = object_to_dict(Entity())
+    dct = object_to_dict(Entity(), PersistableMeta)
     assert dct == {'__type__': 'Entity'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert isinstance(obj, Entity)
 
-    dct = object_to_dict(Foo())
+    dct = object_to_dict(Foo(), PersistableMeta)
     assert dct == {'__type__': 'Foo'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert isinstance(obj, Foo)
 
 
@@ -57,13 +57,14 @@ def test_attribute():
     """
     # Attribute dicts always contain both ``unique`` and ``required`` keys.
     attr = Bar(unique=True)
-    dct = object_to_dict(attr)
+    dct = object_to_dict(attr, PersistableMeta)
     assert dct == {
         '__type__': 'Bar', 'unique': True, 'required': False, 'name': None}
 
     # Attribute objects have default values of ``None`` for ``unique``
     # and ``required``.
-    obj = dict_to_object({'__type__': 'Bar', 'unique': True, 'name': None})
+    obj = dict_to_object(
+        {'__type__': 'Bar', 'unique': True, 'name': None}, PersistableMeta)
     assert isinstance(obj, Bar)
     assert obj.unique is True
     assert obj.required is None
@@ -71,28 +72,28 @@ def test_attribute():
 
 
 def test_relationship():
-    dct = object_to_dict(Relationship(None, None))
+    dct = object_to_dict(Relationship(None, None), PersistableMeta)
     assert dct == {'__type__': 'Relationship'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert isinstance(obj, Relationship)
 
 
 def test_obj_with_attrs():
     spam = Spam(id=None)
 
-    dct = object_to_dict(spam, include_none=False)
+    dct = object_to_dict(spam, PersistableMeta, include_none=False)
     assert dct == {'__type__': 'Spam', 'ham': 'eggs'}
 
-    dct = object_to_dict(spam, include_none=True)
+    dct = object_to_dict(spam, PersistableMeta, include_none=True)
     assert dct == {'__type__': 'Spam', 'id': None, 'ham': 'eggs'}
 
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
     dct.pop('ham')  # removing an attr with defaults
-    obj = dict_to_object(dct)
+    obj = dict_to_object(dct, PersistableMeta)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
@@ -102,12 +103,12 @@ def test_dynamic_type():
 
     Foobar = DynamicType('Foobar', (Entity,), {})
 
-    dct = object_to_dict(Foobar)
+    dct = object_to_dict(Foobar, PersistableMeta)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Foobar'}
 
     # since Foobar is only registered with DynamicType
     with pytest.raises(UnknownType):
-        obj = dict_to_object(dct)
+        obj = dict_to_object(dct, PersistableMeta)
 
     obj = dict_to_object(dct, DynamicType)
     assert obj is Foobar
@@ -189,7 +190,7 @@ def test_attribute_types():
 
 def test_missing_info():
     with pytest.raises(DeserialisationError):
-        dict_to_object({})
+        dict_to_object({}, PersistableMeta)
 
 
 def test_IsA_and_InstanceOf_type_relationships():
