@@ -8,7 +8,7 @@ from kaiso.types import Entity
 def test_save_dynamic_type(storage):
 
     attrs = {'id': String(unique=True)}
-    Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
+    Foobar = storage.create_type('Foobar', (Entity,), attrs)
 
     storage.save(Foobar)
 
@@ -22,7 +22,7 @@ def test_save_dynamic_type(storage):
 def test_save_dynamic_typed_obj(storage):
 
     attrs = {'id': String(unique=True)}
-    Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
+    Foobar = storage.create_type('Foobar', (Entity,), attrs)
 
     foo = Foobar(id='spam')
     storage.save(foo)
@@ -35,7 +35,7 @@ def test_save_dynamic_typed_obj(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_add_attr_to_type(storage):
-    Foobar = storage.dynamic_type('Foobar', (Entity,), {})
+    Foobar = storage.create_type('Foobar', (Entity,), {})
     storage.save(Foobar)
 
     Foobar.ham = String(default='eggs')
@@ -52,7 +52,7 @@ def test_add_attr_to_type(storage):
 @pytest.mark.usefixtures('storage')
 def test_remove_attr_from_type(storage):
     attrs = {'ham': String()}
-    Foobar = storage.dynamic_type('Foobar', (Entity,), attrs)
+    Foobar = storage.create_type('Foobar', (Entity,), attrs)
     storage.save(Foobar)
 
     del Foobar.ham
@@ -74,7 +74,7 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     storage.save(Ham)
 
     attrs = {'egg': String(), 'spam': String()}
-    DynHam = storage.dynamic_type('Ham', (Entity,), attrs)
+    DynHam = storage.create_type('Ham', (Entity,), attrs)
     storage.save(DynHam)
 
     del Ham.egg
@@ -90,11 +90,11 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_load_dynamic_types(storage):
-    Animal = storage.dynamic_type('Animal', (Entity,), {'id': String()})
-    Horse = storage.dynamic_type('Horse', (Animal,), {'hoof': String()})
-    Duck = storage.dynamic_type('Duck', (Animal,), {'beek': String()})
-    Beaver = storage.dynamic_type('Beaver', (Animal,), {'tail': String()})
-    Platypus = storage.dynamic_type(
+    Animal = storage.create_type('Animal', (Entity,), {'id': String()})
+    Horse = storage.create_type('Horse', (Animal,), {'hoof': String()})
+    Duck = storage.create_type('Duck', (Animal,), {'beek': String()})
+    Beaver = storage.create_type('Beaver', (Animal,), {'tail': String()})
+    Platypus = storage.create_type(
         'Platypus', (Duck, Beaver), {'egg': String()})
 
     storage.save(Horse)
@@ -129,7 +129,7 @@ def test_load_dynamic_types(storage):
 @pytest.mark.usefixtures('storage')
 def test_add_attr_to_type_via_2nd_storage(storage):
     attrs = {'id': String(unique=True)}
-    Shrub = storage.dynamic_type('Shrub', (Entity,), attrs)
+    Shrub = storage.create_type('Shrub', (Entity,), attrs)
 
     shrub = Shrub(id='spam')
     storage.save(shrub)

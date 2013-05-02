@@ -348,6 +348,11 @@ class Storage(object):
 
         return obj
 
+    def create_type(self, name, bases, attrs):
+        """ Creates a new class given the name, bases and attrs given.
+        """
+        return self._dynamic_meta(name, bases, attrs)
+
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
         If a matching object (by unique keys) already exists, it will
