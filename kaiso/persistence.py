@@ -459,12 +459,16 @@ class Storage(object):
 
         Args:
             obj: The object to delete.
+
+        Returns:
+            A tuple: with (number of nodes removed, number of rels removed)
         """
         if isinstance(obj, Relationship):
             query = join_lines(
                 'START {}, {}',
                 'MATCH n1 -[rel]-> n2',
-                'DELETE rel'
+                'DELETE rel',
+                'RETURN 0, count(rel)'
             ).format(
                 get_start_clause(obj.start, 'n1'),
                 get_start_clause(obj.end, 'n2'),
@@ -475,7 +479,8 @@ class Storage(object):
                 'MATCH attr -[:DECLAREDON]-> obj',
                 'DELETE attr',
                 'MATCH obj -[rel]- ()',
-                'DELETE obj, rel'
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
             ).format(
                 get_start_clause(obj, 'obj')
             )
@@ -483,14 +488,15 @@ class Storage(object):
             query = join_lines(
                 'START {}',
                 'MATCH obj -[rel]- ()',
-                'DELETE obj, rel'
+                'DELETE obj, rel',
+                'RETURN count(obj), count(rel)'
             ).format(
                 get_start_clause(obj, 'obj')
             )
 
         # TODO: delete node/rel from indexes
 
-        self._execute(query)
+        return next(self._execute(query))
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
