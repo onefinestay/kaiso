@@ -133,7 +133,7 @@ class Storage(object):
 
     def _load_types(self):
         query = join_lines(
-            'START ts=node:typesystem(id="TypeSystem")',
+            'START %s' % get_start_clause(self.type_system, 'ts'),
             'MATCH',
             '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
             '  tpe <-[:DECLAREDON*0..]- attr,',
