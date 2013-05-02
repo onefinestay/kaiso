@@ -65,7 +65,7 @@ class Storage(object):
         self._conn_uri = connection_uri
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
-        self.dynamic_type = None
+        self._dynamic_meta = None
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -96,7 +96,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties, self.dynamic_type)
+            obj = dict_to_object(properties, self._dynamic_meta)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -146,7 +146,7 @@ class Storage(object):
 
         rows = self.query(query)
 
-        dyn_type = self.dynamic_type
+        dyn_type = self._dynamic_meta
 
         for type_id, _, bases, attrs in rows:
             try:
@@ -160,7 +160,7 @@ class Storage(object):
             if cls is None:
                 bases = tuple(dyn_type.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                self.dynamic_type(str(type_id), bases, attrs)
+                self._dynamic_meta(str(type_id), bases, attrs)
 
     def _get_changes(self, persistable):
         changes = {}
@@ -211,8 +211,8 @@ class Storage(object):
             existing = self.get(obj_type, **get_attr_filter(persistable))
 
             if existing is not None:
-                existing_props = object_to_dict(existing, self.dynamic_type)
-                props = object_to_dict(persistable, self.dynamic_type)
+                existing_props = object_to_dict(existing, self._dynamic_meta)
+                props = object_to_dict(persistable, self._dynamic_meta)
 
                 if existing_props == props:
                     return existing, {}
@@ -223,7 +223,7 @@ class Storage(object):
 
     def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
-            cls, self.type_system, self.dynamic_type)
+            cls, self.type_system, self._dynamic_meta)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -254,7 +254,7 @@ class Storage(object):
             set_clauses = ''
 
         if isinstance(persistable, type):
-            descr = self.dynamic_type.get_descriptor(persistable)
+            descr = self._dynamic_meta.get_descriptor(persistable)
 
             query_args = {'type_id': descr.type_id}
 
@@ -271,7 +271,7 @@ class Storage(object):
                 where = ''
 
             query = join_lines(
-                'START n=node:%s(id={type_id})' % self.dynamic_type.index_name,
+                'START n=node:%s(id={type_id})' % self._dynamic_meta.index_name,
                 set_clauses,
                 'MATCH attr -[r:DECLAREDON]-> n',
                 where,
@@ -317,7 +317,7 @@ class Storage(object):
             # object is a relationship
             obj_type = type(obj)
             # self._update_types(obj_type)
-            query = get_create_relationship_query(obj, self.dynamic_type)
+            query = get_create_relationship_query(obj, self._dynamic_meta)
 
         else:
             # object is an instance; create its type, its hierarchy and then
@@ -337,10 +337,10 @@ class Storage(object):
             query_args = {
                 'type_id': obj_type.get_descriptor(obj_type).type_id,
                 'rel_props': object_to_dict(
-                    InstanceOf(None, None), self.dynamic_type),
+                    InstanceOf(None, None), self._dynamic_meta),
             }
 
-        query_args['props'] = object_to_dict(obj, self.dynamic_type, False)
+        query_args['props'] = object_to_dict(obj, self._dynamic_meta, False)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
@@ -510,7 +510,7 @@ class Storage(object):
 
     def initialize(self):
         type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
-        self.dynamic_type = type(type_name, (PersistableMeta,), {})
+        self._dynamic_meta = type(type_name, (PersistableMeta,), {})
 
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
