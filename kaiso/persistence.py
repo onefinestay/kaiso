@@ -132,23 +132,9 @@ class Storage(object):
             set_store_for_object(obj, self)
 
     def _load_types(self):
-        query = join_lines(
-            'START ts=node:typesystem(id="TypeSystem")',
-            'MATCH',
-            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
-            '  tpe <-[:DECLAREDON*0..]- attr,',
-            '  tpe -[:ISA*0..1]-> base',
-            'RETURN tpe.id,  length(p) AS level,',
-            '  filter(b_id in collect(distinct base.id): b_id <> tpe.id),',
-            '  filter(a in collect(distinct attr): a.id? <> tpe.id)',
-            'ORDER BY level'
-        )
-
-        rows = self.query(query)
-
         dyn_type = self.dynamic_type
 
-        for type_id, _, bases, attrs in rows:
+        for type_id, bases, attrs in self.get_type_hierarchy():
             try:
                 cls = dyn_type.get_class_by_id(type_id)
 
@@ -347,6 +333,30 @@ class Storage(object):
         self._index_object(obj, node_or_rel)
 
         return obj
+
+    def get_type_hierarchy(self):
+        """ Returns the entire type hierarchy defined in the database.
+
+        Returns: A generator yielding tuples of the form
+        ``(type_id, bases, attrs)`` where
+            - ``type_id`` identifies the type
+            - ``bases`` lists the type_ids of the type's bases
+            - ``attrs`` lists the attributes defined on the type
+        """
+        query = join_lines(
+            'START ts=node:typesystem(id="TypeSystem")',
+            'MATCH',
+            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
+            '  tpe <-[:DECLAREDON*0..]- attr,',
+            '  tpe -[:ISA*0..1]-> base',
+            'RETURN tpe.id,  length(p) AS level,',
+            '  filter(b_id in collect(distinct base.id): b_id <> tpe.id),',
+            '  filter(a in collect(distinct attr): a.id? <> tpe.id)',
+            'ORDER BY level'
+        )
+
+        rows = self.query(query)
+        return ((type_id, bases, attrs) for type_id, _, bases, attrs in rows)
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.
