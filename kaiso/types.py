@@ -22,15 +22,6 @@ def get_declaring_class(cls, attr_name):
     return declaring_class
 
 
-def get_meta(cls):
-    if issubclass(cls, PersistableMeta):
-        meta_cls = cls
-    else:
-        meta_cls = type(cls)
-
-    return meta_cls
-
-
 def get_index_name(cls):
     """ Returns a cypher index name for a class.
 
@@ -58,7 +49,12 @@ def get_index_entries(obj):
         Generator yielding tuples (index_name, key, value)
     """
 
-    meta_cls = get_meta(type(obj))
+    cls = type(obj)
+
+    if issubclass(cls, PersistableMeta):
+        meta_cls = cls
+    else:
+        meta_cls = type(cls)
 
     return meta_cls.get_index_entries(obj)
 
