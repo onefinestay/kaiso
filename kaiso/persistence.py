@@ -490,7 +490,7 @@ class Storage(object):
 
         # TODO: delete node/rel from indexes
 
-        cypher.execute(self._conn, query)
+        self._execute(query)
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
