@@ -38,20 +38,20 @@ def get_start_clause(obj, name):
     return query
 
 
-def get_create_types_query(obj, root, type_registry):
+def get_create_types_query(cls, root, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
 
     Args:
-        obj: An object to create a type hierarchy for.
+        cls: An object to create a type hierarchy for.
 
     Returns:
         A tuple containing:
-        (cypher query, objects to create nodes for, the object names).
+        (cypher query, classes to create nodes for, the object names).
     """
     lines = []
-    objects = {}
+    classes = {}
 
     query_args = {
         'root_id': root.id,
@@ -63,7 +63,7 @@ def get_create_types_query(obj, root, type_registry):
 
     # filter type relationships that we want to persist
     type_relationships = []
-    for cls1, rel_cls, cls2 in get_type_relationships(obj):
+    for cls1, rel_cls, cls2 in get_type_relationships(cls):
         if issubclass(cls2, AttributedBase):
             type_relationships.append((cls1, rel_cls, cls2))
 
@@ -73,19 +73,19 @@ def get_create_types_query(obj, root, type_registry):
 
         name1 = cls1.__name__
 
-        if name1 in objects:
+        if name1 in classes:
             abstr1 = name1
         else:
             abstr1 = '(%s {%s_props})' % (name1, name1)
 
-        objects[name1] = cls1
+        classes[name1] = cls1
 
         if is_first:
             is_first = False
             ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
         else:
             name2 = cls2.__name__
-            objects[name2] = cls2
+            classes[name2] = cls2
 
             rel_name = rel_cls.__name__
             rel_type = rel_name.upper()
@@ -95,7 +95,7 @@ def get_create_types_query(obj, root, type_registry):
         lines.append(ln)
 
     # process attributes
-    for name, cls in objects.items():
+    for name, cls in classes.items():
 
         descriptor = type_registry.get_descriptor(cls)
         attributes = descriptor.declared_attributes
@@ -112,16 +112,16 @@ def get_create_types_query(obj, root, type_registry):
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
-    for key, obj in objects.iteritems():
-        query_args['%s_props' % key] = object_to_dict(obj, type_registry)
+    for key, cls in classes.iteritems():
+        query_args['%s_props' % key] = object_to_dict(cls, type_registry)
 
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
         'CREATE UNIQUE',
         (lines, ','),
-        'RETURN %s' % ', '.join(objects.keys())
+        'RETURN %s' % ', '.join(classes.keys())
     )
-    return query, objects.values(), query_args
+    return query, classes.values(), query_args
 
 
 def get_create_relationship_query(rel, type_registry):
