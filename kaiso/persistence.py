@@ -511,24 +511,21 @@ class Storage(object):
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
-            rel_query = 'n -[:{}]-> related'
+            rel_query = 'n -[relation:{}]-> related'
         elif ref_cls is Incoming:
-            rel_query = 'n <-[:{}]- related'
+            rel_query = 'n <-[relation:{}]- related'
 
         # TODO: should get the rel name from descriptor?
         rel_query = rel_query.format(rel_cls.__name__.upper())
 
-        query = 'START {idx_lookup} MATCH {rel_query} RETURN related'
+        query = 'START {idx_lookup} MATCH {rel_query} RETURN related, relation'
 
         query = query.format(
             idx_lookup=get_start_clause(obj, 'n'),
             rel_query=rel_query
         )
 
-        rows = self.query(query)
-        related_objects = (related_obj for (related_obj,) in rows)
-
-        return related_objects
+        return self.query(query)
 
     def delete(self, obj):
         """ Deletes an object from the store.
