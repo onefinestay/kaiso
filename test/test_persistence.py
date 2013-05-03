@@ -170,22 +170,8 @@ def test_simple_add_and_get_relationship(storage):
 
     assert type(queried_rel) == IndexedRelated
     assert queried_rel.id == rel.id
-
-
-@pytest.mark.usefixtures('storage')
-def test_delete_instance_types_remain(storage):
-    thing = Thing()
-    storage.save(thing)
-
-    storage.delete(thing)
-
-    # we are expecting the type to stay in place
-    rows = storage.query("""
-        START n=node:persistablemeta("id:*")
-        MATCH n-[:ISA|INSTANCEOF]->m
-        RETURN n""")
-    result = set(item for (item,) in rows)
-    assert result == {Thing}
+    assert queried_rel.start.id == thing1.id
+    assert queried_rel.end.id == thing2.id
 
 
 @pytest.mark.usefixtures('storage')
@@ -218,6 +204,48 @@ def test_delete_relationship(storage):
     assert str(thing1.id) in ids
     assert str(thing2.id) in ids
     assert 'Related' not in rels
+
+
+@pytest.mark.usefixtures('storage')
+def test_update_relationship_end_points(storage):
+    thing1 = Thing()
+    thing2 = Thing()
+    thing3 = Thing()
+
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(thing3)
+
+    rel = IndexedRelated(start=thing1, end=thing2)
+    storage.save(rel)
+
+    rel.end = thing3
+    storage.save(rel)
+    queried_rel = storage.get(IndexedRelated, id=rel.id)
+    assert queried_rel.start.id == thing1.id
+    assert queried_rel.end.id == thing3.id
+
+    rel.start = thing2
+    storage.save(rel)
+    queried_rel = storage.get(IndexedRelated, id=rel.id)
+    assert queried_rel.start.id == thing2.id
+    assert queried_rel.end.id == thing3.id
+
+
+@pytest.mark.usefixtures('storage')
+def test_delete_instance_types_remain(storage):
+    thing = Thing()
+    storage.save(thing)
+
+    storage.delete(thing)
+
+    # we are expecting the type to stay in place
+    rows = storage.query("""
+        START n=node:persistablemeta("id:*")
+        MATCH n-[:ISA|INSTANCEOF]->m
+        RETURN n""")
+    result = set(item for (item,) in rows)
+    assert result == {Thing}
 
 
 @pytest.mark.usefixtures('storage')
