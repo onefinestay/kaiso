@@ -201,18 +201,16 @@ class Storage(object):
                 props = object_to_dict(persistable, self._dynamic_meta)
 
                 if isinstance(persistable, Relationship):
-                    ex_start = get_attr_filter(existing.start)
-                    ex_end = get_attr_filter(existing.end)
-
-                    if hasattr(persistable, 'start'):
-                        pers_start = get_attr_filter(persistable.start)
-                        if ex_start != pers_start:
-                            props['start'] = persistable.start
-
-                    if hasattr(persistable, 'end'):
-                        pers_end = get_attr_filter(persistable.end)
-                        if ex_end != pers_end:
-                            props['end'] = persistable.end
+                    # if the relationship has endoints, also consider
+                    # whether those have changed
+                    for rel_attr in ['start', 'end']:
+                        new = getattr(persistable, rel_attr, None)
+                        if new is None:
+                            continue
+                        ex_rel_attr = getattr(existing, rel_attr)
+                        ex_rel_identifier = get_attr_filter(ex_rel_attr)
+                        if new != ex_rel_identifier:
+                            props[rel_attr] = new
 
                 if existing_props == props:
                     return existing, {}
