@@ -233,6 +233,34 @@ def test_update_relationship_end_points(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_update_relationship_missing_endpoints(storage):
+    # same as test_update_relationship_end_points, with the difference
+    # that the relationship is passed through deserialize(serialize())
+    # which strips the start/end references
+
+    thing1 = Thing()
+    thing2 = Thing()
+    thing3 = Thing()
+
+    storage.save(thing1)
+    storage.save(thing2)
+    storage.save(thing3)
+
+    rel = IndexedRelated(start=thing1, end=thing2)
+    storage.save(rel)
+
+    rel.end = thing3
+    storage.save(rel)
+    reserialized_rel = storage.deserialize(storage.serialize(rel))
+    reserialized_rel.start = thing2
+    storage.save(reserialized_rel)
+
+    queried_rel = storage.get(IndexedRelated, id=rel.id)
+    assert queried_rel.start.id == thing2.id
+    assert queried_rel.end.id == thing3.id
+
+
+@pytest.mark.usefixtures('storage')
 def test_delete_instance_types_remain(storage):
     thing = Thing()
     storage.save(thing)
