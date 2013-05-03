@@ -7,7 +7,7 @@ from kaiso.types import Entity
 
 
 class Contains(Relationship):
-    pass
+    id = Uuid(unique=True)
 
 
 class Box(Entity):
@@ -88,3 +88,20 @@ def test_many_children(storage):
 
     assert len(list(parent.contains)) == 2
     assert parent.contains.first().id in [child1.id, child2.id]
+
+
+@pytest.mark.usefixtures('storage')
+def test_reference_relationship_itself(storage):
+    parent = Box()
+    child = Box()
+
+    contains = Contains(parent, child)
+
+    storage.save(parent)
+    storage.save(child)
+    storage.save(contains)
+
+    fetched = storage.get(Box, id=str(child.id))
+    fetched_rel = next(fetched.contained_within.relationships)
+
+    assert fetched_rel.id == contains.id
