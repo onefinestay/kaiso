@@ -21,7 +21,7 @@ class RelationshipManager(object):
         self.obj = obj
         self.relationship_reference = relationship_reference
 
-    def __iter__(self):
+    def _related_objects(self):
         obj = self.obj
         relationship_reference = self.relationship_reference
 
@@ -33,6 +33,13 @@ class RelationshipManager(object):
             obj)
 
         return related_objects
+
+    def __iter__(self):
+        return (rel_obj for rel_obj, _ in self._related_objects())
+
+    @property
+    def relationship(self):
+        return next(rel for _, rel in self._related_objects())
 
     def first(self):
         return next(iter(self), None)

@@ -10,11 +10,21 @@ class Contains(Relationship):
     pass
 
 
+class ContainsWithId(Contains):
+    id = Uuid(unique=True)
+
+
 class Box(Entity):
     id = Uuid(unique=True)
 
     contains = Outgoing(Contains)
     contained_within = Incoming(Contains)
+
+
+class BoxWithRelId(Entity):
+    id = Uuid(unique=True)
+
+    contained_within = Incoming(ContainsWithId)
 
 
 @pytest.mark.usefixtures('storage')
@@ -88,3 +98,20 @@ def test_many_children(storage):
 
     assert len(list(parent.contains)) == 2
     assert parent.contains.first().id in [child1.id, child2.id]
+
+
+@pytest.mark.usefixtures('storage')
+def test_reference_relationship_itself(storage):
+    parent = BoxWithRelId()
+    child = BoxWithRelId()
+
+    contains = ContainsWithId(parent, child)
+
+    storage.save(parent)
+    storage.save(child)
+    storage.save(contains)
+
+    fetched = storage.get(BoxWithRelId, id=str(child.id))
+    fetched_rel = fetched.contained_within.relationship
+
+    assert fetched_rel.id == contains.id
