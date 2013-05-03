@@ -1,7 +1,6 @@
 from kaiso.exceptions import MultipleObjectsFound, NoResultFound
 from kaiso.references import get_store_for_object
 
-
 _attribute_types = {}
 
 
@@ -52,28 +51,13 @@ class RelationshipManager(object):
         return first
 
 
+def _is_relationship_reference(obj):
+    return isinstance(obj, RelationshipReference)
+
+
 class RelationshipReference(object):
     def __init__(self, relationship_class):
         self.relationship_class = relationship_class
 
     def get_manager(self, obj):
         return RelationshipManager(obj, self)
-
-
-class Attribute(object):
-    def __init__(self, unique=False):
-        self.unique = unique
-
-    @staticmethod
-    def to_python(value):
-        return value
-
-    @staticmethod
-    def to_db(value):
-        return value
-
-
-class DefaultableAttribute(Attribute):
-    def __init__(self, default=None, unique=False):
-        super(DefaultableAttribute, self).__init__(unique)
-        self.default = default
