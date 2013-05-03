@@ -200,6 +200,18 @@ class Storage(object):
                 existing_props = object_to_dict(existing, self._dynamic_meta)
                 props = object_to_dict(persistable, self._dynamic_meta)
 
+                if isinstance(persistable, Relationship):
+                    ex_start = get_attr_filter(existing.start)
+                    ex_end = get_attr_filter(existing.end)
+                    pers_start = get_attr_filter(persistable.start)
+                    pers_end = get_attr_filter(persistable.end)
+
+                    if ex_start != pers_start:
+                        props['start'] = persistable.start
+
+                    if ex_end != pers_end:
+                        props['end'] = persistable.end
+
                 if existing_props == props:
                     return existing, {}
 
@@ -270,19 +282,52 @@ class Storage(object):
             self._update_types(persistable)
         else:
             start_clause = get_start_clause(existing, 'n')
+            query = None
 
-            query = join_lines(
-                'START %s' % start_clause,
-                set_clauses,
-                'RETURN n'
-            )
-            query_args = changes
+            if isinstance(persistable, Relationship):
+                old_start = existing.start
+                old_end = existing.end
+
+                new_start = changes.pop('start', old_start)
+                new_end = changes.pop('end', old_end)
+
+                if old_start != new_start or old_end != new_end:
+                    start_clause = '%s, %s, %s, %s, %s' % (
+                        start_clause,
+                        get_start_clause(old_start, 'old_start'),
+                        get_start_clause(old_end, 'old_end'),
+                        get_start_clause(new_start, 'new_start'),
+                        get_start_clause(new_end, 'new_end')
+                    )
+
+                    rel_props = object_to_dict(persistable, self._dynamic_meta)
+
+                    query = join_lines(
+                        'START %s' % start_clause,
+                        'DELETE n',
+                        'CREATE new_start -[r:%s {rel_props}]-> new_end' % (
+                            rel_props['__type__'].upper()
+                        ),
+                        'RETURN r'
+                    )
+                    query_args = {'rel_props': rel_props}
+
+            if query is None:
+                query = join_lines(
+                    'START %s' % start_clause,
+                    set_clauses,
+                    'RETURN n'
+                )
+                query_args = changes
 
         try:
             (result,) = next(self._execute(query, **query_args))
         except StopIteration:
             # this can happen, if no attributes where changed on a type
             result = persistable
+
+        if isinstance(persistable, Relationship):
+            self._index_object(persistable, result)
         return result
 
     def _add(self, obj):
