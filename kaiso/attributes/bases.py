@@ -38,8 +38,8 @@ class RelationshipManager(object):
         return (rel_obj for rel_obj, _ in self._related_objects())
 
     @property
-    def relationship(self):
-        return next(rel for _, rel in self._related_objects())
+    def relationships(self):
+        return (rel for _, rel in self._related_objects())
 
     def first(self):
         return next(iter(self), None)

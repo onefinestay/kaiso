@@ -7,10 +7,6 @@ from kaiso.types import Entity
 
 
 class Contains(Relationship):
-    pass
-
-
-class ContainsWithId(Contains):
     id = Uuid(unique=True)
 
 
@@ -19,12 +15,6 @@ class Box(Entity):
 
     contains = Outgoing(Contains)
     contained_within = Incoming(Contains)
-
-
-class BoxWithRelId(Entity):
-    id = Uuid(unique=True)
-
-    contained_within = Incoming(ContainsWithId)
 
 
 @pytest.mark.usefixtures('storage')
@@ -102,16 +92,16 @@ def test_many_children(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_reference_relationship_itself(storage):
-    parent = BoxWithRelId()
-    child = BoxWithRelId()
+    parent = Box()
+    child = Box()
 
-    contains = ContainsWithId(parent, child)
+    contains = Contains(parent, child)
 
     storage.save(parent)
     storage.save(child)
     storage.save(contains)
 
-    fetched = storage.get(BoxWithRelId, id=str(child.id))
-    fetched_rel = fetched.contained_within.relationship
+    fetched = storage.get(Box, id=str(child.id))
+    fetched_rel = next(fetched.contained_within.relationships)
 
     assert fetched_rel.id == contains.id
