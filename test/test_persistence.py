@@ -234,6 +234,10 @@ def test_update_relationship_end_points(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_update_relationship_missing_endpoints(storage):
+    # same as test_update_relationship_end_points, with the difference
+    # that the relationship is passed through deserialize(serialize())
+    # which strips the start/end references
+
     thing1 = Thing()
     thing2 = Thing()
     thing3 = Thing()
