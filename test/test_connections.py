@@ -1,4 +1,5 @@
 import os
+import subprocess
 import shutil
 
 from mock import patch
@@ -106,3 +107,9 @@ class TestTempConnectionProcesses():
         with patch.object(kaiso.connection, 'TIMEOUT', 0):
             with pytest.raises(TempConnectionError):
                 get_connection('temp://8888')
+
+
+def test_temp_connection_no_neo4j_info():
+    with patch.object(subprocess, 'check_output', lambda _: None):
+        with pytest.raises(TempConnectionError):
+            get_connection('temp://8888')

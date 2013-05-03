@@ -28,3 +28,15 @@ class InstanceOf(Relationship):
     It maps to python's isinstance(obj, the_class) as
     InstanceOf(obj, the_class).
     """
+
+
+class DeclaredOn(Relationship):
+    """ Describes the relationship between a type and the properties that
+    instances of that type can have.
+    """
+
+
+class Defines(Relationship):
+    """ Relationship used by the ``TypeSystem`` to connect to the types
+    it defines.
+    """
