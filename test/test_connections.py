@@ -110,6 +110,12 @@ class TestTempConnectionProcesses():
 
 
 def test_temp_connection_no_neo4j_info():
-    with patch.object(subprocess, 'check_output', lambda _: None):
+    """ Verify that we throw an error if neo4j info cannot be determined.
+    """
+    def raise_os_error(_):
+        raise OSError()
+
+    with patch.object(subprocess, 'check_output') as check_output:
+        check_output.side_effect = raise_os_error
         with pytest.raises(TempConnectionError):
             get_connection('temp://8888')
