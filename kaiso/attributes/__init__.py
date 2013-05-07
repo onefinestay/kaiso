@@ -73,7 +73,9 @@ class DateTime(DefaultableAttribute):
 
 
 class Choice(String):
+    choices = None
+
     def __init__(self, *choices, **kwargs):
         # again, super(Choice) vs Choice.__init__
         super(Choice, self).__init__(**kwargs)
-        self.choices = choices
+        self.choices = list(choices)

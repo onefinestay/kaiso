@@ -2,8 +2,7 @@ from kaiso.attributes.bases import get_attibute_for_type
 from kaiso.exceptions import DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import (
-    Attribute, DefaultableAttribute, Descriptor, PersistableMeta)
+from kaiso.types import DefaultableAttribute, Descriptor, PersistableMeta
 
 
 def get_changes(old, new):
@@ -108,19 +107,6 @@ def object_to_dict(obj, type_registry, include_none=True):
     if isinstance(obj, type):
         properties['id'] = Descriptor(obj).type_id
 
-    elif isinstance(obj, Attribute):
-        # TODO: move logic to handle Attribute attrs into descriptor
-        #       and let this code just treat them like any other persistable
-        if obj.name is not None or include_none:
-            properties['name'] = obj.name
-
-        properties['unique'] = obj.unique
-        properties['required'] = obj.required
-
-        if isinstance(obj, DefaultableAttribute):
-            if obj.default is not None or include_none:
-                properties['default'] = obj.default
-
     else:
         descr = type_registry.get_descriptor(obj_type)
 
@@ -183,19 +169,15 @@ def dict_to_object(properties, type_registry):
     else:
         obj = cls.__new__(cls)
 
-        if isinstance(obj, Attribute):
-            for attr_name, value in properties.iteritems():
-                setattr(obj, attr_name, value)
-        else:
-            descr = type_registry.get_descriptor_by_id(cls_id)
+        descr = type_registry.get_descriptor_by_id(cls_id)
 
-            for attr_name, attr in descr.attributes.items():
-                try:
-                    value = properties[attr_name]
-                except KeyError:
-                    pass
-                else:
-                    value = attr.to_python(value)
-                    setattr(obj, attr_name, value)
+        for attr_name, attr in descr.attributes.items():
+            try:
+                value = properties[attr_name]
+            except KeyError:
+                pass
+            else:
+                value = attr.to_python(value)
+                setattr(obj, attr_name, value)
 
     return obj

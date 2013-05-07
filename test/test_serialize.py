@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError, UnknownType
-from kaiso.attributes import String, Uuid
+from kaiso.attributes import String, Uuid, Choice
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes,
@@ -69,6 +69,19 @@ def test_attribute():
     assert obj.unique is True
     assert obj.required is None
     assert obj.name is None
+
+
+def test_choices():
+    attr = Choice('ham', 'spam', 'eggs')
+    dct = object_to_dict(attr, PersistableMeta)
+    assert dct == {
+        '__type__': 'Choice', 'name': None,
+        'unique': False, 'required': False, 'default': None,
+        'choices': ['ham', 'spam', 'eggs']}
+
+    obj = dict_to_object(dct, PersistableMeta)
+    assert isinstance(obj, Choice)
+    assert obj.choices == ['ham', 'spam', 'eggs']
 
 
 def test_relationship():

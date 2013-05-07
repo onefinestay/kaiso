@@ -1,4 +1,4 @@
-from inspect import getmembers, getmro
+from inspect import getmembers, getmro, isfunction, isdatadescriptor
 
 from kaiso.exceptions import UnknownType, TypeAlreadyRegistered
 
@@ -99,7 +99,17 @@ class Descriptor(object):
 
     @property
     def attributes(self):
-        attributes = dict(getmembers(self.cls, _is_attribute))
+        if issubclass(self.cls, Attribute):
+            attributes = {}
+            for name, value in getmembers(self.cls):
+                if not (name.startswith('_')
+                        or isfunction(value)
+                        or isdatadescriptor(value)):
+                    attr = Attribute()
+                    attributes[name] = attr
+        else:
+            attributes = dict(getmembers(self.cls, _is_attribute))
+
         return attributes
 
     @property
