@@ -100,6 +100,18 @@ class Descriptor(object):
     @property
     def attributes(self):
         attributes = dict(getmembers(self.cls, _is_attribute))
+
+        if issubclass(self.cls, Attribute):
+            # Because we don't have the attrs on the base Attribute classes
+            # declared using Attribute instances, we have to pretend we did,
+            # so that they behave like them.
+            attributes['name'] = Attribute()
+            attributes['unique'] = Attribute()
+            attributes['required'] = Attribute()
+
+            if issubclass(self.cls, DefaultableAttribute):
+                attributes['default'] = Attribute()
+
         return attributes
 
     @property
