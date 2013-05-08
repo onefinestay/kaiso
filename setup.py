@@ -51,7 +51,7 @@ test_requirements, dependency_links = parse_requirements(
 
 setup(
     name='kaiso',
-    version='0.1-dev',
+    version='0.1.1',
     description='A queryable object persistence and relationship framework'
                 ' based on the Neo4j graph database.',
     author='onefinestay',
