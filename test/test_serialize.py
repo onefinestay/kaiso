@@ -74,7 +74,7 @@ def test_attribute():
 def test_choices():
     attr = Choice('ham', 'spam', 'eggs')
     dct = object_to_dict(attr, PersistableMeta)
-    print dct
+
     assert dct == {
         '__type__': 'Choice', 'name': None,
         'unique': False, 'required': False, 'default': None,
