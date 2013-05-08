@@ -627,3 +627,77 @@ def test_serialize_deserialize(storage):
 
     obj = storage.deserialize(dct)
     assert obj is Entity
+
+
+@pytest.mark.usefixtures('storage')
+def test_recursive_delete(storage):
+    class Model(Entity):
+        id = Uuid(unique=True)
+
+    class City(Model):
+        pass
+
+    class Home(Model):
+        pass
+
+    class Room(Model):
+        pass
+
+    class Chest(Model):
+        pass
+
+    class Stuff(Model):
+        pass
+
+    class Store(Model):
+        pass
+
+    class Seal(Model):
+        pass
+
+    class Contains(Relationship):
+        pass
+
+    class AppliesTo(Relationship):
+        pass
+
+    class StoreIn(Relationship):
+        pass
+
+    c = City()
+    h = Home()
+    r1 = Room()
+    r2 = Room()
+    ch = Chest()
+    stuff1 = Stuff()
+    stuff2 = Stuff()
+
+    storage.save(c)
+    storage.save(h)
+    storage.save(r1)
+    storage.save(r2)
+    storage.save(ch)
+    storage.save(stuff1)
+    storage.save(stuff2)
+
+    storage.save(Contains(c, h))
+    storage.save(Contains(h, r1))
+    storage.save(Contains(h, r2))
+    storage.save(Contains(r1, ch))
+    storage.save(Contains(r1, stuff1))
+    storage.save(Contains(r2, stuff2))
+
+    store1 = Store()
+    storage.save(store1)
+    storage.save(AppliesTo(store1, stuff1))
+    storage.save(StoreIn(store1, ch))
+
+    store2 = Store()
+    storage.save(store2)
+    storage.save(AppliesTo(store2, stuff2))
+    storage.save(StoreIn(store2, ch))
+
+    seal = Seal()
+    storage.save(seal)
+    storage.save(AppliesTo(seal, ch))
+
