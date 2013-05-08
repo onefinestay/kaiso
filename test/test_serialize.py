@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError, UnknownType
-from kaiso.attributes import String, Uuid
+from kaiso.attributes import String, Uuid, Choice
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes,
@@ -71,6 +71,20 @@ def test_attribute():
     assert obj.name is None
 
 
+def test_choices():
+    attr = Choice('ham', 'spam', 'eggs')
+    dct = object_to_dict(attr, PersistableMeta)
+
+    assert dct == {
+        '__type__': 'Choice', 'name': None,
+        'unique': False, 'required': False, 'default': None,
+        'choices': ['ham', 'spam', 'eggs']}
+
+    obj = dict_to_object(dct, PersistableMeta)
+    assert isinstance(obj, Choice)
+    assert obj.choices == ('ham', 'spam', 'eggs')
+
+
 def test_relationship():
     dct = object_to_dict(Relationship(None, None), PersistableMeta)
     assert dct == {'__type__': 'Relationship'}
@@ -103,7 +117,7 @@ def test_dynamic_type():
 
     Foobar = DynamicType('Foobar', (Entity,), {})
 
-    dct = object_to_dict(Foobar, PersistableMeta)
+    dct = object_to_dict(Foobar, DynamicType)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Foobar'}
 
     # since Foobar is only registered with DynamicType
