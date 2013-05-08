@@ -1,14 +1,14 @@
 import os
+import socket
 import subprocess
 import shutil
 
-from mock import patch
+from mock import patch, ANY
 import pytest
-import socket
-import requests
 
 import kaiso.connection
-from kaiso.connection import get_connection, TempConnectionError
+from kaiso.connection import get_connection, write_config
+from kaiso.exceptions import ConnectionError
 
 
 @pytest.mark.slow
@@ -22,25 +22,36 @@ class TestTempConnectionProcesses():
            whch sometimes results in a SocketError. This is possibly
            a bug in neo4j, but it shouldn't influence these tests.
     """
-    temp_data_dir = '/tmp/foo'
+    temp_dir = '/tmp/foo'
+
+    def setup_method(self, method):
+        # patch write_config to itself so we can assert arguments
+        self._p_write_config = patch('kaiso.connection.write_config')
+        self.write_config = self._p_write_config.start()
+        self.write_config.side_effect = write_config
 
     def teardown_method(self, method):
-        """ Kill process and remove temp_data_dir after every test.
-        """
+        # kill processes
         for key, temp_neo4j in kaiso.connection._temporary_databases.items():
             temp_neo4j.process.terminate()
             temp_neo4j.process.wait()
             del kaiso.connection._temporary_databases[key]
-        if os.path.exists(self.temp_data_dir):
-            shutil.rmtree(self.temp_data_dir)
+        # remove temp directory
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+        # stop patch
+        self._p_write_config.stop()
 
     def test_temp_connection_defaults(self):
         """ Verify temporary connection with default options.
         """
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
             conn = get_connection('temp://')
-        assert conn == "http://127.0.0.1:7475/db/data/"
-        assert "neo4j_version" in requests.get(conn).text
+
+        assert conn == "http://localhost:7475/db/data/"
+        self.write_config.assert_called_once_with(
+            ANY, 7475, ANY, 'localhost'
+        )
 
     def test_temp_connection_custom_port(self):
         """ Verify temporary connection on a custom port.
@@ -48,18 +59,25 @@ class TestTempConnectionProcesses():
         port = "7777"
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
             conn = get_connection('temp://:{}'.format(port))
-        assert conn == "http://127.0.0.1:{}/db/data/".format(port)
-        assert "neo4j_version" in requests.get(conn).text
+
+        assert conn == "http://localhost:{}/db/data/".format(port)
+        self.write_config.assert_called_once_with(
+            ANY, 7777, ANY, 'localhost'
+        )
 
     def test_temp_connection_custom_data_dir(self):
         """ Verify temporary connection with a custom data directory.
         """
-        data_dir = self.temp_data_dir
+        temp_dir = self.temp_dir
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
-            conn = get_connection('temp://{}'.format(data_dir))
-        assert conn == "http://127.0.0.1:7475/db/data/"
-        assert "neo4j_version" in requests.get(conn).text
-        assert os.path.exists(data_dir)
+            conn = get_connection('temp://{}'.format(temp_dir))
+
+        assert conn == "http://localhost:7475/db/data/"
+        assert os.path.exists(temp_dir)
+        self.write_config.assert_called_once_with(
+            os.path.join(temp_dir, 'server.properties'), 7475,
+            os.path.join(temp_dir, 'data'), 'localhost'
+        )
 
     def test_temp_connection_custom_bind_iface(self):
         """ Verify temporary connection with bound to a specific interface.
@@ -68,28 +86,27 @@ class TestTempConnectionProcesses():
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
             conn = get_connection('temp://{}'.format(bind_iface))
 
-        assert conn == "http://{}:7475/db/data/".format(bind_iface)
-        # ensure we can reach the webservice via an external hostname
-        hostname = socket.gethostname()
-        external_url = "http://{}:7475/db/data/".format(hostname)
-        assert "neo4j_version" in requests.get(external_url).text
+        assert conn == "http://localhost:7475/db/data/"
+        self.write_config.assert_called_once_with(
+            ANY, 7475, ANY, bind_iface
+        )
 
     def test_temp_connection_custom(self):
         """ Verify temporary connection with custom everything.
         """
         port = "7777"
-        bind_iface = "0.0.0.0"
-        data_dir = self.temp_data_dir
-
+        bind_iface = socket.gethostname().lower()
+        temp_dir = self.temp_dir
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
             conn = get_connection('temp://{}:{}{}'.format(bind_iface, port,
-                                                          data_dir))
+                                                          temp_dir))
+
         assert conn == "http://{}:{}/db/data/".format(bind_iface, port)
-        assert os.path.exists(data_dir)
-        # ensure we can reach the webservice via an external hostname
-        hostname = socket.gethostname()
-        external_url = "http://{}:{}/db/data/".format(hostname, port)
-        assert "neo4j_version" in requests.get(external_url).text
+        assert os.path.exists(temp_dir)
+        self.write_config.assert_called_once_with(
+            os.path.join(temp_dir, 'server.properties'), 7777,
+            os.path.join(temp_dir, 'data'), bind_iface
+        )
 
     def test_multiple_temp_connections(self):
         """ Verify that temporary connections are recycled if the uri matches
@@ -105,17 +122,21 @@ class TestTempConnectionProcesses():
         """ Verify that an exception is raised if the process times out.
         """
         with patch.object(kaiso.connection, 'TIMEOUT', 0):
-            with pytest.raises(TempConnectionError):
+            with pytest.raises(ConnectionError):
                 get_connection('temp://8888')
 
 
 def test_temp_connection_no_neo4j_info():
     """ Verify that we throw an error if neo4j info cannot be determined.
     """
-    def raise_os_error(_):
-        raise OSError()
-
     with patch.object(subprocess, 'check_output') as check_output:
-        check_output.side_effect = raise_os_error
-        with pytest.raises(TempConnectionError):
+        check_output.side_effect = OSError()
+        with pytest.raises(ConnectionError):
             get_connection('temp://8888')
+
+
+def test_temp_connection_empty_string():
+    """ Verify that we throw an error if an empty connection string is used.
+    """
+    with pytest.raises(ConnectionError):
+        get_connection('')
