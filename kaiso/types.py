@@ -1,4 +1,4 @@
-from inspect import getmembers, getmro, isfunction, isdatadescriptor
+from inspect import getmembers, getmro
 
 from kaiso.exceptions import UnknownType, TypeAlreadyRegistered
 
@@ -99,16 +99,18 @@ class Descriptor(object):
 
     @property
     def attributes(self):
+        attributes = dict(getmembers(self.cls, _is_attribute))
+
         if issubclass(self.cls, Attribute):
-            attributes = {}
-            for name, value in getmembers(self.cls):
-                if not (name.startswith('_')
-                        or isfunction(value)
-                        or isdatadescriptor(value)):
-                    attr = Attribute()
-                    attributes[name] = attr
-        else:
-            attributes = dict(getmembers(self.cls, _is_attribute))
+            # Because we don't have the attrs on the base Attribute classes
+            # declared using Attribute instances, we have to pretend we did,
+            # so that they behave like them.
+            attributes['name'] = Attribute()
+            attributes['unique'] = Attribute()
+            attributes['required'] = Attribute()
+
+            if issubclass(self.cls, DefaultableAttribute):
+                attributes['default'] = Attribute()
 
         return attributes
 

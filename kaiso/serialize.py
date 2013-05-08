@@ -100,16 +100,16 @@ def object_to_dict(obj, type_registry, include_none=True):
     """
     obj_type = type(obj)
 
+    descr = type_registry.get_descriptor(obj_type)
+
     properties = {
-        '__type__': Descriptor(obj_type).type_id,
+        '__type__': descr.type_id,
     }
 
     if isinstance(obj, type):
-        properties['id'] = Descriptor(obj).type_id
+        properties['id'] = type_registry.get_descriptor(obj).type_id
 
     else:
-        descr = type_registry.get_descriptor(obj_type)
-
         for name, attr in descr.attributes.items():
             try:
                 value = attr.to_db(getattr(obj, name))

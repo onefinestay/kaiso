@@ -74,6 +74,7 @@ def test_attribute():
 def test_choices():
     attr = Choice('ham', 'spam', 'eggs')
     dct = object_to_dict(attr, PersistableMeta)
+    print dct
     assert dct == {
         '__type__': 'Choice', 'name': None,
         'unique': False, 'required': False, 'default': None,
@@ -81,7 +82,7 @@ def test_choices():
 
     obj = dict_to_object(dct, PersistableMeta)
     assert isinstance(obj, Choice)
-    assert obj.choices == ['ham', 'spam', 'eggs']
+    assert obj.choices == ('ham', 'spam', 'eggs')
 
 
 def test_relationship():
@@ -116,7 +117,7 @@ def test_dynamic_type():
 
     Foobar = DynamicType('Foobar', (Entity,), {})
 
-    dct = object_to_dict(Foobar, PersistableMeta)
+    dct = object_to_dict(Foobar, DynamicType)
     assert dct == {'__type__': 'PersistableMeta', 'id': 'Foobar'}
 
     # since Foobar is only registered with DynamicType
