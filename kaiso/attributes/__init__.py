@@ -82,7 +82,7 @@ class DateTime(DefaultableAttribute):
         return iso8601.parse_date(value)
 
 
-class Choice(String):
+class Choice(DefaultableAttribute):
     choices = Tuple(default=tuple(), required=True)
 
     def __init__(self, *choices, **kwargs):
