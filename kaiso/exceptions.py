@@ -2,6 +2,11 @@
 """
 
 
+class ConnectionError(Exception):
+    """ Raised when an error occurs connecting to the Neo4j Database
+    """
+
+
 class UniqueConstraintError(Exception):
     """Raised when attempting to create more than one object with the same
        value on an attribute declared to be unique"""

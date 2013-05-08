@@ -5,25 +5,26 @@ For temporary instances it requires the neo4j command
 to be available on the path.
 """
 import os
-import re
 import time
 import atexit
 import logging
 import requests
 import tempfile
+import urlparse
 import subprocess
+
+from collections import namedtuple
 
 from py2neo import neo4j
 
+from kaiso.exceptions import ConnectionError
+
 logger = logging.getLogger(__name__)
 
+temp_neo4j = namedtuple('temp_neo4j', ['http_url', 'process'])
 _temporary_databases = {}
 
 TIMEOUT = 30  # seconds
-
-
-class TempConnectionError(Exception):
-    pass
 
 
 def get_neo4j_info():
@@ -45,9 +46,8 @@ def get_neo4j_info():
             pass
 
     if not output:
-        raise TempConnectionError('Cannot determine neo4j info. Is the '
-                                  'NEO4J_CMD environment varaible set '
-                                  'correctly?')
+        raise ConnectionError('Cannot determine neo4j info. Is the NEO4J_CMD '
+                              'environment varaible set correctly?')
 
     keys = ['NEO4J_HOME', 'NEO4J_INSTANCE', 'JAVA_OPTS', 'CLASSPATH']
 
@@ -64,23 +64,36 @@ def get_neo4j_info():
     return result
 
 
+def write_config(config_filepath, port, temp_data_dir, bind_iface):
+    """ Write neo4j server properties into the file at ``config_filepath``
+    """
+    config_options = {
+        'org.neo4j.server.webserver.port': port,
+        'org.neo4j.server.database.location': temp_data_dir,
+        'org.neo4j.server.webserver.address': bind_iface
+    }
+
+    with open(config_filepath, 'w') as props_file:
+        for key, value in config_options.iteritems():
+            props_file.write("{}={}\n".format(key, value))
+
+
 def temp_neo4j_instance(uri):
     """ Start or return an existing instance of the neo4j graph database server
     using the given URI.
     """
-
     # split the uri
-    match = re.match(r"temp://?(?P<port>\d*)(?P<temp_dir>.*)", uri)
-    port = match.group("port") or '7475'
+    split_uri = urlparse.urlparse(uri)
+    port = split_uri.port or 7475
+    bind_iface = split_uri.hostname or "localhost"
 
-    # return http uri if this temporary database already exists,
-    # using the port as the unique identifer
-    if port in _temporary_databases:
-        return "http://localhost:{}/db/data/".format(port)
+    # return http uri if this temporary database already exists
+    if uri in _temporary_databases:
+        return _temporary_databases[uri].http_url
 
     neo4j_info = get_neo4j_info()
 
-    temp_dir = match.group("temp_dir") or tempfile.mkdtemp()
+    temp_dir = split_uri.path or tempfile.mkdtemp()
     temp_data_dir = os.path.join(temp_dir, 'data')
     if not os.path.exists(temp_data_dir):
         os.makedirs(temp_data_dir)
@@ -92,15 +105,8 @@ def temp_neo4j_instance(uri):
 
     # neo requires a physical config file which we temporarily create to
     # specify config overrides
-    config_options = {
-        'org.neo4j.server.webserver.port': port,
-        'org.neo4j.server.database.location': temp_data_dir
-    }
-
     props_filepath = os.path.join(temp_dir, 'server.properties')
-    with open(props_filepath, 'w') as props_file:
-        for key, value in config_options.iteritems():
-            props_file.write("{}={}\n".format(key, value))
+    write_config(props_filepath, port, temp_data_dir, bind_iface)
 
     # required startup args
     args = [
@@ -124,7 +130,6 @@ def temp_neo4j_instance(uri):
     # start the subprocess
     neo4j_process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
-    _temporary_databases[port] = neo4j_process
 
     # terminate subprocess at exit
     def terminate():  # pragma: no cover
@@ -137,14 +142,16 @@ def temp_neo4j_instance(uri):
     # the startup process is async so we monitor the http interface to know
     # when to allow the test runner to continue
     timeout_time = time.time() + TIMEOUT
-    url = "http://localhost:{}/db/data/".format(port)
+    hostname = "localhost" if bind_iface == "0.0.0.0" else bind_iface
+    http_url = "http://{}:{}/db/data/".format(hostname, port)
 
     while time.time() < timeout_time:
         try:
-            req = requests.get(url)
+            req = requests.get(http_url)
             if "neo4j_version" in req.text:
-                logger.debug('neo4j server started on {}'.format(url))
-                return url  # return REST API url
+                logger.debug('neo4j server started on {}'.format(http_url))
+                _temporary_databases[uri] = temp_neo4j(http_url, neo4j_process)
+                return http_url  # return REST API url
         except requests.ConnectionError:
             time.sleep(0.2)
 
@@ -152,10 +159,12 @@ def temp_neo4j_instance(uri):
         'Unable to start Neo4j: timeout after %s '
         'seconds. See logs in %s.', TIMEOUT, temp_data_dir)
 
-    raise TempConnectionError(url)
+    raise ConnectionError(http_url)
 
 
 def get_connection(uri):
+    if not uri:
+        raise ConnectionError("You must provide a connection URI")
     if uri.startswith('temp://'):
         uri = temp_neo4j_instance(uri)
     graph_db = neo4j.GraphDatabaseService(uri)
