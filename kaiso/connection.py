@@ -142,9 +142,8 @@ def temp_neo4j_instance(uri):
     # the startup process is async so we monitor the http interface to know
     # when to allow the test runner to continue
     timeout_time = time.time() + TIMEOUT
-    if bind_iface == "0.0.0.0":
-        bind_iface = "localhost"
-    http_url = "http://{}:{}/db/data/".format(bind_iface, port)
+    hostname = "localhost" if bind_iface == "0.0.0.0" else bind_iface
+    http_url = "http://{}:{}/db/data/".format(hostname, port)
 
     while time.time() < timeout_time:
         try:
