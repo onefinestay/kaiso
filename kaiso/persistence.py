@@ -396,14 +396,16 @@ class Storage(object):
             '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
             '  tpe <-[:DECLAREDON*0..]- attr,',
             '  tpe -[:ISA*0..1]-> base',
-            'RETURN tpe.id,  length(p) AS level,',
-            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),',
+            'WITH tpe.id AS type_id,  length(p) AS level,',
+            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
+            '  AS bases,',
             '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
-            'ORDER BY level'
-        )
+            '  AS attrs',
+            'ORDER BY level',
+            'RETURN type_id, bases, attrs')
 
         rows = self.query(query)
-        return ((type_id, bases, attrs) for type_id, _, bases, attrs in rows)
+        return rows
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.
@@ -475,6 +477,14 @@ class Storage(object):
                 start_func, idx_name, idx_key)
 
             query_args['idx_value'] = idx_value
+
+        elif cls is TypeSystem:
+            idx_name = get_index_name(TypeSystem)
+            query = join_lines(
+                'START ts=node:%s(id={idx_value})' % idx_name,
+                'RETURN ts'
+            )
+            query_args['idx_value'] = self.type_system.id
         else:
             idx_where = []
             for key, value in indexes:
