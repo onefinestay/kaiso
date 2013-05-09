@@ -22,6 +22,10 @@ class Thing(Entity):
     ch_attr = Choice('a', 'b')
 
 
+class OtherThing(Entity):
+    id = Uuid(unique=True)
+
+
 class NonUnique(Entity):
     val = String()
 
@@ -75,6 +79,17 @@ def test_add_fails_on_non_persistable(storage):
         storage.save(PersistableMeta)
 
     # TODO: need to make sure we don't allow adding base classes
+
+
+@pytest.mark.usefixtures('storage')
+def test_initialize_twice(storage):
+    storage.initialize()
+    storage.initialize()
+    rows = storage.query(
+        'START ts = node:typesystem(id="TypeSystem") RETURN count(ts)')
+
+    (count,) = next(rows)
+    assert count == 1
 
 
 @pytest.mark.usefixtures('storage')
