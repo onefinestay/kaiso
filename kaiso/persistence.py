@@ -393,16 +393,18 @@ class Storage(object):
         """
 
         if start_type_id:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
             where = 'WHERE opt.id = {start_id}'
             query_args = {'start_id': start_type_id}
         else:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe)'
             where = ''
             query_args = {}
 
         query = join_lines(
             'START %s' % get_start_clause(self.type_system, 'ts'),
             'MATCH',
-            '  p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)' ,
+            match,
             where,
             '  WITH tpe, length(p) AS level' ,
             '  MATCH' ,
