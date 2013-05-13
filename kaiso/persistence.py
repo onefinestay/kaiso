@@ -381,8 +381,9 @@ class Storage(object):
 
         return obj
 
-    def get_type_hierarchy(self):
-        """ Returns the entire type hierarchy defined in the database.
+    def get_type_hierarchy(self, start_type_id=None):
+        """ Returns the entire type hierarchy defined in the database
+        if start_type_id is None, else returns from that type.
 
         Returns: A generator yielding tuples of the form
         ``(type_id, bases, attrs)`` where
@@ -390,19 +391,37 @@ class Storage(object):
             - ``bases`` lists the type_ids of the type's bases
             - ``attrs`` lists the attributes defined on the type
         """
-        query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts'),
-            'MATCH',
-            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
-            '  tpe <-[:DECLAREDON*0..]- attr,',
-            '  tpe -[:ISA*0..1]-> base',
-            'WITH tpe.id AS type_id,  length(p) AS level,',
-            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
-            '  AS bases,',
-            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
-            '  AS attrs',
-            'ORDER BY level',
-            'RETURN type_id, bases, attrs')
+
+        if start_type_id:
+            query = join_lines(
+                'START %s' % get_start_clause(self.type_system, 'ts'),
+                'MATCH',
+                '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- opt <-[:ISA*0..]- tpe),' ,
+                '  tpe <-[:DECLAREDON*0..]- attr,',
+                '  tpe -[:ISA*0..1]-> base',
+                'WHERE opt.id = \'{}\''.format(start_type_id) ,
+                'WITH opt.id AS type_id,  length(p) AS level,',
+                '  filter(bse_id in collect(distinct base.id): bse_id <> opt.id)',
+                '  AS bases,',
+                '  filter(attr in collect(distinct attr): attr.id? <> opt.id)',
+                '  AS attrs',
+                'ORDER BY level',
+                'RETURN type_id, bases, attrs')
+
+        else:
+            query = join_lines(
+                'START %s' % get_start_clause(self.type_system, 'ts'),
+                'MATCH',
+                '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
+                '  tpe <-[:DECLAREDON*0..]- attr,',
+                '  tpe -[:ISA*0..1]-> base',
+                'WITH tpe.id AS type_id,  length(p) AS level,',
+                '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
+                '  AS bases,',
+                '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
+                '  AS attrs',
+                'ORDER BY level',
+                'RETURN type_id, bases, attrs')
 
         rows = self.query(query)
         return rows
