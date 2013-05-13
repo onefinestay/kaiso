@@ -400,21 +400,21 @@ class Storage(object):
             query_args = {}
 
         query = join_lines(
-                'START %s' % get_start_clause(self.type_system, 'ts'),
-                'MATCH',
-                '  p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)' ,
-                where,
-                '  WITH tpe, length(p) AS level' ,
-                '  MATCH' ,
-                '      tpe <-[:DECLAREDON*0..]- attr,' ,
-                '      tpe -[:ISA*0..1]-> base' ,
-                '  WITH tpe.id AS type_id, level,' ,
-                '      filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
-                '      AS bases,',
-                '      filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
-                '      AS attrs',
-                'ORDER BY level',
-                'RETURN type_id, bases, attrs')
+            'START %s' % get_start_clause(self.type_system, 'ts'),
+            'MATCH',
+            '  p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)' ,
+            where,
+            '  WITH tpe, length(p) AS level' ,
+            '  MATCH' ,
+            '      tpe <-[:DECLAREDON*0..]- attr,' ,
+            '      tpe -[:ISA*0..1]-> base' ,
+            '  WITH tpe.id AS type_id, level,' ,
+            '      filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
+            '      AS bases,',
+            '      filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
+            '      AS attrs',
+            'ORDER BY level',
+            'RETURN type_id, bases, attrs')
 
         rows = self.query(query, **query_args)
         return rows
