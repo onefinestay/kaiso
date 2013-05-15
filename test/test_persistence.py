@@ -428,22 +428,22 @@ def test_get_type_hierarchy(storage):
     storage.save(obj3)
 
     hierarchy1 = storage.get_type_hierarchy()
-    entities = [e for e in hierarchy1]
+    entities = [e[0] for e in hierarchy1]
 
     assert len(entities) == 4
-    assert entities[0][0] == Entity.__name__
-    assert entities[1][0] == Thing.__name__
-    assert entities[2][0] == Colouring.__name__
-    assert entities[3][0] == Carmine.__name__
+    assert entities[0] == Entity.__name__
+    assert entities[1] == Thing.__name__
+    assert entities[2] == Colouring.__name__
+    assert entities[3] == Carmine.__name__
 
     hierarchy2 = storage.get_type_hierarchy(
         start_type_id='Colouring'
     )
-    entities = [e for e in hierarchy2]
+    entities = [e[0] for e in hierarchy2]
 
     assert len(entities) == 2
-    assert entities[0][0] == Colouring.__name__
-    assert entities[1][0] == Carmine.__name__
+    assert entities[0] == Colouring.__name__
+    assert entities[1] == Carmine.__name__
 
 
 @pytest.mark.usefixtures('storage')
