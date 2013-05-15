@@ -511,12 +511,18 @@ class Storage(object):
             idx_name = get_index_name(TypeSystem)
             query = join_lines(
                 'START root=node:%s(id={idx_value})' % idx_name,
-                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> () <-[:DEFINES]- root',
+                'MATCH ',
+                '    n -[:INSTANCEOF]-> ()',
+                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> () <-[:DEFINES]- root',
                 'WHERE %s' % idx_where,
+                '   AND tpe.id = {tpe_id}',
                 'RETURN n',
             )
 
             query_args['idx_value'] = self.type_system.id
+
+            type_id = self._dynamic_meta.get_descriptor(cls).type_id
+            query_args['tpe_id'] = type_id
 
         found = [node for (node,) in self._execute(query, **query_args)]
 
