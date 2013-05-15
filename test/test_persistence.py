@@ -160,7 +160,9 @@ def test_simple_add_and_get_instance(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_instance_same_id_different_type(storage):
-    """ Instances of two different types must be distinguishable. """
+    """ Instances of two different types that have the same id
+    should be distinguishable """
+
     thing1 = Thing()
     thing2 = OtherThing(id=thing1.id)
 
