@@ -418,6 +418,35 @@ def test_indexed_relationship(storage):
 
 
 @pytest.mark.usefixtures('storage')
+def test_get_type_hierarchy(storage):
+    obj1 = Thing()      # subclasses Entity
+    obj2 = Colouring()  # subclass of Thing
+    obj3 = Carmine()    # subclass of Colouring
+
+    storage.save(obj1)
+    storage.save(obj2)
+    storage.save(obj3)
+
+    hierarchy1 = storage.get_type_hierarchy()
+    entities = [e[0] for e in hierarchy1]
+
+    assert len(entities) == 4
+    assert entities[0] == Entity.__name__
+    assert entities[1] == Thing.__name__
+    assert entities[2] == Colouring.__name__
+    assert entities[3] == Carmine.__name__
+
+    hierarchy2 = storage.get_type_hierarchy(
+        start_type_id='Colouring'
+    )
+    entities = [e[0] for e in hierarchy2]
+
+    assert len(entities) == 2
+    assert entities[0] == Colouring.__name__
+    assert entities[1] == Carmine.__name__
+
+
+@pytest.mark.usefixtures('storage')
 def test_type_hierarchy_object(storage):
     obj = Thing()
     storage.save(obj)
