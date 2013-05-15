@@ -160,16 +160,21 @@ def test_simple_add_and_get_instance(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_simple_add_and_get_instance_same_id_different_type(storage):
+    """ Testing thatinstances of two different types, that have the same id
+    can be retrieved and are indeed distinguishable.
+    """
     thing1 = Thing()
     thing2 = OtherThing(id=thing1.id)
 
     storage.save(thing1)
     storage.save(thing2)
 
-    queried_thing = storage.get(OtherThing, id=thing2.id)
+    queried_thing1 = storage.get(Thing, id=thing1.id)
+    queried_thing2 = storage.get(OtherThing, id=thing2.id)
 
-    assert type(queried_thing) == OtherThing
-    assert queried_thing.id == thing2.id
+    assert type(queried_thing1) == Thing
+    assert type(queried_thing2) == OtherThing
+    assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
 @pytest.mark.usefixtures('storage')
