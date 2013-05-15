@@ -437,7 +437,8 @@ def test_get_type_hierarchy(storage):
     assert entities[3][0] == Carmine.__name__
 
     hierarchy2 = storage.get_type_hierarchy(
-                        start_type_id='Colouring')
+        start_type_id='Colouring'
+    )
     entities = [e for e in hierarchy2]
 
     assert len(entities) == 2
