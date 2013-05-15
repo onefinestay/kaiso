@@ -381,8 +381,9 @@ class Storage(object):
 
         return obj
 
-    def get_type_hierarchy(self):
-        """ Returns the entire type hierarchy defined in the database.
+    def get_type_hierarchy(self, start_type_id=None):
+        """ Returns the entire type hierarchy defined in the database
+        if start_type_id is None, else returns from that type.
 
         Returns: A generator yielding tuples of the form
         ``(type_id, bases, attrs)`` where
@@ -390,21 +391,36 @@ class Storage(object):
             - ``bases`` lists the type_ids of the type's bases
             - ``attrs`` lists the attributes defined on the type
         """
+
+        if start_type_id:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
+            where = 'WHERE opt.id = {start_id}'
+            query_args = {'start_id': start_type_id}
+        else:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe)'
+            where = ''
+            query_args = {}
+
         query = join_lines(
             'START %s' % get_start_clause(self.type_system, 'ts'),
             'MATCH',
-            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
-            '  tpe <-[:DECLAREDON*0..]- attr,',
-            '  tpe -[:ISA*0..1]-> base',
-            'WITH tpe.id AS type_id,  length(p) AS level,',
-            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id)',
-            '  AS bases,',
-            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
-            '  AS attrs',
+            match,
+            where,
+            'WITH tpe, length(p) AS level',
+            'MATCH',
+            '    tpe <-[:DECLAREDON*0..]- attr,',
+            '    tpe -[:ISA*0..1]-> base',
+            'WITH tpe.id AS type_id, level,',
+            '    filter(',
+            '        bse_id in collect(distinct base.id): bse_id <> tpe.id)',
+            '    AS bases,',
+            '    filter(',
+            '        attr in collect(distinct attr): attr.id? <> tpe.id)',
+            '    AS attrs',
             'ORDER BY level',
             'RETURN type_id, bases, attrs')
 
-        rows = self.query(query)
+        rows = self.query(query, **query_args)
         return rows
 
     def serialize(self, obj):
