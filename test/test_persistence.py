@@ -631,7 +631,10 @@ def test_serialize_deserialize(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_recursive_delete(storage):
-    class Model(Entity):
+    Base = storage.create_type('TestBase', (Entity,), {})
+    BaseRel = storage.create_type('TestRelBase', (Relationship,), {})
+
+    class Model(Base):
         id = Uuid(unique=True)
 
     class City(Model):
@@ -655,49 +658,80 @@ def test_recursive_delete(storage):
     class Seal(Model):
         pass
 
-    class Contains(Relationship):
+    class Contains(BaseRel):
         pass
 
-    class AppliesTo(Relationship):
+    class AppliesTo(BaseRel):
         pass
 
-    class StoreIn(Relationship):
+    class StoreIn(BaseRel):
         pass
 
     c = City()
     h = Home()
     r1 = Room()
     r2 = Room()
+    r3 = Room()
     ch = Chest()
+
     stuff1 = Stuff()
     stuff2 = Stuff()
-
-    storage.save(c)
-    storage.save(h)
-    storage.save(r1)
-    storage.save(r2)
-    storage.save(ch)
-    storage.save(stuff1)
-    storage.save(stuff2)
-
-    storage.save(Contains(c, h))
-    storage.save(Contains(h, r1))
-    storage.save(Contains(h, r2))
-    storage.save(Contains(r1, ch))
-    storage.save(Contains(r1, stuff1))
-    storage.save(Contains(r2, stuff2))
+    stuff3 = Stuff()
 
     store1 = Store()
-    storage.save(store1)
-    storage.save(AppliesTo(store1, stuff1))
-    storage.save(StoreIn(store1, ch))
-
     store2 = Store()
-    storage.save(store2)
-    storage.save(AppliesTo(store2, stuff2))
-    storage.save(StoreIn(store2, ch))
-
     seal = Seal()
-    storage.save(seal)
-    storage.save(AppliesTo(seal, ch))
+
+    items = (
+        c, h, r1, r2, r3, ch,
+        stuff1, stuff2, stuff3,
+        store1, store2, seal
+    )
+
+    def create_and_delete(del_item):
+        for item in items:
+            storage.save(item)
+
+        storage.save(Contains(c, h))
+
+        storage.save(Contains(h, r1))
+        storage.save(Contains(h, r2))
+        storage.save(Contains(h, r3))
+
+        storage.save(Contains(r1, ch))
+
+        storage.save(Contains(r1, stuff1))
+        storage.save(Contains(r2, stuff2))
+        storage.save(Contains(r3, stuff3))
+
+        storage.save(AppliesTo(store1, stuff1))
+        storage.save(StoreIn(store1, ch))
+
+        storage.save(AppliesTo(store2, stuff2))
+        storage.save(StoreIn(store2, ch))
+
+        storage.save(AppliesTo(seal, ch))
+
+        storage.delete_subgraph(del_item)
+
+        query = 'START n=node(*) MATCH n -[:INSTANCEOF]-> () RETURN n'
+        return set(item.id for (item,) in storage.query(query))
+
+    existing_ids = create_and_delete(r1)
+    expected_ids = {c.id, h.id, r2.id, r3.id,
+                    stuff2.id, stuff3.id,
+                    store2.id}
+    assert existing_ids == expected_ids
+
+    existing_ids = create_and_delete(r2)
+    expected_ids = {c.id, h.id, r1.id, r3.id, ch.id,
+                    stuff1.id, stuff3.id,
+                    store1.id, store2.id, seal.id}
+    assert existing_ids == expected_ids
+
+    existing_ids = create_and_delete(r3)
+    expected_ids = {c.id, h.id, r1.id, r2.id, ch.id,
+                    stuff1.id, stuff2.id,
+                    store1.id, store2.id, seal.id}
+    assert existing_ids == expected_ids
 

@@ -349,7 +349,6 @@ class Storage(object):
         elif isinstance(obj, Relationship):
             # object is a relationship
             obj_type = type(obj)
-
             query = get_create_relationship_query(obj, self._dynamic_meta)
 
         else:
@@ -392,15 +391,14 @@ class Storage(object):
         """
         query = join_lines(
             'START %s' % get_start_clause(self.type_system, 'ts'),
-            'MATCH',
-            '  p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),',
-            '  tpe <-[:DECLAREDON*0..]- attr,',
-            '  tpe -[:ISA*0..1]-> base',
-            'RETURN tpe.id,  length(p) AS level,',
-            '  filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),',
-            '  filter(attr in collect(distinct attr): attr.id? <> tpe.id)',
-            'ORDER BY level'
-        )
+            '''MATCH
+              p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),
+              tpe <-[:DECLAREDON*0..]- attr,
+              tpe -[:ISA*0..1]-> base
+            RETURN tpe.id,  length(p) AS level,
+              filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),
+              filter(attr in collect(distinct attr): attr.id? <> tpe.id)
+            ORDER BY level''')
 
         rows = self.query(query)
         return ((type_id, bases, attrs) for type_id, _, bases, attrs in rows)
@@ -538,38 +536,87 @@ class Storage(object):
         """
         if isinstance(obj, Relationship):
             query = join_lines(
-                'START {}, {}',
+                'START {}, {}'.format(
+                    get_start_clause(obj.start, 'n1'),
+                    get_start_clause(obj.end, 'n2')),
                 'MATCH n1 -[rel]-> n2',
                 'DELETE rel',
                 'RETURN 0, count(rel)'
-            ).format(
-                get_start_clause(obj.start, 'n1'),
-                get_start_clause(obj.end, 'n2'),
             )
         elif isinstance(obj, PersistableMeta):
             query = join_lines(
-                'START {}',
+                'START {}'.format(get_start_clause(obj, 'obj')),
                 'MATCH attr -[:DECLAREDON]-> obj',
                 'DELETE attr',
                 'MATCH obj -[rel]- ()',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
-            ).format(
-                get_start_clause(obj, 'obj')
             )
         else:
             query = join_lines(
-                'START {}',
+                'START {}'.format(get_start_clause(obj, 'obj')),
                 'MATCH obj -[rel]- ()',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
-            ).format(
-                get_start_clause(obj, 'obj')
             )
 
         # TODO: delete node/rel from indexes
 
         return next(self._execute(query))
+
+    def delete_subgraph(self, obj):
+
+        query = join_lines(
+            'START %s' % get_start_clause(obj, 'root'),
+            '''MATCH
+                // the node or a node pointing to it
+                root -[*0..]-> () <-[*0..]- deletable,
+                deletable -[:INSTANCEOF]-> ()
+            WHERE
+                // we have to make sure we exclude parents of root
+                (root -[*0..]-> deletable OR root -[*0..]-> () <-- deletable)
+
+            WITH DISTINCT root, deletable
+
+            MATCH
+                // all parents of deletable up to a common parent with root
+                deletable -[*0..]-> foo <-[*0..]- parent
+                    <-[*1..]- common_parent -[*1..]-> root,
+
+                common_parent -[:INSTANCEOF]-> (),
+                parent -[:INSTANCEOF]-> (),
+                foo -[:INSTANCEOF]-> ()
+
+            WITH root, deletable,
+                (
+                    collect(DISTINCT parent)
+                    + collect(DISTINCT foo)
+                ) AS parents
+
+            WHERE
+                all(
+                    x in parents
+                    WHERE
+                        root -[*0..]-> x
+                        OR
+                        x -[*0..]-> root
+                )
+
+            WITH DISTINCT deletable
+
+            MATCH
+                deletable -[rel]- ()
+
+            WITH
+                collect(DISTINCT deletable) AS del_nodes,
+                collect(DISTINCT rel) AS del_rels
+
+            FOREACH(r in del_rels: DELETE r)
+            FOREACH(n in del_nodes: DELETE n)
+
+            RETURN length(del_nodes), length(del_rels)''')
+
+        return next(self.query(query))
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
