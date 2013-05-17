@@ -692,6 +692,8 @@ def test_serialize_deserialize(storage):
     assert obj is Entity
 
 
+
+@pytest.mark.slow
 @pytest.mark.usefixtures('storage')
 def test_recursive_delete(storage):
     Base = storage.create_type('TestBase', (Entity,), {})
@@ -774,7 +776,6 @@ def test_recursive_delete(storage):
         storage.save(StoreIn(store2, ch))
 
         storage.save(AppliesTo(seal, ch))
-
         storage.delete_subgraph(del_item)
 
         query = 'START n=node(*) MATCH n -[:INSTANCEOF]-> () RETURN n'
@@ -797,4 +798,3 @@ def test_recursive_delete(storage):
                     stuff1.id, stuff2.id,
                     store1.id, store2.id, seal.id}
     assert existing_ids == expected_ids
-

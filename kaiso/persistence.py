@@ -598,7 +598,12 @@ class Storage(object):
         return next(self._execute(query))
 
     def delete_subgraph(self, obj):
+        """ Deletes `obj` and any object connected to it or it's children,
+        as long as all their relationships, excluding InstanceOf and IsA, are
+        contained within the sub-graph outgoing from `obj`
 
+        Objects will only be deleted if they are instances of types.
+        """
         query = join_lines(
             'START %s' % get_start_clause(obj, 'root'),
             '''MATCH
@@ -630,9 +635,12 @@ class Storage(object):
                 all(
                     x in parents
                     WHERE
-                        root -[*0..]-> x
+                        x = root
                         OR
-                        x -[*0..]-> root
+                        root -[*1..]-> x
+                        OR
+                        x -[*1..]-> root
+
                 )
 
             WITH DISTINCT deletable
