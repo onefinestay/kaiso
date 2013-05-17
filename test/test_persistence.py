@@ -22,6 +22,10 @@ class Thing(Entity):
     ch_attr = Choice('a', 'b')
 
 
+class OtherThing(Entity):
+    id = Uuid(unique=True)
+
+
 class NonUnique(Entity):
     val = String()
 
@@ -75,6 +79,17 @@ def test_add_fails_on_non_persistable(storage):
         storage.save(PersistableMeta)
 
     # TODO: need to make sure we don't allow adding base classes
+
+
+@pytest.mark.usefixtures('storage')
+def test_initialize_twice(storage):
+    storage.initialize()
+    storage.initialize()
+    rows = storage.query(
+        'START ts = node:typesystem(id="TypeSystem") RETURN count(ts)')
+
+    (count,) = next(rows)
+    assert count == 1
 
 
 @pytest.mark.usefixtures('storage')
@@ -141,6 +156,25 @@ def test_simple_add_and_get_instance(storage):
 
     assert type(queried_thing) == Thing
     assert queried_thing.id == thing.id
+
+
+@pytest.mark.usefixtures('storage')
+def test_simple_add_and_get_instance_same_id_different_type(storage):
+    """ Instances of two different types that have the same id
+    should be distinguishable """
+
+    thing1 = Thing()
+    thing2 = OtherThing(id=thing1.id)
+
+    storage.save(thing1)
+    storage.save(thing2)
+
+    queried_thing1 = storage.get(Thing, id=thing1.id)
+    queried_thing2 = storage.get(OtherThing, id=thing2.id)
+
+    assert type(queried_thing1) == Thing
+    assert type(queried_thing2) == OtherThing
+    assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
 @pytest.mark.usefixtures('storage')
@@ -400,6 +434,35 @@ def test_indexed_relationship(storage):
     assert result == {
         (str(thing1.id), str(thing2.id))
     }
+
+
+@pytest.mark.usefixtures('storage')
+def test_get_type_hierarchy(storage):
+    obj1 = Thing()      # subclasses Entity
+    obj2 = Colouring()  # subclass of Thing
+    obj3 = Carmine()    # subclass of Colouring
+
+    storage.save(obj1)
+    storage.save(obj2)
+    storage.save(obj3)
+
+    hierarchy1 = storage.get_type_hierarchy()
+    entities = [e[0] for e in hierarchy1]
+
+    assert len(entities) == 4
+    assert entities[0] == Entity.__name__
+    assert entities[1] == Thing.__name__
+    assert entities[2] == Colouring.__name__
+    assert entities[3] == Carmine.__name__
+
+    hierarchy2 = storage.get_type_hierarchy(
+        start_type_id='Colouring'
+    )
+    entities = [e[0] for e in hierarchy2]
+
+    assert len(entities) == 2
+    assert entities[0] == Colouring.__name__
+    assert entities[1] == Carmine.__name__
 
 
 @pytest.mark.usefixtures('storage')

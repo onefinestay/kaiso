@@ -380,8 +380,9 @@ class Storage(object):
 
         return obj
 
-    def get_type_hierarchy(self):
-        """ Returns the entire type hierarchy defined in the database.
+    def get_type_hierarchy(self, start_type_id=None):
+        """ Returns the entire type hierarchy defined in the database
+        if start_type_id is None, else returns from that type.
 
         Returns: A generator yielding tuples of the form
         ``(type_id, bases, attrs)`` where
@@ -389,19 +390,37 @@ class Storage(object):
             - ``bases`` lists the type_ids of the type's bases
             - ``attrs`` lists the attributes defined on the type
         """
+
+        if start_type_id:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
+            where = 'WHERE opt.id = {start_id}'
+            query_args = {'start_id': start_type_id}
+        else:
+            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe)'
+            where = ''
+            query_args = {}
+
         query = join_lines(
             'START %s' % get_start_clause(self.type_system, 'ts'),
-            '''MATCH
-              p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),
-              tpe <-[:DECLAREDON*0..]- attr,
-              tpe -[:ISA*0..1]-> base
-            RETURN tpe.id,  length(p) AS level,
-              filter(bse_id in collect(distinct base.id): bse_id <> tpe.id),
-              filter(attr in collect(distinct attr): attr.id? <> tpe.id)
-            ORDER BY level''')
+            'MATCH',
+            match,
+            where,
+            'WITH tpe, length(p) AS level',
+            'MATCH',
+            '    tpe <-[:DECLAREDON*0..]- attr,',
+            '    tpe -[:ISA*0..1]-> base',
+            'WITH tpe.id AS type_id, level,',
+            '    filter(',
+            '        bse_id in collect(distinct base.id): bse_id <> tpe.id)',
+            '    AS bases,',
+            '    filter(',
+            '        attr in collect(distinct attr): attr.id? <> tpe.id)',
+            '    AS attrs',
+            'ORDER BY level',
+            'RETURN type_id, bases, attrs')
 
-        rows = self.query(query)
-        return ((type_id, bases, attrs) for type_id, _, bases, attrs in rows)
+        rows = self.query(query, **query_args)
+        return rows
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.
@@ -473,6 +492,14 @@ class Storage(object):
                 start_func, idx_name, idx_key)
 
             query_args['idx_value'] = idx_value
+
+        elif cls is TypeSystem:
+            idx_name = get_index_name(TypeSystem)
+            query = join_lines(
+                'START ts=node:%s(id={idx_value})' % idx_name,
+                'RETURN ts'
+            )
+            query_args['idx_value'] = self.type_system.id
         else:
             idx_where = []
             for key, value in indexes:
@@ -483,12 +510,18 @@ class Storage(object):
             idx_name = get_index_name(TypeSystem)
             query = join_lines(
                 'START root=node:%s(id={idx_value})' % idx_name,
-                'MATCH n -[:INSTANCEOF]-> () -[:ISA*]-> () <-[:DEFINES]- root',
+                'MATCH ',
+                '    n -[:INSTANCEOF]-> ()',
+                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> () <-[:DEFINES]- root',
                 'WHERE %s' % idx_where,
+                '   AND tpe.id = {tpe_id}',
                 'RETURN n',
             )
 
             query_args['idx_value'] = self.type_system.id
+
+            type_id = self._dynamic_meta.get_descriptor(cls).type_id
+            query_args['tpe_id'] = type_id
 
         found = [node for (node,) in self._execute(query, **query_args)]
 
