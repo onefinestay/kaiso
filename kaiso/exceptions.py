@@ -36,3 +36,7 @@ class DeserialisationError(Exception):
 
 class TypeAlreadyRegistered(Exception):
     pass
+
+
+class DuplicateTypeName(Exception):
+    pass
