@@ -65,15 +65,15 @@ class TypeRegistry():
         self.register(DynamicType)
 
     def is_registered(self, cls):
-        return self.is_dynamic_type(cls) or self.is_static_type(cls)
+        name = cls.__name__ if isinstance(cls, type) else cls
+        return (name in self._descriptors['static'] or
+                name in self._descriptors['dynamic'])
 
     def is_dynamic_type(self, cls):
-        name = cls.__name__ if isinstance(cls, type) else cls
-        return name in self._descriptors['dynamic']
+        return type(cls) is DynamicType
 
     def is_static_type(self, cls):
-        name = cls.__name__ if isinstance(cls, type) else cls
-        return name in self._descriptors['static']
+        return type(cls) is PersistableType
 
     def create(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
