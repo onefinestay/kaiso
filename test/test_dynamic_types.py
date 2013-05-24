@@ -12,7 +12,7 @@ def test_save_dynamic_type(storage):
 
     storage.save(Foobar)
 
-    rows = storage.query('START n=node:persistablemeta(id="Foobar") RETURN n')
+    rows = storage.query('START n=node:persistabletype(id="Foobar") RETURN n')
     (result,) = next(rows)
 
     assert result is Foobar
@@ -42,7 +42,7 @@ def test_add_attr_to_type(storage):
     storage.save(Foobar)
 
     rows = storage.query(
-        'START n=node:persistablemeta(id="Foobar") '
+        'START n=node:persistabletype(id="Foobar") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
     (count,) = next(rows)
@@ -59,7 +59,7 @@ def test_remove_attr_from_type(storage):
     storage.save(Foobar)
 
     rows = storage.query(
-        'START n=node:persistablemeta(id="Foobar") '
+        'START n=node:persistabletype(id="Foobar") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
     (count,) = next(rows)
@@ -89,7 +89,7 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     storage.save(Ham)
 
     rows = storage.query(
-        'START n=node:persistablemeta(id="Ham") '
+        'START n=node:persistabletype(id="Ham") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
     (count,) = next(rows)
@@ -146,7 +146,7 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     storage.initialize()
 
     (Shrub,) = next(storage.query(
-        'START cls=node:persistablemeta(id="Shrub") RETURN cls'))
+        'START cls=node:persistabletype(id="Shrub") RETURN cls'))
     Shrub.ham = String(default='eggs')
     storage.save(Shrub)
 

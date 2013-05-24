@@ -1,7 +1,7 @@
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
-    AttributedBase, get_index_entries, get_index_name, Relationship)
-from kaiso.serialize import get_type_relationships, object_to_dict
+    AttributedBase, get_index_name, Relationship)
+from kaiso.serialize import get_type_relationships
 
 
 def join_lines(*lines, **kwargs):
@@ -19,7 +19,7 @@ def join_lines(*lines, **kwargs):
     return sep.join(rows)
 
 
-def get_start_clause(obj, name):
+def get_start_clause(obj, name, type_registry):
     """ Returns a node lookup by index as used by the START clause.
 
     Args:
@@ -29,7 +29,7 @@ def get_start_clause(obj, name):
         A string with index lookup of a cypher START clause.
     """
 
-    index = next(get_index_entries(obj), None)
+    index = next(type_registry.get_index_entries(obj), None)
     if isinstance(obj, Relationship):
         index_type = "rel"
     else:
@@ -55,10 +55,10 @@ def get_create_types_query(cls, root, type_registry):
 
     query_args = {
         'root_id': root.id,
-        'IsA_props': object_to_dict(IsA(), type_registry),
-        'Defines_props': object_to_dict(Defines(), type_registry),
-        'InstanceOf_props': object_to_dict(InstanceOf(), type_registry),
-        'DeclaredOn_props': object_to_dict(DeclaredOn(), type_registry),
+        'IsA_props': type_registry.object_to_dict(IsA()),
+        'Defines_props': type_registry.object_to_dict(Defines()),
+        'InstanceOf_props': type_registry.object_to_dict(InstanceOf()),
+        'DeclaredOn_props': type_registry.object_to_dict(DeclaredOn()),
     }
 
     # filter type relationships that we want to persist
@@ -106,14 +106,14 @@ def get_create_types_query(cls, root, type_registry):
                 key, name)
             lines.append(ln)
 
-            attr_dict = object_to_dict(
-                attr, type_registry, include_none=False)
+            attr_dict = type_registry.object_to_dict(
+                attr, include_none=False)
 
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
     for key, cls in classes.iteritems():
-        query_args['%s_props' % key] = object_to_dict(cls, type_registry)
+        query_args['%s_props' % key] = type_registry.object_to_dict(cls)
 
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
@@ -125,12 +125,12 @@ def get_create_types_query(cls, root, type_registry):
 
 
 def get_create_relationship_query(rel, type_registry):
-    rel_props = object_to_dict(rel, type_registry, include_none=False)
+    rel_props = type_registry.object_to_dict(rel, include_none=False)
     query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (
-        get_start_clause(rel.start, 'n1'),
-        get_start_clause(rel.end, 'n2'),
+        get_start_clause(rel.start, 'n1', type_registry),
+        get_start_clause(rel.end, 'n2', type_registry),
         rel_props['__type__'].upper(),
     )
 

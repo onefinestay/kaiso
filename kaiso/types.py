@@ -4,7 +4,15 @@ from kaiso.exceptions import (UnknownType, TypeAlreadyRegistered,
                               DeserialisationError, DuplicateTypeName)
 
 
-class PersistableCollector(type):
+class Persistable(object):
+    """ The base of all persistable objects.
+
+    Any object stored in the db must inherit from this class.
+    Any object having Persistable as it's base are considered persistable.
+    """
+
+
+class PersistableCollector(type, Persistable):
     """ Collects Persistable objects so that they can later be
     """
     collected = {}
@@ -35,6 +43,7 @@ class TypeRegistry():
     def initialize(self):
         for cls in PersistableCollector.collected.values():
             self.register(cls)
+        self.register(PersistableCollector)
 
     def is_registered(self, cls):
         return self.is_dynamic_type(cls) or self.is_static_type(cls)
@@ -269,28 +278,6 @@ def get_index_name(cls):
         return cls.__name__.lower()
 
 
-def get_index_entries(obj):
-    """ Returns tuples of (index-name, key, value) for a persistable object.
-
-    It can be used to create queryies with index lookups.
-
-    Args:
-        obj: A persistable object.
-
-    Returns:
-        Generator yielding tuples (index_name, key, value)
-    """
-
-    cls = type(obj)
-
-    if issubclass(cls, PersistableMeta):
-        meta_cls = cls
-    else:
-        meta_cls = type(cls)
-
-    return meta_cls.get_index_entries(obj)
-
-
 def is_indexable(cls):
     """ Returns True if the class ``cls`` has any indexable attributes.
     """
@@ -354,14 +341,6 @@ class Descriptor(object):
                 declared[name] = attr
 
         return declared
-
-
-class Persistable(object):
-    """ The base of all persistable objects.
-
-    Any object stored in the db must inherit from this class.
-    Any object having Persistable as it's base are considered persistable.
-    """
 
 
 class DiscriptorType(type):
@@ -489,7 +468,7 @@ class AttributedBase(Persistable):
 
         obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
-        descriptor = type(cls).get_descriptor(cls)
+        descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
@@ -506,7 +485,7 @@ class AttributedBase(Persistable):
 class Entity(AttributedBase):
     def __getattribute__(self, name):
         cls = type(self)
-        descriptor = type(cls).get_descriptor(cls)
+        descriptor = Descriptor(cls)
         try:
             rel_reference = descriptor.relationships[name]
         except KeyError:
