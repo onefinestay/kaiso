@@ -41,3 +41,11 @@ def storage(request):
     _storage.delete_all_data()
     _storage.initialize()
     return _storage
+
+
+@pytest.fixture
+def type_registry(request):
+    from kaiso.types import TypeRegistry
+    registry = TypeRegistry()
+    registry.initialize()
+    return registry

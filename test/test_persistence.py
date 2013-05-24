@@ -8,7 +8,7 @@ from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship
-from kaiso.types import PersistableMeta, Entity
+from kaiso.types import PersistableCollector, Entity
 
 
 class Thing(Entity):
@@ -76,7 +76,7 @@ def test_add_fails_on_non_persistable(storage):
         storage.save(object())
 
     with pytest.raises(TypeError):
-        storage.save(PersistableMeta)
+        storage.save(PersistableCollector)
 
     # TODO: need to make sure we don't allow adding base classes
 
@@ -98,7 +98,7 @@ def test_add_persistable_only_adds_single_node(storage):
     storage.save(Entity)
 
     result = list(storage.query(
-        'START n=node:persistablemeta("id:*") RETURN n')
+        'START n=node:persistabletype("id:*") RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -110,7 +110,7 @@ def test_only_adds_entity_once(storage):
     storage.save(Entity)
 
     result = list(storage.query(
-        'START n=node:persistablemeta("id:*") RETURN n')
+        'START n=node:persistabletype("id:*") RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -124,7 +124,7 @@ def test_only_adds_types_once(storage):
     storage.save(thing2)
 
     (count,) = next(storage.query(
-        'START n=node:persistablemeta(id="Thing") '
+        'START n=node:persistabletype(id="Thing") '
         'RETURN count(n)'))
 
     assert count == 1
@@ -135,7 +135,7 @@ def test_simple_add_and_get_type(storage):
 
     storage.save(Thing)
 
-    result = storage.get(PersistableMeta, id='Thing')
+    result = storage.get(PersistableCollector, id='Thing')
 
     assert result is Thing
 
@@ -144,7 +144,7 @@ def test_simple_add_and_get_type(storage):
 def test_get_type_non_existing_obj(storage):
     storage.save(Thing)
 
-    assert storage.get(PersistableMeta, name="Ting") is None
+    assert storage.get(PersistableCollector, name="Ting") is None
 
 
 @pytest.mark.usefixtures('storage')
@@ -303,7 +303,7 @@ def test_delete_instance_types_remain(storage):
 
     # we are expecting the type to stay in place
     rows = storage.query("""
-        START n=node:persistablemeta("id:*")
+        START n=node:persistabletype("id:*")
         MATCH n-[:ISA|INSTANCEOF]->m
         RETURN n""")
     result = set(item for (item,) in rows)
@@ -438,9 +438,9 @@ def test_indexed_relationship(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_get_type_hierarchy(storage):
-    obj1 = Thing()      # subclasses Entity
+    obj1 = Thing()  # subclasses Entity
     obj2 = Colouring()  # subclass of Thing
-    obj3 = Carmine()    # subclass of Colouring
+    obj3 = Carmine()  # subclass of Colouring
 
     storage.save(obj1)
     storage.save(obj2)
@@ -526,7 +526,7 @@ def test_add_type_creates_index(storage):
 def count(storage, type_):
     type_id = type_.__name__
     query = """
-        START Thing=node:persistablemeta(id="{}")
+        START Thing=node:persistabletype(id="{}")
         MATCH (n)-[:INSTANCEOF]->Thing
         RETURN count(n);
         """.format(type_id)
@@ -584,7 +584,7 @@ def test_persist_attributes(storage):
     storage.save(Thing)
 
     query_str = """
-        START Thing = node:persistablemeta(id="Thing")
+        START Thing = node:persistabletype(id="Thing")
         MATCH attr -[DECLAREDON]-> Thing
         RETURN attr
     """
@@ -612,7 +612,7 @@ def test_attribute_creation(storage):
     storage.save(Thing)
 
     query_str = """
-        START Thing = node:persistablemeta(id="Thing")
+        START Thing = node:persistabletype(id="Thing")
         MATCH attr -[:DECLAREDON]-> Thing
         RETURN attr.__type__, attr.name, attr.unique
     """
@@ -644,7 +644,7 @@ def test_attribute_inheritance(storage):
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
     # there are two paths from it to ``Entity``.
     query_str = """
-        START Entity = node:persistablemeta(id="Entity")
+        START Entity = node:persistabletype(id="Entity")
         MATCH attr -[:DECLAREDON]-> type -[:ISA*]-> Entity
         RETURN type.id, attr.name, attr.__type__, attr.default?
     """
@@ -672,7 +672,7 @@ def test_attribute_inheritance(storage):
 
     # ``natural`` on ``Beetroot`` should only be defined once
     query_str = """
-        START Beetroot = node:persistablemeta(id="Beetroot")
+        START Beetroot = node:persistabletype(id="Beetroot")
         MATCH attr -[:DECLAREDON]-> Beetroot
         RETURN count(attr)
     """
@@ -686,7 +686,7 @@ def test_serialize_deserialize(storage):
     Verify that serialize and deserialize are reversible
     """
     dct = storage.serialize(Entity)
-    assert dct == {'__type__': 'PersistableMeta', 'id': 'Entity'}
+    assert dct == {'__type__': 'PersistableCollector', 'id': 'Entity'}
 
     obj = storage.deserialize(dct)
     assert obj is Entity

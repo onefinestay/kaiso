@@ -1,14 +1,12 @@
 import pytest
 
-from kaiso.exceptions import DeserialisationError, UnknownType
+from kaiso.exceptions import DeserialisationError
 from kaiso.attributes import String, Uuid, Choice
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
-    get_type_relationships, get_changes,
-    object_to_dict, dict_to_object, dict_to_db_values_dict)
+    get_type_relationships, get_changes, dict_to_db_values_dict)
 from kaiso.types import (
-    Persistable, DiscriptorType, PersistableMeta,
-    Entity, AttributedBase, Attribute)
+    Persistable, PersistableCollector, Entity, AttributedBase, Attribute)
 
 
 class Foo(Entity):
@@ -24,163 +22,161 @@ class Spam(Entity):
     ham = String(default='eggs')
 
 
-def test_classes_to_dict():
-    dct = object_to_dict(Entity, PersistableMeta)
-    assert dct == {'__type__': 'PersistableMeta', 'id': 'Entity'}
+def test_classes_to_dict(type_registry):
 
-    obj = dict_to_object(dct, PersistableMeta)
+    dct = type_registry.object_to_dict(Entity)
+    assert dct == {'__type__': 'PersistableCollector', 'id': 'Entity'}
+
+    obj = type_registry.dict_to_object(dct)
     assert obj is Entity
 
-    dct = object_to_dict(Foo, PersistableMeta)
-    assert dct == {'__type__': 'PersistableMeta', 'id': 'Foo'}
+    dct = type_registry.object_to_dict(Foo)
+    assert dct == {'__type__': 'PersistableCollector', 'id': 'Foo'}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert obj is Foo
 
 
-def test_objects():
-    dct = object_to_dict(Entity(), PersistableMeta)
+def test_objects(type_registry):
+
+    dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity'}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Entity)
 
-    dct = object_to_dict(Foo(), PersistableMeta)
+    dct = type_registry.object_to_dict(Foo())
     assert dct == {'__type__': 'Foo'}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Foo)
 
 
-def test_attribute():
+def test_attribute(type_registry):
     """ Verify (de)serialization of Attributes.
     """
     # Attribute dicts always contain both ``unique`` and ``required`` keys.
     attr = Bar(unique=True)
-    dct = object_to_dict(attr, PersistableMeta)
+    dct = type_registry.object_to_dict(attr)
     assert dct == {
         '__type__': 'Bar', 'unique': True, 'required': False, 'name': None}
 
     # Attribute objects have default values of ``None`` for ``unique``
     # and ``required``.
-    obj = dict_to_object(
-        {'__type__': 'Bar', 'unique': True, 'name': None}, PersistableMeta)
+    obj = type_registry.dict_to_object(
+        {'__type__': 'Bar', 'unique': True, 'name': None})
     assert isinstance(obj, Bar)
     assert obj.unique is True
     assert obj.required is None
     assert obj.name is None
 
 
-def test_choices():
+def test_choices(type_registry):
+
     attr = Choice('ham', 'spam', 'eggs')
-    dct = object_to_dict(attr, PersistableMeta)
+    dct = type_registry.object_to_dict(attr)
 
     assert dct == {
         '__type__': 'Choice', 'name': None,
         'unique': False, 'required': False, 'default': None,
         'choices': ['ham', 'spam', 'eggs']}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Choice)
     assert obj.choices == ('ham', 'spam', 'eggs')
 
 
-def test_relationship():
-    dct = object_to_dict(Relationship(None, None), PersistableMeta)
+def test_relationship(type_registry):
+
+    dct = type_registry.object_to_dict(Relationship(None, None))
     assert dct == {'__type__': 'Relationship'}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Relationship)
 
 
-def test_obj_with_attrs():
+def test_obj_with_attrs(type_registry):
+
     spam = Spam(id=None)
 
-    dct = object_to_dict(spam, PersistableMeta, include_none=False)
+    dct = type_registry.object_to_dict(spam, include_none=False)
     assert dct == {'__type__': 'Spam', 'ham': 'eggs'}
 
-    dct = object_to_dict(spam, PersistableMeta, include_none=True)
+    dct = type_registry.object_to_dict(spam, include_none=True)
     assert dct == {'__type__': 'Spam', 'id': None, 'ham': 'eggs'}
 
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
     dct.pop('ham')  # removing an attr with defaults
-    obj = dict_to_object(dct, PersistableMeta)
+    obj = type_registry.dict_to_object(dct)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
 
-def test_dynamic_type():
-    DynamicType = type('DynamicType', (PersistableMeta,), {})
+def test_dynamic_typex(type_registry):
+    Foobar = type_registry.create('Foobar', (Entity,), {})
 
-    Foobar = DynamicType('Foobar', (Entity,), {})
-
-    dct = object_to_dict(Foobar, DynamicType)
-    assert dct == {'__type__': 'PersistableMeta', 'id': 'Foobar'}
+    dct = type_registry.object_to_dict(Foobar)
+    assert dct == {'__type__': 'PersistableCollector', 'id': 'Foobar'}
 
     # since Foobar is only registered with DynamicType
-    with pytest.raises(UnknownType):
-        obj = dict_to_object(dct, PersistableMeta)
+    # INVALID: we only have one shared type registry now
+    # with pytest.raises(UnknownType):
+    #    obj = type_registry.dict_to_object(dct)
 
-    obj = dict_to_object(dct, DynamicType)
+    obj = type_registry.dict_to_object(dct)
     assert obj is Foobar
 
 
-def test_dynamic_typed_object():
-    DynamicType = type('DynamicType', (PersistableMeta,), {})
+def test_dynamic_typed_object(type_registry):
 
     attrs = {'id': String()}
-    Foobar = DynamicType('Foobar', (Entity,), attrs)
+    Foobar = type_registry.create('Foobar', (Entity,), attrs)
 
     foo = Foobar(id='spam')
-    dct = object_to_dict(foo, DynamicType)
+    dct = type_registry.object_to_dict(foo)
 
     assert dct == {'__type__': 'Foobar', 'id': 'spam'}
 
-    obj = dict_to_object(dct, DynamicType)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Foobar)
     assert obj.id == foo.id
 
 
-def test_extended_declared_type_using_dynamic_type():
-    DynamicType = type('DynamicType', (PersistableMeta,), {})
+def test_extend_declared_type_using_dynamic_type(type_registry):
 
     attrs = {'id': Uuid()}
-    DynEntity = DynamicType('Entity', (AttributedBase,), attrs)
+    DynEntity = type_registry.create('Entity', (AttributedBase,), attrs)
 
     foo = DynEntity()
-    dct = object_to_dict(foo, DynamicType)
+    dct = type_registry.object_to_dict(foo)
 
     assert dct == {'__type__': 'Entity', 'id': str(foo.id)}
 
-    obj = dict_to_object(dct, DynamicType)
+    obj = type_registry.dict_to_object(dct)
     assert isinstance(obj, Entity)
     assert not isinstance(obj, DynEntity)
     assert obj.id == foo.id
 
 
-def test_extended_declared_type_using_declared_type():
-    DynamicType = type('DynamicType', (PersistableMeta,), {})
-
+def test_extend_declared_type_using_declared_type(type_registry):
     attrs = {'id': String()}
-    DynamicType('Entity', (AttributedBase,), attrs)
+    type_registry.create('Entity', (AttributedBase,), attrs)
 
-    dct = object_to_dict(Entity(), DynamicType)
+    dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity', 'id': None}
 
 
-def test_extended_declared_type_with_default_using_declared_type():
-    DynamicType = type('DynamicType', (PersistableMeta,), {})
-
+def test_extend_declared_type_with_default_using_declared_type(type_registry):
     attrs = {
         'id': String(default='foobar'),
         'spam': Uuid()
     }
-    DynamicType('Entity', (AttributedBase,), attrs)
+    type_registry.create('Entity', (AttributedBase,), attrs)
 
-    dct = object_to_dict(Entity(), DynamicType)
+    dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity', 'id': 'foobar', 'spam': None}
 
 
@@ -202,9 +198,9 @@ def test_attribute_types():
     assert dct == {'foo': str(uid), 'bar': 123}
 
 
-def test_missing_info():
+def test_missing_info(type_registry):
     with pytest.raises(DeserialisationError):
-        dict_to_object({}, PersistableMeta)
+        type_registry.dict_to_object({})
 
 
 def test_IsA_and_InstanceOf_type_relationships():
@@ -220,17 +216,15 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (DiscriptorType, IsA, type),
-        (DiscriptorType, InstanceOf, type),
-        (PersistableMeta, IsA, type),
+        (PersistableCollector, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableMeta, IsA, Persistable),
-        (PersistableMeta, InstanceOf, DiscriptorType),
+        (PersistableCollector, IsA, Persistable),
+        (PersistableCollector, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableMeta),
+        (AttributedBase, InstanceOf, PersistableCollector),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableMeta),
+        (Entity, InstanceOf, PersistableCollector),
     ]
 
     pers = Entity()
@@ -240,17 +234,15 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (DiscriptorType, IsA, type),
-        (DiscriptorType, InstanceOf, type),
-        (PersistableMeta, IsA, type),
+        (PersistableCollector, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableMeta, IsA, Persistable),
-        (PersistableMeta, InstanceOf, DiscriptorType),
+        (PersistableCollector, IsA, Persistable),
+        (PersistableCollector, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableMeta),
+        (AttributedBase, InstanceOf, PersistableCollector),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableMeta),
+        (Entity, InstanceOf, PersistableCollector),
         (pers, InstanceOf, Entity),
     ]
 
@@ -261,18 +253,16 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (DiscriptorType, IsA, type),
-        (DiscriptorType, InstanceOf, type),
-        (PersistableMeta, IsA, type),
+        (PersistableCollector, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableMeta, IsA, Persistable),
-        (PersistableMeta, InstanceOf, DiscriptorType),
+        (PersistableCollector, IsA, Persistable),
+        (PersistableCollector, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableMeta),
+        (AttributedBase, InstanceOf, PersistableCollector),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableMeta),
+        (Entity, InstanceOf, PersistableCollector),
         (Foo, IsA, Entity),
-        (Foo, InstanceOf, PersistableMeta),
+        (Foo, InstanceOf, PersistableCollector),
         (foo, InstanceOf, Foo),
     ]

@@ -1,21 +1,18 @@
-from logging import getLogger
-import uuid
-
-from py2neo import cypher, neo4j
-
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, UnknownType
 from kaiso.queries import (
-    get_create_types_query, get_create_relationship_query,
-    get_start_clause, join_lines)
+    get_create_types_query, get_create_relationship_query, get_start_clause,
+    join_lines)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
-from kaiso.serialize import (
-    dict_to_db_values_dict, get_changes)
+from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
-    Descriptor, Persistable, PersistableMeta, PersistableCollector,
-    Relationship, TypeRegistry, AttributedBase, get_index_name, is_indexable)
+    Descriptor, Persistable, PersistableCollector, Relationship, TypeRegistry,
+    AttributedBase, get_index_name, is_indexable)
+from logging import getLogger
+from py2neo import cypher, neo4j
+
 
 log = getLogger(__name__)
 
@@ -50,7 +47,7 @@ class Storage(object):
     """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
-    This includes instances of Entity, PersistableMeta
+    This includes instances of Entity, PersistableCollector
     and subclasses of either.
 
     InstanceOf and IsA relationships are automatically generated,
@@ -131,34 +128,38 @@ class Storage(object):
 
     def _load_types(self):
 
+        registry = self.type_registry
+
         for type_id, bases, attrs in self.get_type_hierarchy():
             try:
-                cls = self.type_registry.get_class_by_id(type_id)
+                cls = registry.get_class_by_id(type_id)
 
                 # if type(cls) is not dyn_type:
-                if not self.type_registry.is_dynamic_type(cls):
+                if not registry.is_dynamic_type(cls):
                     cls = None
             except UnknownType:
                 cls = None
 
             if cls is None:
-                bases = tuple(self.type_registry.get_class_by_id(base) for base in bases)
+                bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                self.type_registry.create(str(type_id), bases, attrs)
+                registry.create(str(type_id), bases, attrs)
 
     def _get_changes(self, persistable):
         changes = {}
         existing = None
         obj_type = type(persistable)
 
+        registry = self.type_registry
+
         if isinstance(persistable, PersistableCollector):
             # this is a class, we need to get it and it's attrs
             # idx_name = obj_type.index_name
-            idx_name = self.type_registry.index_name
+            idx_name = registry.index_name
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
             # descr = obj_type.get_descriptor(persistable)
-            descr = self.type_registry.get_descriptor(persistable)
+            descr = registry.get_descriptor(persistable)
             query_args = {
                 'type_id': descr.type_id
             }
@@ -195,11 +196,12 @@ class Storage(object):
             if modified_attrs:
                 changes['attributes'] = modified_attrs
         else:
-            existing = self.get(obj_type, **get_attr_filter(persistable, self.type_registry))
+            existing = self.get(obj_type, **get_attr_filter(persistable,
+                                                            registry))
 
             if existing is not None:
-                existing_props = self.type_registry.object_to_dict(existing)
-                props = self.type_registry.object_to_dict(persistable)
+                existing_props = registry.object_to_dict(existing)
+                props = registry.object_to_dict(persistable)
 
                 if isinstance(persistable, Relationship):
                     # if the relationship has endoints, also consider
@@ -209,7 +211,8 @@ class Storage(object):
                         if new is None:
                             continue
                         ex_rel_attr = getattr(existing, rel_attr)
-                        ex_rel_identifier = get_attr_filter(ex_rel_attr, self.type_registry)
+                        ex_rel_identifier = get_attr_filter(ex_rel_attr,
+                                                            registry)
                         if new != ex_rel_identifier:
                             props[rel_attr] = new
 
@@ -237,7 +240,10 @@ class Storage(object):
         return cls
 
     def _update(self, persistable, existing, changes):
-        for _, index_attr, _ in self.type_registry.get_index_entries(existing):
+
+        registry = self.type_registry
+
+        for _, index_attr, _ in registry.get_index_entries(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
@@ -253,7 +259,7 @@ class Storage(object):
             set_clauses = ''
 
         if isinstance(persistable, type):
-            descr = self.type_registry.get_descriptor(persistable)
+            descr = registry.get_descriptor(persistable)
 
             query_args = {'type_id': descr.type_id}
 
@@ -269,7 +275,7 @@ class Storage(object):
             else:
                 where = ''
 
-            index_name = self.type_registry.index_name
+            index_name = registry.index_name
 
             query = join_lines(
                 'START n=node:%s(id={type_id})' % index_name,
@@ -282,7 +288,7 @@ class Storage(object):
 
             self._update_types(persistable)
         else:
-            start_clause = get_start_clause(existing, 'n', self.type_registry)
+            start_clause = get_start_clause(existing, 'n', registry)
             query = None
 
             if isinstance(persistable, Relationship):
@@ -295,13 +301,13 @@ class Storage(object):
                 if old_start != new_start or old_end != new_end:
                     start_clause = '%s, %s, %s, %s, %s' % (
                         start_clause,
-                        get_start_clause(old_start, 'old_start', self.type_registry),
-                        get_start_clause(old_end, 'old_end', self.type_registry),
-                        get_start_clause(new_start, 'new_start', self.type_registry),
-                        get_start_clause(new_end, 'new_end', self.type_registry)
+                        get_start_clause(old_start, 'old_start', registry),
+                        get_start_clause(old_end, 'old_end', registry),
+                        get_start_clause(new_start, 'new_start', registry),
+                        get_start_clause(new_end, 'new_end', registry)
                     )
 
-                    rel_props = self.type_registry.object_to_dict(persistable)
+                    rel_props = registry.object_to_dict(persistable)
 
                     query = join_lines(
                         'START %s' % start_clause,
@@ -402,7 +408,8 @@ class Storage(object):
             query_args = {}
 
         query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts', self.type_registry),
+            'START %s' % get_start_clause(self.type_system, 'ts',
+                                          self.type_registry),
             'MATCH',
             match,
             where,
@@ -478,7 +485,7 @@ class Storage(object):
 
         indexes = attr_filter.items()
 
-        if issubclass(cls, (Relationship, PersistableMeta)):
+        if issubclass(cls, (Relationship, PersistableCollector)):
             idx_name = get_index_name(cls)
             idx_key, idx_value = indexes[0]
 
@@ -550,7 +557,10 @@ class Storage(object):
         # TODO: should get the rel name from descriptor?
         rel_query = rel_query.format(rel_cls.__name__.upper())
 
-        query = 'START {idx_lookup} MATCH {rel_query} RETURN related, relation'
+        query = join_lines(
+            'START {idx_lookup} MATCH {rel_query}',
+            'RETURN related, relation'
+        )
 
         query = query.format(
             idx_lookup=get_start_clause(obj, 'n', self.type_registry),
@@ -578,7 +588,7 @@ class Storage(object):
                 get_start_clause(obj.start, 'n1', self.type_registry),
                 get_start_clause(obj.end, 'n2', self.type_registry),
             )
-        elif isinstance(obj, PersistableMeta):
+        elif isinstance(obj, PersistableCollector):
             query = join_lines(
                 'START {}',
                 'MATCH attr -[:DECLAREDON]-> obj',
@@ -629,8 +639,6 @@ class Storage(object):
             self._conn.delete_index(neo4j.Relationship, index_name)
 
     def initialize(self):
-        # type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
-        # self._dynamic_meta = type(type_name, (PersistableMeta,), {})
         self.type_registry = TypeRegistry()
         self.type_registry.initialize()
 

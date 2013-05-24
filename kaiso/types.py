@@ -1,7 +1,6 @@
 from inspect import getmembers, getmro
-
-from kaiso.exceptions import (UnknownType, TypeAlreadyRegistered,
-                              DeserialisationError, TypeAlreadyCollected)
+from kaiso.exceptions import (
+    UnknownType, TypeAlreadyRegistered, DeserialisationError)
 
 
 class Persistable(object):
@@ -13,13 +12,20 @@ class Persistable(object):
 
 
 class PersistableCollector(type, Persistable):
-    """ Collects Persistable objects so that they can later be
+    """ Metaclass for static persistable types.
+
+    Collects classes as they are declared so that they can be registered with
+    the TypeRegistry later.
     """
     collected = {}
 
+    type_id = 'PersistableCollector'
+
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableCollector, mcs).__new__(mcs, name, bases, dct)
-        mcs.collect(cls)
+        # don't collect in our subclasses
+        if mcs == PersistableCollector:
+            mcs.collect(cls)
         return cls
 
     @classmethod
@@ -32,7 +38,9 @@ class PersistableCollector(type, Persistable):
         # can't redefine new dynamic types. (In the old world tests couldn't
         # define duplicate static types for the same reason).
         # if name in mcs.collected:
-        #    raise TypeAlreadyCollected("Type `{}` already defined.".format(name))
+        #    raise TypeAlreadyCollected(
+        #        "Type `{}` already defined.".format(name)
+        #    )
         mcs.collected[name] = cls
 
 
@@ -45,6 +53,8 @@ class TypeRegistry():
             'static': {},
             'dynamic': {}
         }
+        self.dynamic_type = type("DynamicType", (PersistableCollector,), {})
+        self.register(self.dynamic_type)
 
     def initialize(self):
         for cls in PersistableCollector.collected.values():
@@ -65,11 +75,13 @@ class TypeRegistry():
     def create(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
-        cls = type(cls_id, bases, attrs)
+        cls = self.dynamic_type(cls_id, bases, attrs)
         self.register(cls, registry="dynamic")
         return cls
 
     def register(self, cls, registry="static"):
+        """ Register a type
+        """
         name = cls.__name__
         if name in self._descriptors[registry]:
             raise TypeAlreadyRegistered(cls)
@@ -277,8 +289,8 @@ def get_index_name(cls):
     Returns:
         An index name.
     """
-    if issubclass(cls, PersistableMeta):
-        return cls.index_name
+    if issubclass(cls, PersistableCollector):
+        return TypeRegistry.index_name
     else:
         return cls.__name__.lower()
 
@@ -308,7 +320,7 @@ class Descriptor(object):
     def type_id(self):
         cls = self.cls
 
-        if issubclass(cls, PersistableMeta):
+        if issubclass(cls, PersistableCollector):
             return cls.type_id
         else:
             return cls.__name__
@@ -348,86 +360,8 @@ class Descriptor(object):
         return declared
 
 
-class DiscriptorType(type):
-    def __init__(cls, name, bases, dct):  # pylint:disable-msg=W0613
-        super(DiscriptorType, cls).__init__(cls)
-        cls.descriptors = {}
-        cls.register(cls)
-
-
 class AttributeBase(object):
     name = None
-
-
-class PersistableMeta(type, Persistable):
-    __metaclass__ = DiscriptorType
-
-    index_name = 'persistablemeta'
-    type_id = 'PersistableMeta'
-
-    def __new__(mcs, name, bases, dct):
-        for attr_name, attr in dct.items():
-            if isinstance(attr, AttributeBase):
-                attr.name = attr_name
-
-        cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
-        mcs.register(cls)
-        return cls
-
-    @classmethod
-    def register(mcs, cls):
-        name = cls.__name__
-        if name in mcs.descriptors:
-            raise TypeAlreadyRegistered(cls)
-        mcs.descriptors[name] = Descriptor(cls)
-
-    @classmethod
-    def get_class_by_id(mcs, cls_id):
-        try:
-            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
-                return PersistableMeta.get_class_by_id(cls_id)
-        except UnknownType:
-            pass
-
-        return mcs.get_descriptor_by_id(cls_id).cls
-
-    @classmethod
-    def get_descriptor(mcs, cls):
-        name = cls.__name__
-        return mcs.get_descriptor_by_id(name)
-
-    @classmethod
-    def get_descriptor_by_id(mcs, cls_id):
-        try:
-            return mcs.descriptors[cls_id]
-        except KeyError:
-            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
-                return PersistableMeta.get_descriptor_by_id(cls_id)
-
-            raise UnknownType('Unknown type "{}"'.format(cls_id))
-
-    @classmethod
-    def get_index_entries(mcs, obj):
-        if isinstance(obj, type):
-            yield (mcs.index_name, 'id', obj.__name__)
-        else:
-            obj_type = type(obj)
-            descr = mcs.get_descriptor(obj_type)
-
-            for name, attr in descr.attributes.items():
-                if attr.unique:
-                    declaring_class = get_declaring_class(descr.cls, name)
-
-                    index_name = get_index_name(declaring_class)
-                    key = name
-                    value = attr.to_db(getattr(obj, name))
-
-                    if value is not None:
-                        yield (index_name, key, value)
-
-
-PersistableMeta.register(type)
-PersistableMeta.register(object)
 
 
 def _is_attribute(obj):

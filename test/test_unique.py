@@ -4,7 +4,7 @@ import string
 import pytest
 
 from kaiso.exceptions import UniqueConstraintError
-from kaiso.types import PersistableCollector, Entity, Relationship
+from kaiso.types import Entity, Relationship
 from kaiso.attributes import Integer, String
 
 

@@ -1,8 +1,6 @@
 from kaiso.attributes.bases import get_attibute_for_type
-from kaiso.exceptions import DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import DefaultableAttribute, Descriptor, PersistableMeta
 
 
 def get_changes(old, new):
@@ -33,10 +31,10 @@ def get_type_relationships(obj):
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableMeta, IsA, type),
-        (PersistableMeta, InstanceOf, type),
+        (PersistableCollector, IsA, type),
+        (PersistableCollector, InstanceOf, type),
         (Entity, IsA, object),
-        (Entity, InstanceOf, PersistableMeta),
+        (Entity, InstanceOf, PersistableCollector),
         (<Entity object>, InstanceOf, Entity)
 
     Args:

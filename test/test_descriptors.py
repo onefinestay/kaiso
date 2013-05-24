@@ -1,17 +1,14 @@
 import pytest
 
-from kaiso.types import TypeRegistry, Entity
+from kaiso.types import Entity
 from kaiso.exceptions import UnknownType
 
 
 class Ente(Entity):
     pass
 
-type_registry = TypeRegistry()
-type_registry.initialize()
 
-
-def test_type_ids():
+def test_type_ids(type_registry):
 
     descr = type_registry.get_descriptor(Entity)
     assert descr.type_id == 'Entity'
@@ -20,6 +17,6 @@ def test_type_ids():
     assert descr.type_id == 'Ente'
 
 
-def test_unknown_type():
+def test_unknown_type(type_registry):
     with pytest.raises(UnknownType):
         type_registry.get_descriptor(UnknownType)
