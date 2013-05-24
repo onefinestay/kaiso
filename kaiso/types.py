@@ -11,6 +11,20 @@ class Persistable(object):
     Any object having Persistable as it's base are considered persistable.
     """
 
+collected = {}
+
+
+def collect(cls):
+    """ Collect a class as it is defined at import time. Called by the
+    PersistableType metaclass at class creation time.
+    """
+    name = cls.__name__
+    if name in collected:
+        raise TypeAlreadyCollected(
+            "Type `{}` already defined.".format(name)
+        )
+    collected[name] = cls
+
 
 class PersistableType(type, Persistable):
     """ Metaclass for static persistable types.
@@ -18,25 +32,15 @@ class PersistableType(type, Persistable):
     Collects classes as they are declared so that they can be registered with
     the TypeRegistry later.
     """
-    collected = {}
-
     type_id = 'PersistableType'
 
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
-        # don't collect in our subclasses (i.e. DynamicType)
-        if mcs == PersistableType:
-            mcs.collect(cls)
+        # DynamicType must inherit from PersistableType, but we only want to
+        # collect statically defined classes
+        if mcs is not DynamicType:
+            collect(cls)
         return cls
-
-    @classmethod
-    def collect(mcs, cls):
-        name = cls.__name__
-        if name in mcs.collected:
-            raise TypeAlreadyCollected(
-                "Type `{}` already defined.".format(name)
-            )
-        mcs.collected[name] = cls
 
 
 class DynamicType(PersistableType):
@@ -58,7 +62,7 @@ class TypeRegistry():
         }
 
     def initialize(self):
-        for cls in PersistableType.collected.values():
+        for cls in collected.values():
             self.register(cls)
         self.register(PersistableType)
         self.register(DynamicType)
