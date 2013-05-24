@@ -1,7 +1,7 @@
 from inspect import getmembers, getmro
 
 from kaiso.exceptions import (UnknownType, TypeAlreadyRegistered,
-                              DeserialisationError, DuplicateTypeName)
+                              DeserialisationError, TypeAlreadyCollected)
 
 
 class Persistable(object):
@@ -25,8 +25,14 @@ class PersistableCollector(type, Persistable):
     @classmethod
     def collect(mcs, cls):
         name = cls.__name__
-        if name in mcs.collected:
-            raise DuplicateTypeName("Type `{}` already defined.".format(name))
+        # In the old world, we have one PersistableCollector/Meta for static
+        # types (the one created at import time) and a dynamic one created
+        # by every new storage. Since we're not doing that anymore, we have
+        # to ignore duplicate names, because tests (which share an interpreter)
+        # can't redefine new dynamic types. (In the old world tests couldn't
+        # define duplicate static types for the same reason).
+        # if name in mcs.collected:
+        #    raise TypeAlreadyCollected("Type `{}` already defined.".format(name))
         mcs.collected[name] = cls
 
 

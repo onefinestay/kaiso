@@ -38,5 +38,5 @@ class TypeAlreadyRegistered(Exception):
     pass
 
 
-class DuplicateTypeName(Exception):
+class TypeAlreadyCollected(Exception):
     pass
