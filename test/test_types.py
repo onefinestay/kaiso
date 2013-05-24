@@ -1,10 +1,10 @@
 import pytest
 
-from kaiso.exceptions import TypeAlreadyRegistered
+from kaiso.exceptions import TypeAlreadyRegistered, TypeAlreadyCollected
 from kaiso.types import Entity, TypeRegistry
 
 
-def test_register_duplicate_dynamic():
+def test_register_duplicate():
 
     type_registry = TypeRegistry()
     type_registry.initialize()
@@ -15,7 +15,7 @@ def test_register_duplicate_dynamic():
         type_registry.create('Duplicate', (Entity,), {})
 
 
-def test_register_duplicate_static():
+def test_collect_duplicate():
 
     # this declares a static class
     class Duplicate(Entity):
@@ -24,8 +24,7 @@ def test_register_duplicate_static():
     type_registry = TypeRegistry()
     type_registry.initialize()
 
-    with pytest.raises(TypeAlreadyRegistered):
+    with pytest.raises(TypeAlreadyCollected):
 
         # this also declares a static class
-        DuplicateDuplicate = type("Duplicate", (Entity,), {})
-        type_registry.register(DuplicateDuplicate)
+        type("Duplicate", (Entity,), {})

@@ -8,7 +8,7 @@ from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship
-from kaiso.types import PersistableCollector, Entity
+from kaiso.types import PersistableType, Entity
 
 
 class Thing(Entity):
@@ -76,7 +76,7 @@ def test_add_fails_on_non_persistable(storage):
         storage.save(object())
 
     with pytest.raises(TypeError):
-        storage.save(PersistableCollector)
+        storage.save(PersistableType)
 
     # TODO: need to make sure we don't allow adding base classes
 
@@ -135,7 +135,7 @@ def test_simple_add_and_get_type(storage):
 
     storage.save(Thing)
 
-    result = storage.get(PersistableCollector, id='Thing')
+    result = storage.get(PersistableType, id='Thing')
 
     assert result is Thing
 
@@ -144,7 +144,7 @@ def test_simple_add_and_get_type(storage):
 def test_get_type_non_existing_obj(storage):
     storage.save(Thing)
 
-    assert storage.get(PersistableCollector, name="Ting") is None
+    assert storage.get(PersistableType, name="Ting") is None
 
 
 @pytest.mark.usefixtures('storage')
@@ -686,7 +686,7 @@ def test_serialize_deserialize(storage):
     Verify that serialize and deserialize are reversible
     """
     dct = storage.serialize(Entity)
-    assert dct == {'__type__': 'PersistableCollector', 'id': 'Entity'}
+    assert dct == {'__type__': 'PersistableType', 'id': 'Entity'}
 
     obj = storage.deserialize(dct)
     assert obj is Entity

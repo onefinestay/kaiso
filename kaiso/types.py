@@ -1,6 +1,7 @@
 from inspect import getmembers, getmro
 from kaiso.exceptions import (
-    UnknownType, TypeAlreadyRegistered, DeserialisationError)
+    UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
+    DeserialisationError)
 
 
 class Persistable(object):
@@ -11,7 +12,7 @@ class Persistable(object):
     """
 
 
-class PersistableCollector(type, Persistable):
+class PersistableType(type, Persistable):
     """ Metaclass for static persistable types.
 
     Collects classes as they are declared so that they can be registered with
@@ -19,29 +20,31 @@ class PersistableCollector(type, Persistable):
     """
     collected = {}
 
-    type_id = 'PersistableCollector'
+    type_id = 'PersistableType'
 
     def __new__(mcs, name, bases, dct):
-        cls = super(PersistableCollector, mcs).__new__(mcs, name, bases, dct)
-        # don't collect in our subclasses
-        if mcs == PersistableCollector:
+        cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
+        # don't collect in our subclasses (i.e. DynamicType)
+        if mcs == PersistableType:
             mcs.collect(cls)
         return cls
 
     @classmethod
     def collect(mcs, cls):
         name = cls.__name__
-        # In the old world, we have one PersistableCollector/Meta for static
-        # types (the one created at import time) and a dynamic one created
-        # by every new storage. Since we're not doing that anymore, we have
-        # to ignore duplicate names, because tests (which share an interpreter)
-        # can't redefine new dynamic types. (In the old world tests couldn't
-        # define duplicate static types for the same reason).
-        # if name in mcs.collected:
-        #    raise TypeAlreadyCollected(
-        #        "Type `{}` already defined.".format(name)
-        #    )
+        if name in mcs.collected:
+            raise TypeAlreadyCollected(
+                "Type `{}` already defined.".format(name)
+            )
         mcs.collected[name] = cls
+
+
+class DynamicType(PersistableType):
+    """ Metaclass for dynamic persistable types
+
+    Extends PersistableType, but the classes it produces will not be
+    collected.
+    """
 
 
 class TypeRegistry():
@@ -53,13 +56,12 @@ class TypeRegistry():
             'static': {},
             'dynamic': {}
         }
-        self.dynamic_type = type("DynamicType", (PersistableCollector,), {})
-        self.register(self.dynamic_type)
 
     def initialize(self):
-        for cls in PersistableCollector.collected.values():
+        for cls in PersistableType.collected.values():
             self.register(cls)
-        self.register(PersistableCollector)
+        self.register(PersistableType)
+        self.register(DynamicType)
 
     def is_registered(self, cls):
         return self.is_dynamic_type(cls) or self.is_static_type(cls)
@@ -75,7 +77,7 @@ class TypeRegistry():
     def create(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
-        cls = self.dynamic_type(cls_id, bases, attrs)
+        cls = DynamicType(cls_id, bases, attrs)
         self.register(cls, registry="dynamic")
         return cls
 
@@ -233,7 +235,7 @@ class TypeRegistry():
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
-        if type_id == Descriptor(PersistableCollector).type_id:
+        if type_id == Descriptor(PersistableType).type_id:
             # we are looking at a class object
             cls_id = properties['id']
         else:
@@ -289,7 +291,7 @@ def get_index_name(cls):
     Returns:
         An index name.
     """
-    if issubclass(cls, PersistableCollector):
+    if issubclass(cls, PersistableType):
         return TypeRegistry.index_name
     else:
         return cls.__name__.lower()
@@ -320,7 +322,7 @@ class Descriptor(object):
     def type_id(self):
         cls = self.cls
 
-        if issubclass(cls, PersistableCollector):
+        if issubclass(cls, PersistableType):
             return cls.type_id
         else:
             return cls.__name__
@@ -369,7 +371,7 @@ def _is_attribute(obj):
 
 
 class Attribute(AttributeBase):
-    __metaclass__ = PersistableCollector
+    __metaclass__ = PersistableType
 
     unique = None
     required = None
@@ -401,7 +403,7 @@ class AttributedBase(Persistable):
     Sets default values during instance creation and applies kwargs
     passed to __init__.
     """
-    __metaclass__ = PersistableCollector
+    __metaclass__ = PersistableType
 
     def __new__(cls, *args, **kwargs):
 

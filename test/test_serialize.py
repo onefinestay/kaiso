@@ -6,7 +6,7 @@ from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes, dict_to_db_values_dict)
 from kaiso.types import (
-    Persistable, PersistableCollector, Entity, AttributedBase, Attribute)
+    Persistable, PersistableType, Entity, AttributedBase, Attribute)
 
 
 class Foo(Entity):
@@ -25,13 +25,13 @@ class Spam(Entity):
 def test_classes_to_dict(type_registry):
 
     dct = type_registry.object_to_dict(Entity)
-    assert dct == {'__type__': 'PersistableCollector', 'id': 'Entity'}
+    assert dct == {'__type__': 'PersistableType', 'id': 'Entity'}
 
     obj = type_registry.dict_to_object(dct)
     assert obj is Entity
 
     dct = type_registry.object_to_dict(Foo)
-    assert dct == {'__type__': 'PersistableCollector', 'id': 'Foo'}
+    assert dct == {'__type__': 'PersistableType', 'id': 'Foo'}
 
     obj = type_registry.dict_to_object(dct)
     assert obj is Foo
@@ -119,7 +119,7 @@ def test_dynamic_typex(type_registry):
     Foobar = type_registry.create('Foobar', (Entity,), {})
 
     dct = type_registry.object_to_dict(Foobar)
-    assert dct == {'__type__': 'PersistableCollector', 'id': 'Foobar'}
+    assert dct == {'__type__': 'PersistableType', 'id': 'Foobar'}
 
     # since Foobar is only registered with DynamicType
     # INVALID: we only have one shared type registry now
@@ -216,15 +216,15 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableCollector, IsA, type),
+        (PersistableType, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableCollector, IsA, Persistable),
-        (PersistableCollector, InstanceOf, type),
+        (PersistableType, IsA, Persistable),
+        (PersistableType, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableCollector),
+        (AttributedBase, InstanceOf, PersistableType),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableCollector),
+        (Entity, InstanceOf, PersistableType),
     ]
 
     pers = Entity()
@@ -234,15 +234,15 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableCollector, IsA, type),
+        (PersistableType, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableCollector, IsA, Persistable),
-        (PersistableCollector, InstanceOf, type),
+        (PersistableType, IsA, Persistable),
+        (PersistableType, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableCollector),
+        (AttributedBase, InstanceOf, PersistableType),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableCollector),
+        (Entity, InstanceOf, PersistableType),
         (pers, InstanceOf, Entity),
     ]
 
@@ -253,16 +253,16 @@ def test_IsA_and_InstanceOf_type_relationships():
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableCollector, IsA, type),
+        (PersistableType, IsA, type),
         (Persistable, IsA, object),
         (Persistable, InstanceOf, type),
-        (PersistableCollector, IsA, Persistable),
-        (PersistableCollector, InstanceOf, type),
+        (PersistableType, IsA, Persistable),
+        (PersistableType, InstanceOf, type),
         (AttributedBase, IsA, Persistable),
-        (AttributedBase, InstanceOf, PersistableCollector),
+        (AttributedBase, InstanceOf, PersistableType),
         (Entity, IsA, AttributedBase),
-        (Entity, InstanceOf, PersistableCollector),
+        (Entity, InstanceOf, PersistableType),
         (Foo, IsA, Entity),
-        (Foo, InstanceOf, PersistableCollector),
+        (Foo, InstanceOf, PersistableType),
         (foo, InstanceOf, Foo),
     ]

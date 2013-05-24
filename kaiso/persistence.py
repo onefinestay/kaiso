@@ -8,7 +8,7 @@ from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
-    Descriptor, Persistable, PersistableCollector, Relationship, TypeRegistry,
+    Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
     AttributedBase, get_index_name, is_indexable)
 from logging import getLogger
 from py2neo import cypher, neo4j
@@ -47,7 +47,7 @@ class Storage(object):
     """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
-    This includes instances of Entity, PersistableCollector
+    This includes instances of Entity, PersistableType
     and subclasses of either.
 
     InstanceOf and IsA relationships are automatically generated,
@@ -152,7 +152,7 @@ class Storage(object):
 
         registry = self.type_registry
 
-        if isinstance(persistable, PersistableCollector):
+        if isinstance(persistable, PersistableType):
             # this is a class, we need to get it and it's attrs
             # idx_name = obj_type.index_name
             idx_name = registry.index_name
@@ -346,7 +346,7 @@ class Storage(object):
 
         query_args = {}
 
-        if isinstance(obj, PersistableCollector):
+        if isinstance(obj, PersistableType):
             # object is a type; create the type and its hierarchy
             return self._update_types(obj)
 
@@ -485,7 +485,7 @@ class Storage(object):
 
         indexes = attr_filter.items()
 
-        if issubclass(cls, (Relationship, PersistableCollector)):
+        if issubclass(cls, (Relationship, PersistableType)):
             idx_name = get_index_name(cls)
             idx_key, idx_value = indexes[0]
 
@@ -588,7 +588,7 @@ class Storage(object):
                 get_start_clause(obj.start, 'n1', self.type_registry),
                 get_start_clause(obj.end, 'n2', self.type_registry),
             )
-        elif isinstance(obj, PersistableCollector):
+        elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
                 'MATCH attr -[:DECLAREDON]-> obj',

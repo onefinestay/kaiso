@@ -31,10 +31,10 @@ def get_type_relationships(obj):
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableCollector, IsA, type),
-        (PersistableCollector, InstanceOf, type),
+        (PersistableType, IsA, type),
+        (PersistableType, InstanceOf, type),
         (Entity, IsA, object),
-        (Entity, InstanceOf, PersistableCollector),
+        (Entity, InstanceOf, PersistableType),
         (<Entity object>, InstanceOf, Entity)
 
     Args:
