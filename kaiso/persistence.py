@@ -273,7 +273,7 @@ class Storage(object):
             else:
                 where = ''
 
-            index_name = registry.index_name
+            index_name = get_index_name(PersistableType)
 
             query = join_lines(
                 'START n=node:%s(id={type_id})' % index_name,
@@ -364,7 +364,7 @@ class Storage(object):
 
             self._update_types(obj_type)
 
-            idx_name = TypeRegistry.index_name
+            idx_name = get_index_name(PersistableType)
             query = (
                 'START cls=node:%s(id={type_id}) '
                 'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '

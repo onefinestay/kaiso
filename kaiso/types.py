@@ -50,9 +50,8 @@ class DynamicType(PersistableType):
 
 
 class TypeRegistry():
-
-    index_name = "persistabletype"
-
+    """ Keeps track of statically and dynamically declared types.
+    """
     def __init__(self):
         self._descriptors = {
             'static': {},
@@ -141,8 +140,8 @@ class TypeRegistry():
             return self._descriptors['static'][cls_id]
 
     def get_index_entries(self, obj):
-        if isinstance(obj, type):
-            yield (self.index_name, 'id', obj.__name__)
+        if isinstance(obj, PersistableType):
+            yield (get_index_name(PersistableType), 'id', obj.__name__)
         else:
             obj_type = type(obj)
             descr = self.get_descriptor(obj_type)
