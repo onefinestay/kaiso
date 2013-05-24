@@ -79,6 +79,8 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     class Ham(Entity):
         egg = String
 
+    # type registry already initialised, so we have to manually register Ham
+    storage.type_registry.register(Ham)
     storage.save(Ham)
 
     attrs = {'egg': String(), 'spam': String()}
@@ -136,6 +138,8 @@ def test_load_dynamic_types(storage):
 
 @pytest.mark.usefixtures('storage')
 def test_add_attr_to_type_via_2nd_storage(storage):
+    # NB: This will fail until TypeRegistry is separated from
+    #     Storage. We need pools.
     attrs = {'id': String(unique=True)}
     Shrub = storage.create_type('Shrub', (Entity,), attrs)
 

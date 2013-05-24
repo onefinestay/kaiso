@@ -221,8 +221,7 @@ class TypeRegistry():
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
-        # if type_id == Descriptor(PersistableMeta).type_id:
-        if type_id == self.index_name:
+        if type_id == Descriptor(PersistableCollector).type_id:
             # we are looking at a class object
             cls_id = properties['id']
         else:

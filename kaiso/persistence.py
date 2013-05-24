@@ -151,12 +151,14 @@ class Storage(object):
         existing = None
         obj_type = type(persistable)
 
-        if isinstance(persistable, PersistableMeta):
+        if isinstance(persistable, PersistableCollector):
             # this is a class, we need to get it and it's attrs
-            idx_name = obj_type.index_name
+            # idx_name = obj_type.index_name
+            idx_name = self.type_registry.index_name
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
-            descr = obj_type.get_descriptor(persistable)
+            # descr = obj_type.get_descriptor(persistable)
+            descr = self.type_registry.get_descriptor(persistable)
             query_args = {
                 'type_id': descr.type_id
             }
