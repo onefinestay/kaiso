@@ -9,7 +9,7 @@ from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
-    AttributedBase, get_index_name, is_indexable)
+    AttributedBase, get_index_name, get_type_id, is_indexable)
 from logging import getLogger
 from py2neo import cypher, neo4j
 
@@ -153,14 +153,12 @@ class Storage(object):
 
         if isinstance(persistable, PersistableType):
             # this is a class, we need to get it and it's attrs
-            # idx_name = obj_type.index_name
-            idx_name = registry.index_name
+            idx_name = get_index_name(PersistableType)
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
-            # descr = obj_type.get_descriptor(persistable)
-            descr = registry.get_descriptor(persistable)
+            type_id = get_type_id(persistable)
             query_args = {
-                'type_id': descr.type_id
+                'type_id': type_id
             }
 
             query = join_lines(
@@ -180,6 +178,7 @@ class Storage(object):
 
             modified_attrs = {}
 
+            descr = registry.get_descriptor(persistable)
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr
@@ -258,12 +257,12 @@ class Storage(object):
             set_clauses = ''
 
         if isinstance(persistable, type):
-            descr = registry.get_descriptor(persistable)
 
-            query_args = {'type_id': descr.type_id}
+            query_args = {'type_id': get_type_id(persistable)}
 
             where = []
 
+            descr = registry.get_descriptor(persistable)
             for attr_name in descr.declared_attributes.keys():
                 where.append('attr.name = {attr_%s}' % attr_name)
                 query_args['attr_%s' % attr_name] = attr_name
@@ -373,7 +372,7 @@ class Storage(object):
             ) % idx_name
 
             query_args = {
-                'type_id': self.type_registry.get_descriptor(obj_type).type_id,
+                'type_id': get_type_id(obj_type),
                 'rel_props': self.type_registry.object_to_dict(
                     InstanceOf(None, None)),
             }
@@ -527,7 +526,7 @@ class Storage(object):
 
             query_args['idx_value'] = self.type_system.id
 
-            type_id = self.type_registry.get_descriptor(cls).type_id
+            type_id = get_type_id(cls)
             query_args['tpe_id'] = type_id
 
         found = [node for (node,) in self._execute(query, **query_args)]

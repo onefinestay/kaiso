@@ -32,8 +32,6 @@ class PersistableType(type, Persistable):
     Collects classes as they are declared so that they can be registered with
     the TypeRegistry later.
     """
-    type_id = 'PersistableType'
-
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         # DynamicType must inherit from PersistableType, but we only want to
@@ -186,16 +184,15 @@ class TypeRegistry():
         """
         obj_type = type(obj)
 
-        descr = self.get_descriptor(obj_type)
-
         properties = {
-            '__type__': descr.type_id,
+            '__type__': get_type_id(obj_type)
         }
 
         if isinstance(obj, type):
-            properties['id'] = self.get_descriptor(obj).type_id
+            properties['id'] = get_type_id(obj)
 
         else:
+            descr = self.get_descriptor(obj_type)
             for name, attr in descr.attributes.items():
                 try:
                     value = attr.to_db(getattr(obj, name))
@@ -240,7 +237,7 @@ class TypeRegistry():
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
-        if type_id == Descriptor(PersistableType).type_id:
+        if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
         else:
@@ -297,9 +294,18 @@ def get_index_name(cls):
         An index name.
     """
     if issubclass(cls, PersistableType):
-        return TypeRegistry.index_name
+        return PersistableType.__name__.lower()
     else:
         return cls.__name__.lower()
+
+
+def get_type_id(cls):
+    """ Returns the type_id for a class.
+    """
+    if issubclass(cls, PersistableType):
+        return PersistableType.__name__
+    else:
+        return cls.__name__
 
 
 def is_indexable(cls):
@@ -322,15 +328,6 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
-
-    @property
-    def type_id(self):
-        cls = self.cls
-
-        if issubclass(cls, PersistableType):
-            return cls.type_id
-        else:
-            return cls.__name__
 
     @property
     def relationships(self):
