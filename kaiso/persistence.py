@@ -134,7 +134,6 @@ class Storage(object):
             try:
                 cls = registry.get_class_by_id(type_id)
 
-                # if type(cls) is not dyn_type:
                 if not registry.is_dynamic_type(cls):
                     cls = None
             except UnknownType:

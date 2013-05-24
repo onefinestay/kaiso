@@ -82,13 +82,14 @@ class TypeRegistry():
         """ Create and register a dynamic type
         """
         cls = DynamicType(cls_id, bases, attrs)
-        self.register(cls, registry="dynamic")
+        self.register(cls)
         return cls
 
-    def register(self, cls, registry="static"):
+    def register(self, cls):
         """ Register a type
         """
         name = cls.__name__
+        registry = "dynamic" if type(cls) is DynamicType else "static"
         if name in self._descriptors[registry]:
             raise TypeAlreadyRegistered(cls)
         self._descriptors[registry][name] = Descriptor(cls)
