@@ -112,15 +112,15 @@ def test_load_dynamic_types(storage):
         RETURN tpe.id,  length(p) AS level,
             filter(b_id in collect(distinct base.id): b_id <> tpe.id),
             collect(distinct attr.name?)
-        ORDER BY level
+        ORDER BY level, tpe.id
         ''')
     result = list(rows)
 
     assert result == [
         ('Entity', 1, [], []),
         ('Animal', 2, ['Entity'], ['id']),
-        ('Duck', 3, ['Animal'], ['beek']),
         ('Beaver', 3, ['Animal'], ['tail']),
+        ('Duck', 3, ['Animal'], ['beek']),
         ('Horse', 3, ['Animal'], ['hoof']),
         ('Platypus', 4, ['Duck', 'Beaver'], ['egg']),
     ]
