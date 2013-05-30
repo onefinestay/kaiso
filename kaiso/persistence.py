@@ -61,6 +61,11 @@ class Storage(object):
         """
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
+        self.type_registry = TypeRegistry()
+        idx_name = get_index_name(TypeSystem)
+        self._conn.get_or_create_index(neo4j.Node, idx_name)
+        self.save(self.type_system)
+        self.reload_types()
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -126,8 +131,12 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _load_types(self):
+    def reload_types(self):
+        """Reload the type registry for this instance from the graph
+        database.
+        """
 
+        self.type_registry = TypeRegistry()
         registry = self.type_registry
 
         for type_id, bases, attrs in self.get_type_hierarchy():
@@ -626,22 +635,15 @@ class Storage(object):
             yield tuple(self._convert_row(row))
 
     def delete_all_data(self):
-        """ Removes all nodes, relationships and indexes in the store.
+        """ Removes all nodes, relationships and indexes in the store. This
+            object will no longer be usable after calling this method.
+            Construct a new Storage to re-initialise the database for kaiso.
 
             WARNING: This will destroy everything in your Neo4j database.
+
         """
         self._conn.clear()
         for index_name in self._conn.get_indexes(neo4j.Node).keys():
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
-
-    def initialize(self):
-        self.type_registry = TypeRegistry()
-        self.type_registry.initialize()
-
-        idx_name = get_index_name(TypeSystem)
-        self._conn.get_or_create_index(neo4j.Node, idx_name)
-        self.save(self.type_system)
-
-        self._load_types()

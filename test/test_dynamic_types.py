@@ -1,10 +1,7 @@
-import pytest
-
 from kaiso.attributes import String
 from kaiso.types import Entity
 
 
-@pytest.mark.usefixtures('storage')
 def test_save_dynamic_type(storage):
 
     attrs = {'id': String(unique=True)}
@@ -18,7 +15,6 @@ def test_save_dynamic_type(storage):
     assert result is Foobar
 
 
-@pytest.mark.usefixtures('storage')
 def test_save_dynamic_typed_obj(storage):
 
     attrs = {'id': String(unique=True)}
@@ -33,7 +29,6 @@ def test_save_dynamic_typed_obj(storage):
     assert result.id == foo.id
 
 
-@pytest.mark.usefixtures('storage')
 def test_add_attr_to_type(storage):
     Foobar = storage.create_type('Foobar', (Entity,), {})
     storage.save(Foobar)
@@ -49,7 +44,6 @@ def test_add_attr_to_type(storage):
     assert count == 1
 
 
-@pytest.mark.usefixtures('storage')
 def test_remove_attr_from_type(storage):
     attrs = {'ham': String()}
     Foobar = storage.create_type('Foobar', (Entity,), attrs)
@@ -66,7 +60,6 @@ def test_remove_attr_from_type(storage):
     assert count == 0
 
 
-@pytest.mark.usefixtures('storage')
 def test_removing_attr_from_declared_type_does_not_remove_it(storage):
 
     # the use case:
@@ -79,8 +72,6 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     class Ham(Entity):
         egg = String
 
-    # type registry already initialised, so we have to manually register Ham
-    storage.type_registry.register(Ham)
     storage.save(Ham)
 
     attrs = {'egg': String(), 'spam': String()}
@@ -98,7 +89,6 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     assert count == 2
 
 
-@pytest.mark.usefixtures('storage')
 def test_load_dynamic_types(storage):
     Animal = storage.create_type('Animal', (Entity,), {'id': String()})
     Horse = storage.create_type('Horse', (Animal,), {'hoof': String()})
@@ -111,7 +101,7 @@ def test_load_dynamic_types(storage):
     storage.save(Platypus)
 
     # this is the same as creating a new storage
-    storage.initialize()
+    storage.reload_types()
 
     rows = storage.query(
         '''
@@ -136,7 +126,6 @@ def test_load_dynamic_types(storage):
     ]
 
 
-@pytest.mark.usefixtures('storage')
 def test_add_attr_to_type_via_2nd_storage(storage):
     # NB: This will fail until TypeRegistry is separated from
     #     Storage. We need pools.
@@ -147,7 +136,7 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     storage.save(shrub)
 
     # this is the same as creating a new storage using the same URL
-    storage.initialize()
+    storage.reload_types()
 
     (Shrub,) = next(storage.query(
         'START cls=node:persistabletype(id="Shrub") RETURN cls'))
@@ -155,7 +144,7 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     storage.save(Shrub)
 
     # we want to query from an independent storage
-    storage.initialize()
+    storage.reload_types()
     rows = storage.query('START n=node:shrub(id="spam") RETURN n')
     (result,) = next(rows)
 

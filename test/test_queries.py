@@ -14,8 +14,8 @@ class TwoUniquesThing(IndexableThing):
 class Connects(Relationship):
     indexable_attr = String(unique=True)
 
+
 type_registry = TypeRegistry()
-type_registry.initialize()
 
 
 def test_get_start_clause_for_type():

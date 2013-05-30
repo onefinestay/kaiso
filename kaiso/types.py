@@ -49,20 +49,34 @@ class DynamicType(PersistableType):
     """
 
 
-class TypeRegistry():
+class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
+    _static_descriptors = {}
+    _builtin_types = (PersistableType, DynamicType)
+
     def __init__(self):
         self._descriptors = {
-            'static': {},
+            'static': self._static_descriptors,
             'dynamic': {}
         }
 
-    def initialize(self):
-        for cls in collected.values():
-            self.register(cls)
-        self.register(PersistableType)
-        self.register(DynamicType)
+        if not self._static_descriptors:
+            for type_ in self._builtin_types:
+                self.register(type_)
+        self._sync_static_descriptors()
+
+    @classmethod
+    def _sync_static_descriptors(cls):
+        # exit early if there've been no changes to the statically
+        # collected types
+        num_registered = len(cls._static_descriptors)
+        if num_registered - len(cls._builtin_types) == len(collected):
+            return
+
+        for name, collected_cls in collected.iteritems():
+            if name not in cls._static_descriptors:
+                cls._static_descriptors[name] = Descriptor(collected_cls)
 
     def is_registered(self, cls):
         name = cls.__name__ if isinstance(cls, type) else cls
@@ -106,6 +120,7 @@ class TypeRegistry():
         Returns:
             The class that was registered with ``cls_id``
         """
+        self._sync_static_descriptors()
         try:
             return self._descriptors['static'][cls_id].cls
         except KeyError:
@@ -131,6 +146,7 @@ class TypeRegistry():
         Raises:
             UnknownType if no type has been registered with the given id.
         """
+        self._sync_static_descriptors()
         if not self.is_registered(cls_id):
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 

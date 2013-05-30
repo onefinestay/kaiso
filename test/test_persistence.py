@@ -82,17 +82,6 @@ def test_add_fails_on_non_persistable(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_initialize_twice(storage):
-    storage.initialize()
-    storage.initialize()
-    rows = storage.query(
-        'START ts = node:typesystem(id="TypeSystem") RETURN count(ts)')
-
-    (count,) = next(rows)
-    assert count == 1
-
-
-@pytest.mark.usefixtures('storage')
 def test_add_persistable_only_adds_single_node(storage):
 
     storage.save(Entity)
