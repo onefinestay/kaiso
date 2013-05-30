@@ -279,6 +279,13 @@ class TypeRegistry(object):
 
         return obj
 
+    def clone(self):
+        """Return a copy of this TypeRegistry that is dissasociated with this
+        instance's internal state."""
+        clone = TypeRegistry()
+        clone._descriptors['dynamic'] = self._descriptors['dynamic'].copy()
+        return clone
+
 
 def get_declaring_class(cls, attr_name):
     """ Returns the class in the type heirarchy of ``cls`` that defined

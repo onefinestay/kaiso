@@ -149,3 +149,11 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     (result,) = next(rows)
 
     assert result.ham == 'eggs'
+
+
+def test_type_registry_independence(storage):
+    Shrub = storage.create_type('Shrub', (Entity,), {})
+    assert storage.type_registry.is_registered(Shrub)
+
+    storage.reload_types(use_cache=True)
+    assert not storage.type_registry.is_registered(Shrub)

@@ -53,6 +53,9 @@ class Storage(object):
     InstanceOf and IsA relationships are automatically generated,
     when persisting an object.
     """
+
+    _type_registry_cache = None
+
     def __init__(self, connection_uri):
         """ Initializes a Storage object.
 
@@ -65,7 +68,7 @@ class Storage(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
-        self.reload_types()
+        self.reload_types(use_cache=True)
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -131,10 +134,13 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def reload_types(self):
+    def reload_types(self, use_cache=False):
         """Reload the type registry for this instance from the graph
         database.
         """
+        if use_cache and Storage._type_registry_cache:
+            # TODO check if fresh
+            self.type_registry = Storage._type_registry_cache.clone()
 
         self.type_registry = TypeRegistry()
         registry = self.type_registry
@@ -152,6 +158,8 @@ class Storage(object):
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
                 registry.create(str(type_id), bases, attrs)
+
+        Storage._type_registry_cache = self.type_registry.clone()
 
     def _get_changes(self, persistable):
         changes = {}
@@ -244,6 +252,7 @@ class Storage(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
+        self._type_registry_cache = None
         return cls
 
     def _update(self, persistable, existing, changes):
