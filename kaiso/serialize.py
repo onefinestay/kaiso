@@ -172,12 +172,8 @@ def dict_to_object(properties, type_registry):
         descr = type_registry.get_descriptor_by_id(cls_id)
 
         for attr_name, attr in descr.attributes.items():
-            try:
-                value = properties[attr_name]
-            except KeyError:
-                pass
-            else:
-                value = attr.to_python(value)
-                setattr(obj, attr_name, value)
+            value = properties.get(attr_name)
+            value = attr.to_python(value)
+            setattr(obj, attr_name, value)
 
     return obj

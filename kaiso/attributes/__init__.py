@@ -27,6 +27,8 @@ class Uuid(Attribute):
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return uuid.UUID(hex=value)
 
 
@@ -53,6 +55,8 @@ class Tuple(DefaultableAttribute):
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return tuple(value)
 
 
@@ -66,6 +70,8 @@ class Decimal(DefaultableAttribute):
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return decimal.Decimal(value)
 
 
@@ -79,6 +85,8 @@ class DateTime(DefaultableAttribute):
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return iso8601.parse_date(value)
 
 

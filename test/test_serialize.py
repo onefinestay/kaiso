@@ -106,10 +106,10 @@ def test_obj_with_attrs():
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
-    dct.pop('ham')  # removing an attr with defaults
+    dct.pop('ham')  # removing an attr
     obj = dict_to_object(dct, PersistableMeta)
     assert obj.id == spam.id
-    assert obj.ham == spam.ham
+    assert obj.ham is None
 
 
 def test_dynamic_type():
