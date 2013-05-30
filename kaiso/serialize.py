@@ -67,14 +67,14 @@ def object_to_db_value(obj):
     except KeyError:
         return obj
     else:
-        return attr_cls.to_db(obj)
+        return attr_cls.to_primitive(obj, for_db=True)
 
 
 def dict_to_db_values_dict(data):
     return dict((k, object_to_db_value(v)) for k, v in data.items())
 
 
-def object_to_dict(obj, type_registry, include_none=True):
+def object_to_dict(obj, type_registry, for_db=False):
     """ Converts a persistable object to a dict.
 
     The generated dict will contain a __type__ key, for which the value
@@ -112,7 +112,7 @@ def object_to_dict(obj, type_registry, include_none=True):
     else:
         for name, attr in descr.attributes.items():
             try:
-                value = attr.to_db(getattr(obj, name))
+                value = attr.to_primitive(getattr(obj, name), for_db=for_db)
             except AttributeError:
                 # if we are dealing with an extended type, we may not
                 # have the attribute set on the instance
@@ -121,7 +121,7 @@ def object_to_dict(obj, type_registry, include_none=True):
                 else:
                     value = None
 
-            if value is not None or include_none:
+            if value is not None or not for_db:
                 properties[name] = value
 
     return properties

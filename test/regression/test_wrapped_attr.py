@@ -22,7 +22,7 @@ class WrappedAttr(Attribute):
     default = Wrapper()
 
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         return value.unwrap()
 
     @staticmethod

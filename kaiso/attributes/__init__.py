@@ -22,7 +22,7 @@ class Uuid(Attribute):
         return uuid.uuid4()
 
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         return str(value)
 
     @staticmethod
@@ -50,7 +50,7 @@ class String(DefaultableAttribute):
 
 class Tuple(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         return list(value)
 
     @staticmethod
@@ -63,7 +63,7 @@ class Tuple(DefaultableAttribute):
 @wraps_type(decimal.Decimal)
 class Decimal(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         if value is None:
             return None
         return str(value)
@@ -78,7 +78,7 @@ class Decimal(DefaultableAttribute):
 @wraps_type(datetime.datetime)
 class DateTime(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         if value is None:
             return None
         return value.isoformat()

@@ -204,7 +204,7 @@ class PersistableMeta(type, Persistable):
 
                     index_name = get_index_name(declaring_class)
                     key = name
-                    value = attr.to_db(getattr(obj, name))
+                    value = attr.to_primitive(getattr(obj, name), for_db=True)
 
                     if value is not None:
                         yield (index_name, key, value)
@@ -233,7 +233,7 @@ class Attribute(AttributeBase):
         return value
 
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         return value
 
 
