@@ -155,5 +155,5 @@ def test_type_registry_independence(storage):
     Shrub = storage.create_type('Shrub', (Entity,), {})
     assert storage.type_registry.is_registered(Shrub)
 
-    storage.reload_types(use_cache=True)
+    storage.reload_types()
     assert not storage.type_registry.is_registered(Shrub)
