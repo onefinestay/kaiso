@@ -11,19 +11,19 @@ class Persistable(object):
     Any object having Persistable as it's base are considered persistable.
     """
 
-collected = {}
+collected_static_classes = {}
 
 
-def collect(cls):
+def collect_class(cls):
     """ Collect a class as it is defined at import time. Called by the
     PersistableType metaclass at class creation time.
     """
     name = cls.__name__
-    if name in collected:
+    if name in collected_static_classes:
         raise TypeAlreadyCollected(
             "Type `{}` already defined.".format(name)
         )
-    collected[name] = cls
+    collected_static_classes[name] = cls
 
 
 class PersistableType(type, Persistable):
@@ -37,7 +37,7 @@ class PersistableType(type, Persistable):
         # DynamicType must inherit from PersistableType, but we only want to
         # collect statically defined classes
         if mcs is not DynamicType:
-            collect(cls)
+            collect_class(cls)
         return cls
 
 
@@ -71,25 +71,57 @@ class TypeRegistry(object):
         # exit early if there've been no changes to the statically
         # collected types
         num_registered = len(cls._static_descriptors)
-        if num_registered - len(cls._builtin_types) == len(collected):
+        static_registered = num_registered - len(cls._builtin_types)
+        if static_registered == len(collected_static_classes):
             return
 
-        for name, collected_cls in collected.iteritems():
+        for name, collected_cls in collected_static_classes.iteritems():
             if name not in cls._static_descriptors:
                 cls._static_descriptors[name] = Descriptor(collected_cls)
 
     def is_registered(self, cls):
+        """ Determine if ``cls`` is a registered type.
+
+        ``cls`` may be the name of the class, or the class object itself.
+
+        Arguments:
+            - cls: The class object or a class name as a string
+
+        Returns:
+            True if ``cls`` is registered as a static or dynamic type, False
+            otherwise.
+        """
         name = cls.__name__ if isinstance(cls, type) else cls
         return (name in self._descriptors['static'] or
                 name in self._descriptors['dynamic'])
 
     def is_dynamic_type(self, cls):
+        """ Determine if ``cls`` is a dynamic type.
+
+        ``cls`` does not need to be registered with this type registry.
+
+        Arguments:
+            - cls: The class object to inspect
+
+        Returns:
+            True if ``cls`` is a dynamic type, False otherwise
+        """
         return type(cls) is DynamicType
 
     def is_static_type(self, cls):
+        """ Determine if ``cls`` is a static type.
+
+        ``cls`` does not need to be registered with this type registry.
+
+        Arguments:
+            - cls: The class object to inspect
+
+        Returns:
+            True if ``cls`` is a static type, False otherwise
+        """
         return type(cls) is PersistableType
 
-    def create(self, cls_id, bases, attrs):
+    def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
         cls = DynamicType(cls_id, bases, attrs)

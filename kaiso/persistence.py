@@ -175,7 +175,7 @@ class Storage(object):
             if cls is None:
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                registry.create(str(type_id), bases, attrs)
+                registry.create_type(str(type_id), bases, attrs)
 
         Storage._type_registry_cache = (
             self.type_registry.clone(),
@@ -234,7 +234,6 @@ class Storage(object):
         else:
             existing = self.get(obj_type, **get_attr_filter(persistable,
                                                             registry))
-
             if existing is not None:
                 existing_props = registry.object_to_dict(existing)
                 props = registry.object_to_dict(persistable)
@@ -492,7 +491,7 @@ class Storage(object):
     def create_type(self, name, bases, attrs):
         """ Creates a new class given the name, bases and attrs given.
         """
-        return self.type_registry.create(name, bases, attrs)
+        return self.type_registry.create_type(name, bases, attrs)
 
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
