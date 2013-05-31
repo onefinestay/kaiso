@@ -1,5 +1,4 @@
 from logging import getLogger
-import uuid
 
 from py2neo import cypher, neo4j
 
@@ -7,15 +6,15 @@ from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, UnknownType
 from kaiso.queries import (
-    get_create_types_query, get_create_relationship_query,
-    get_start_clause, join_lines)
+    get_create_types_query, get_create_relationship_query, get_start_clause,
+    join_lines)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
-from kaiso.serialize import (
-    dict_to_db_values_dict, dict_to_object, object_to_dict, get_changes)
+from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
-    Descriptor, Persistable, PersistableMeta, Relationship,
-    AttributedBase, get_index_entries, get_index_name, is_indexable)
+    Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
+    AttributedBase, get_index_name, get_type_id, is_indexable)
+
 
 log = getLogger(__name__)
 
@@ -31,7 +30,7 @@ class TypeSystem(AttributedBase):
     version = Uuid()
 
 
-def get_attr_filter(obj):
+def get_attr_filter(obj, type_registry):
     """ Generates a dictionary, that will identify the given ``obj``
     based on it's unique attributes.
 
@@ -41,7 +40,7 @@ def get_attr_filter(obj):
     Returns:
         A dictionary of key-value pairs to indentify an object by.
     """
-    indexes = get_index_entries(obj)
+    indexes = type_registry.get_index_entries(obj)
     index_filter = dict((key, value) for _, key, value in indexes)
     return index_filter
 
@@ -50,12 +49,14 @@ class Storage(object):
     """ Provides a queryable object store.
 
     The object store can store any object as long as it's type is registered.
-    This includes instances of Entity, PersistableMeta
+    This includes instances of Entity, PersistableType
     and subclasses of either.
 
     InstanceOf and IsA relationships are automatically generated,
     when persisting an object.
     """
+    _type_registry_cache = None
+
     def __init__(self, connection_uri):
         """ Initializes a Storage object.
 
@@ -64,7 +65,11 @@ class Storage(object):
         """
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
-        self._dynamic_meta = None
+        self.type_registry = TypeRegistry()
+        idx_name = get_index_name(TypeSystem)
+        self._conn.get_or_create_index(neo4j.Node, idx_name)
+        self.save(self.type_system)
+        self.reload_types()
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -95,7 +100,7 @@ class Storage(object):
         """
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
             properties = value.get_properties()
-            obj = dict_to_object(properties, self._dynamic_meta)
+            obj = self.type_registry.dict_to_object(properties)
 
             if isinstance(value, neo4j.Relationship):
                 obj.start = self._convert_value(value.start_node)
@@ -113,7 +118,7 @@ class Storage(object):
                 yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
-        indexes = get_index_entries(obj)
+        indexes = self.type_registry.get_index_entries(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
                 index_type = neo4j.Relationship
@@ -130,36 +135,68 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _load_types(self):
-        dyn_type = self._dynamic_meta
+    def _query_type_digest(self):
+        query = join_lines(
+            'START %s' % get_start_clause(self.type_system, 'ts',
+                                          self.type_registry),
+            'MATCH ts -[:DEFINES|ISA|DECLAREDON*]- n '
+            'RETURN sum(id(n))'
+        )
+
+        rows = self.query(query)
+        (digest,) = next(rows)
+        return digest
+
+    def reload_types(self):
+        """Reload the type registry for this instance from the graph
+        database.
+        """
+        current_digest = self._query_type_digest()
+        if Storage._type_registry_cache:
+            cached_registry, digest = Storage._type_registry_cache
+            if current_digest == digest:
+                log.debug('using cached type registry, digest: %s',
+                    current_digest)
+                self.type_registry = cached_registry.clone()
+                return
+
+        self.type_registry = TypeRegistry()
+        registry = self.type_registry
 
         for type_id, bases, attrs in self.get_type_hierarchy():
             try:
-                cls = dyn_type.get_class_by_id(type_id)
+                cls = registry.get_class_by_id(type_id)
 
-                if type(cls) is not dyn_type:
+                if not registry.is_dynamic_type(cls):
                     cls = None
             except UnknownType:
                 cls = None
 
             if cls is None:
-                bases = tuple(dyn_type.get_class_by_id(base) for base in bases)
+                bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                self._dynamic_meta(str(type_id), bases, attrs)
+                registry.create_type(str(type_id), bases, attrs)
+
+        Storage._type_registry_cache = (
+            self.type_registry.clone(),
+            current_digest
+        )
 
     def _get_changes(self, persistable):
         changes = {}
         existing = None
         obj_type = type(persistable)
 
-        if isinstance(persistable, PersistableMeta):
+        registry = self.type_registry
+
+        if isinstance(persistable, PersistableType):
             # this is a class, we need to get it and it's attrs
-            idx_name = obj_type.index_name
+            idx_name = get_index_name(PersistableType)
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
-            descr = obj_type.get_descriptor(persistable)
+            type_id = get_type_id(persistable)
             query_args = {
-                'type_id': descr.type_id
+                'type_id': type_id
             }
 
             query = join_lines(
@@ -179,6 +216,7 @@ class Storage(object):
 
             modified_attrs = {}
 
+            descr = registry.get_descriptor(persistable)
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr
@@ -194,11 +232,11 @@ class Storage(object):
             if modified_attrs:
                 changes['attributes'] = modified_attrs
         else:
-            existing = self.get(obj_type, **get_attr_filter(persistable))
-
+            existing = self.get(obj_type, **get_attr_filter(persistable,
+                                                            registry))
             if existing is not None:
-                existing_props = object_to_dict(existing, self._dynamic_meta)
-                props = object_to_dict(persistable, self._dynamic_meta)
+                existing_props = registry.object_to_dict(existing)
+                props = registry.object_to_dict(persistable)
 
                 if isinstance(persistable, Relationship):
                     # if the relationship has endoints, also consider
@@ -208,7 +246,8 @@ class Storage(object):
                         if new is None:
                             continue
                         ex_rel_attr = getattr(existing, rel_attr)
-                        ex_rel_identifier = get_attr_filter(ex_rel_attr)
+                        ex_rel_identifier = get_attr_filter(ex_rel_attr,
+                                                            registry)
                         if new != ex_rel_identifier:
                             props[rel_attr] = new
 
@@ -221,7 +260,7 @@ class Storage(object):
 
     def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
-            cls, self.type_system, self._dynamic_meta)
+            cls, self.type_system, self.type_registry)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
@@ -233,10 +272,14 @@ class Storage(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
+        Storage._type_registry_cache = None
         return cls
 
     def _update(self, persistable, existing, changes):
-        for _, index_attr, _ in get_index_entries(existing):
+
+        registry = self.type_registry
+
+        for _, index_attr, _ in registry.get_index_entries(existing):
             if index_attr in changes:
                 raise NotImplementedError(
                     "We currently don't support changing unique attributes")
@@ -252,12 +295,12 @@ class Storage(object):
             set_clauses = ''
 
         if isinstance(persistable, type):
-            descr = self._dynamic_meta.get_descriptor(persistable)
 
-            query_args = {'type_id': descr.type_id}
+            query_args = {'type_id': get_type_id(persistable)}
 
             where = []
 
+            descr = registry.get_descriptor(persistable)
             for attr_name in descr.declared_attributes.keys():
                 where.append('attr.name = {attr_%s}' % attr_name)
                 query_args['attr_%s' % attr_name] = attr_name
@@ -268,7 +311,7 @@ class Storage(object):
             else:
                 where = ''
 
-            index_name = self._dynamic_meta.index_name
+            index_name = get_index_name(PersistableType)
 
             query = join_lines(
                 'START n=node:%s(id={type_id})' % index_name,
@@ -281,7 +324,7 @@ class Storage(object):
 
             self._update_types(persistable)
         else:
-            start_clause = get_start_clause(existing, 'n')
+            start_clause = get_start_clause(existing, 'n', registry)
             query = None
 
             if isinstance(persistable, Relationship):
@@ -294,13 +337,13 @@ class Storage(object):
                 if old_start != new_start or old_end != new_end:
                     start_clause = '%s, %s, %s, %s, %s' % (
                         start_clause,
-                        get_start_clause(old_start, 'old_start'),
-                        get_start_clause(old_end, 'old_end'),
-                        get_start_clause(new_start, 'new_start'),
-                        get_start_clause(new_end, 'new_end')
+                        get_start_clause(old_start, 'old_start', registry),
+                        get_start_clause(old_end, 'old_end', registry),
+                        get_start_clause(new_start, 'new_start', registry),
+                        get_start_clause(new_end, 'new_end', registry)
                     )
 
-                    rel_props = object_to_dict(persistable, self._dynamic_meta)
+                    rel_props = registry.object_to_dict(persistable)
 
                     query = join_lines(
                         'START %s' % start_clause,
@@ -339,7 +382,7 @@ class Storage(object):
 
         query_args = {}
 
-        if isinstance(obj, PersistableMeta):
+        if isinstance(obj, PersistableType):
             # object is a type; create the type and its hierarchy
             return self._update_types(obj)
 
@@ -350,17 +393,16 @@ class Storage(object):
             # object is a relationship
             obj_type = type(obj)
 
-            query = get_create_relationship_query(obj, self._dynamic_meta)
+            query = get_create_relationship_query(obj, self.type_registry)
 
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
             obj_type = type(obj)
-            obj_type_meta = type(obj_type)
 
             self._update_types(obj_type)
 
-            idx_name = obj_type_meta.index_name
+            idx_name = get_index_name(PersistableType)
             query = (
                 'START cls=node:%s(id={type_id}) '
                 'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
@@ -368,13 +410,13 @@ class Storage(object):
             ) % idx_name
 
             query_args = {
-                'type_id': obj_type.get_descriptor(obj_type).type_id,
-                'rel_props': object_to_dict(
-                    InstanceOf(None, None), self._dynamic_meta, for_db=True),
+                'type_id': get_type_id(obj_type),
+                'rel_props': self.type_registry.object_to_dict(
+                    InstanceOf(None, None), for_db=True),
             }
 
-        query_args['props'] = object_to_dict(
-            obj, self._dynamic_meta, for_db=True)
+        query_args['props'] = self.type_registry.object_to_dict(
+            obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
@@ -403,7 +445,8 @@ class Storage(object):
             query_args = {}
 
         query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts'),
+            'START %s' % get_start_clause(self.type_system, 'ts',
+                                          self.type_registry),
             'MATCH',
             match,
             where,
@@ -433,7 +476,7 @@ class Storage(object):
         Returns:
             A dictionary describing the object
         """
-        return object_to_dict(obj, self._dynamic_meta)
+        return self.type_registry.object_to_dict(obj)
 
     def deserialize(self, object_dict):
         """ Deserialize ``object_dict`` to an object.
@@ -444,12 +487,12 @@ class Storage(object):
         Returns:
             An object deserialized using the type registry
         """
-        return dict_to_object(object_dict, self._dynamic_meta)
+        return self.type_registry.dict_to_object(object_dict)
 
     def create_type(self, name, bases, attrs):
         """ Creates a new class given the name, bases and attrs given.
         """
-        return self._dynamic_meta(name, bases, attrs)
+        return self.type_registry.create_type(name, bases, attrs)
 
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
@@ -479,7 +522,7 @@ class Storage(object):
 
         indexes = attr_filter.items()
 
-        if issubclass(cls, (Relationship, PersistableMeta)):
+        if issubclass(cls, (Relationship, PersistableType)):
             idx_name = get_index_name(cls)
             idx_key, idx_value = indexes[0]
 
@@ -522,7 +565,7 @@ class Storage(object):
 
             query_args['idx_value'] = self.type_system.id
 
-            type_id = self._dynamic_meta.get_descriptor(cls).type_id
+            type_id = get_type_id(cls)
             query_args['tpe_id'] = type_id
 
         found = [node for (node,) in self._execute(query, **query_args)]
@@ -551,10 +594,13 @@ class Storage(object):
         # TODO: should get the rel name from descriptor?
         rel_query = rel_query.format(rel_cls.__name__.upper())
 
-        query = 'START {idx_lookup} MATCH {rel_query} RETURN related, relation'
+        query = join_lines(
+            'START {idx_lookup} MATCH {rel_query}',
+            'RETURN related, relation'
+        )
 
         query = query.format(
-            idx_lookup=get_start_clause(obj, 'n'),
+            idx_lookup=get_start_clause(obj, 'n', self.type_registry),
             rel_query=rel_query
         )
 
@@ -576,10 +622,10 @@ class Storage(object):
                 'DELETE rel',
                 'RETURN 0, count(rel)'
             ).format(
-                get_start_clause(obj.start, 'n1'),
-                get_start_clause(obj.end, 'n2'),
+                get_start_clause(obj.start, 'n1', self.type_registry),
+                get_start_clause(obj.end, 'n2', self.type_registry),
             )
-        elif isinstance(obj, PersistableMeta):
+        elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
                 'MATCH attr -[:DECLAREDON]-> obj',
@@ -588,7 +634,7 @@ class Storage(object):
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
-                get_start_clause(obj, 'obj')
+                get_start_clause(obj, 'obj', self.type_registry)
             )
         else:
             query = join_lines(
@@ -597,7 +643,7 @@ class Storage(object):
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
-                get_start_clause(obj, 'obj')
+                get_start_clause(obj, 'obj', self.type_registry)
             )
 
         # TODO: delete node/rel from indexes
@@ -618,23 +664,16 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def delete_all_data(self):
-        """ Removes all nodes, relationships and indexes in the store.
+    def destroy(self):
+        """ Removes all nodes, relationships and indexes in the store. This
+            object will no longer be usable after calling this method.
+            Construct a new Storage to re-initialise the database for kaiso.
 
             WARNING: This will destroy everything in your Neo4j database.
+
         """
         self._conn.clear()
         for index_name in self._conn.get_indexes(neo4j.Node).keys():
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
-
-    def initialize(self):
-        type_name = 'Storage_PersistableType_{}'.format(uuid.uuid4())
-        self._dynamic_meta = type(type_name, (PersistableMeta,), {})
-
-        idx_name = get_index_name(TypeSystem)
-        self._conn.get_or_create_index(neo4j.Node, idx_name)
-        self.save(self.type_system)
-
-        self._load_types()

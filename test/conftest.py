@@ -37,7 +37,13 @@ def storage(request):
     from kaiso.persistence import Storage
 
     neo4j_uri = request.config.getoption('neo4j_uri')
+    Storage(neo4j_uri).destroy()
     _storage = Storage(neo4j_uri)
-    _storage.delete_all_data()
-    _storage.initialize()
     return _storage
+
+
+@pytest.fixture
+def type_registry(request):
+    from kaiso.types import TypeRegistry
+    registry = TypeRegistry()
+    return registry
