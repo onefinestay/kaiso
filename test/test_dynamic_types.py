@@ -2,41 +2,41 @@ from kaiso.attributes import String
 from kaiso.types import Entity
 
 
-def test_save_dynamic_type(storage):
+def test_save_dynamic_type(manager):
 
     attrs = {'id': String(unique=True)}
-    Foobar = storage.create_type('Foobar', (Entity,), attrs)
+    Foobar = manager.create_type('Foobar', (Entity,), attrs)
 
-    storage.save(Foobar)
+    manager.save(Foobar)
 
-    rows = storage.query('START n=node:persistabletype(id="Foobar") RETURN n')
+    rows = manager.query('START n=node:persistabletype(id="Foobar") RETURN n')
     (result,) = next(rows)
 
     assert result is Foobar
 
 
-def test_save_dynamic_typed_obj(storage):
+def test_save_dynamic_typed_obj(manager):
 
     attrs = {'id': String(unique=True)}
-    Foobar = storage.create_type('Foobar', (Entity,), attrs)
+    Foobar = manager.create_type('Foobar', (Entity,), attrs)
 
     foo = Foobar(id='spam')
-    storage.save(foo)
+    manager.save(foo)
 
-    rows = storage.query('START n=node:foobar(id="spam") RETURN n')
+    rows = manager.query('START n=node:foobar(id="spam") RETURN n')
     (result,) = next(rows)
 
     assert result.id == foo.id
 
 
-def test_add_attr_to_type(storage):
-    Foobar = storage.create_type('Foobar', (Entity,), {})
-    storage.save(Foobar)
+def test_add_attr_to_type(manager):
+    Foobar = manager.create_type('Foobar', (Entity,), {})
+    manager.save(Foobar)
 
     Foobar.ham = String(default='eggs')
-    storage.save(Foobar)
+    manager.save(Foobar)
 
-    rows = storage.query(
+    rows = manager.query(
         'START n=node:persistabletype(id="Foobar") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
@@ -44,15 +44,15 @@ def test_add_attr_to_type(storage):
     assert count == 1
 
 
-def test_remove_attr_from_type(storage):
+def test_remove_attr_from_type(manager):
     attrs = {'ham': String()}
-    Foobar = storage.create_type('Foobar', (Entity,), attrs)
-    storage.save(Foobar)
+    Foobar = manager.create_type('Foobar', (Entity,), attrs)
+    manager.save(Foobar)
 
     del Foobar.ham
-    storage.save(Foobar)
+    manager.save(Foobar)
 
-    rows = storage.query(
+    rows = manager.query(
         'START n=node:persistabletype(id="Foobar") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
@@ -60,7 +60,7 @@ def test_remove_attr_from_type(storage):
     assert count == 0
 
 
-def test_removing_attr_from_declared_type_does_not_remove_it(storage):
+def test_removing_attr_from_declared_type_does_not_remove_it(manager):
 
     # the use case:
     # developer defines a partial type in code
@@ -72,16 +72,16 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     class Ham(Entity):
         egg = String
 
-    storage.save(Ham)
+    manager.save(Ham)
 
     attrs = {'egg': String(), 'spam': String()}
-    DynHam = storage.create_type('Ham', (Entity,), attrs)
-    storage.save(DynHam)
+    DynHam = manager.create_type('Ham', (Entity,), attrs)
+    manager.save(DynHam)
 
     del Ham.egg
-    storage.save(Ham)
+    manager.save(Ham)
 
-    rows = storage.query(
+    rows = manager.query(
         'START n=node:persistabletype(id="Ham") '
         'MATCH n <-[:DECLAREDON]- attr '
         'RETURN count(attr)')
@@ -89,21 +89,21 @@ def test_removing_attr_from_declared_type_does_not_remove_it(storage):
     assert count == 2
 
 
-def test_load_dynamic_types(storage):
-    Animal = storage.create_type('Animal', (Entity,), {'id': String()})
-    Horse = storage.create_type('Horse', (Animal,), {'hoof': String()})
-    Duck = storage.create_type('Duck', (Animal,), {'beek': String()})
-    Beaver = storage.create_type('Beaver', (Animal,), {'tail': String()})
-    Platypus = storage.create_type(
+def test_load_dynamic_types(manager):
+    Animal = manager.create_type('Animal', (Entity,), {'id': String()})
+    Horse = manager.create_type('Horse', (Animal,), {'hoof': String()})
+    Duck = manager.create_type('Duck', (Animal,), {'beek': String()})
+    Beaver = manager.create_type('Beaver', (Animal,), {'tail': String()})
+    Platypus = manager.create_type(
         'Platypus', (Duck, Beaver), {'egg': String()})
 
-    storage.save(Horse)
-    storage.save(Platypus)
+    manager.save(Horse)
+    manager.save(Platypus)
 
-    # this is the same as creating a new storage
-    storage.reload_types()
+    # this is the same as creating a new manager
+    manager.reload_types()
 
-    rows = storage.query(
+    rows = manager.query(
         '''
         START ts=node:typesystem(id="TypeSystem")
         MATCH p = (ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),
@@ -126,34 +126,32 @@ def test_load_dynamic_types(storage):
     ]
 
 
-def test_add_attr_to_type_via_2nd_storage(storage):
-    # NB: This will fail until TypeRegistry is separated from
-    #     Storage. We need pools.
+def test_add_attr_to_type_via_2nd_manager(manager):
     attrs = {'id': String(unique=True)}
-    Shrub = storage.create_type('Shrub', (Entity,), attrs)
+    Shrub = manager.create_type('Shrub', (Entity,), attrs)
 
     shrub = Shrub(id='spam')
-    storage.save(shrub)
+    manager.save(shrub)
 
-    # this is the same as creating a new storage using the same URL
-    storage.reload_types()
+    # this is the same as creating a new manager using the same URL
+    manager.reload_types()
 
-    (Shrub,) = next(storage.query(
+    (Shrub,) = next(manager.query(
         'START cls=node:persistabletype(id="Shrub") RETURN cls'))
     Shrub.newattr = String(default='eggs')
-    storage.save(Shrub)
+    manager.save(Shrub)
 
-    # we want to query from an independent storage
-    storage.reload_types()
-    rows = storage.query('START n=node:shrub(id="spam") RETURN n')
+    # we want to query from an independent manager
+    manager.reload_types()
+    rows = manager.query('START n=node:shrub(id="spam") RETURN n')
     (result,) = next(rows)
 
     assert result.newattr is None
 
 
-def test_type_registry_independence(storage):
-    Shrub = storage.create_type('Shrub', (Entity,), {})
-    assert storage.type_registry.is_registered(Shrub)
+def test_type_registry_independence(manager):
+    Shrub = manager.create_type('Shrub', (Entity,), {})
+    assert manager.type_registry.is_registered(Shrub)
 
-    storage.reload_types()
-    assert not storage.type_registry.is_registered(Shrub)
+    manager.reload_types()
+    assert not manager.type_registry.is_registered(Shrub)

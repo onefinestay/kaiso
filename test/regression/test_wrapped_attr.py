@@ -35,10 +35,10 @@ class WrappingSpam(Entity):
     wrapped = WrappedAttr()
 
 
-def test_save(storage):
+def test_save(manager):
     spam = WrappingSpam()
-    storage.save(spam)
+    manager.save(spam)
 
-    obj = storage.get(WrappingSpam, id=spam.id)
+    obj = manager.get(WrappingSpam, id=spam.id)
 
     assert obj.wrapped == spam.wrapped
