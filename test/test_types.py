@@ -7,7 +7,6 @@ from kaiso.types import Entity, TypeRegistry
 def test_register_duplicate():
 
     type_registry = TypeRegistry()
-    type_registry.initialize()
 
     with pytest.raises(TypeAlreadyRegistered):
         # this declares a dynamic type
@@ -21,10 +20,6 @@ def test_collect_duplicate():
     class Duplicate(Entity):
         pass
 
-    type_registry = TypeRegistry()
-    type_registry.initialize()
-
     with pytest.raises(TypeAlreadyCollected):
-
         # this also declares a static class
         type("Duplicate", (Entity,), {})

@@ -74,9 +74,9 @@ def get_create_types_query(cls, root, type_registry):
         name1 = cls1.__name__
 
         if name1 in classes:
-            abstr1 = name1
+            abstr1 = '`%s`' % (name1,)
         else:
-            abstr1 = '(%s {%s_props})' % (name1, name1)
+            abstr1 = '(`%s` {%s_props})' % (name1, name1)
 
         classes[name1] = cls1
 
@@ -115,11 +115,12 @@ def get_create_types_query(cls, root, type_registry):
     for key, cls in classes.iteritems():
         query_args['%s_props' % key] = type_registry.object_to_dict(cls)
 
+    quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
         'CREATE UNIQUE',
         (lines, ','),
-        'RETURN %s' % ', '.join(classes.keys())
+        'RETURN %s' % ', '.join(quoted_names)
     )
     return query, classes.values(), query_args
 
