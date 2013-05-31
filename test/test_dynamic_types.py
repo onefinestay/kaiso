@@ -147,7 +147,7 @@ def test_add_attr_to_type_via_2nd_storage(storage):
 
     (Shrub,) = next(storage.query(
         'START cls=node:persistablemeta(id="Shrub") RETURN cls'))
-    Shrub.ham = String(default='eggs')
+    Shrub.newattr = String(default='eggs')
     storage.save(Shrub)
 
     # we want to query from an independent storage
@@ -155,4 +155,4 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     rows = storage.query('START n=node:shrub(id="spam") RETURN n')
     (result,) = next(rows)
 
-    assert result.ham == 'eggs'
+    assert result.newattr is None
