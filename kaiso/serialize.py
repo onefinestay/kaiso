@@ -121,8 +121,10 @@ def object_to_dict(obj, type_registry, for_db=False):
                 else:
                     value = None
 
-            if value is not None or not for_db:
-                properties[name] = value
+            if for_db and value is None:
+                continue
+
+            properties[name] = value
 
     return properties
 
