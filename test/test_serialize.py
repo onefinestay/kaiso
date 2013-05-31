@@ -99,20 +99,20 @@ def test_obj_with_attrs(type_registry):
 
     spam = Spam(id=None)
 
-    dct = type_registry.object_to_dict(spam, include_none=False)
+    dct = type_registry.object_to_dict(spam, for_db=True)
     assert dct == {'__type__': 'Spam', 'ham': 'eggs'}
 
-    dct = type_registry.object_to_dict(spam, include_none=True)
+    dct = type_registry.object_to_dict(spam, for_db=False)
     assert dct == {'__type__': 'Spam', 'id': None, 'ham': 'eggs'}
 
     obj = type_registry.dict_to_object(dct)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
-    dct.pop('ham')  # removing an attr with defaults
+    dct.pop('ham')  # removing an attr
     obj = type_registry.dict_to_object(dct)
     assert obj.id == spam.id
-    assert obj.ham == spam.ham
+    assert obj.ham is None
 
 
 def test_dynamic_typex(type_registry):

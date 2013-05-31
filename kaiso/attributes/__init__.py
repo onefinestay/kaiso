@@ -22,11 +22,15 @@ class Uuid(Attribute):
         return uuid.uuid4()
 
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
+        if value is None:
+            return None
         return str(value)
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return uuid.UUID(hex=value)
 
 
@@ -48,37 +52,45 @@ class String(DefaultableAttribute):
 
 class Tuple(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
+        if value is None:
+            return None
         return list(value)
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return tuple(value)
 
 
 @wraps_type(decimal.Decimal)
 class Decimal(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         if value is None:
             return None
         return str(value)
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return decimal.Decimal(value)
 
 
 @wraps_type(datetime.datetime)
 class DateTime(DefaultableAttribute):
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
         if value is None:
             return None
         return value.isoformat()
 
     @staticmethod
     def to_python(value):
+        if value is None:
+            return None
         return iso8601.parse_date(value)
 
 

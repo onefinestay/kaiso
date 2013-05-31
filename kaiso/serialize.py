@@ -65,7 +65,7 @@ def object_to_db_value(obj):
     except KeyError:
         return obj
     else:
-        return attr_cls.to_db(obj)
+        return attr_cls.to_primitive(obj, for_db=True)
 
 
 def dict_to_db_values_dict(data):

@@ -107,7 +107,7 @@ def get_create_types_query(cls, root, type_registry):
             lines.append(ln)
 
             attr_dict = type_registry.object_to_dict(
-                attr, include_none=False)
+                attr, for_db=True)
 
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
@@ -126,7 +126,7 @@ def get_create_types_query(cls, root, type_registry):
 
 
 def get_create_relationship_query(rel, type_registry):
-    rel_props = type_registry.object_to_dict(rel, include_none=False)
+    rel_props = type_registry.object_to_dict(rel, for_db=True)
     query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
 
     query = query % (

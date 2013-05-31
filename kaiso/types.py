@@ -200,12 +200,12 @@ class TypeRegistry(object):
 
                     index_name = get_index_name(declaring_class)
                     key = name
-                    value = attr.to_db(getattr(obj, name))
+                    value = attr.to_primitive(getattr(obj, name), for_db=True)
 
                     if value is not None:
                         yield (index_name, key, value)
 
-    def object_to_dict(self, obj, include_none=True):
+    def object_to_dict(self, obj, for_db=False):
         """ Converts a persistable object to a dict.
 
         The generated dict will contain a __type__ key, for which the value
@@ -242,7 +242,8 @@ class TypeRegistry(object):
             descr = self.get_descriptor(obj_type)
             for name, attr in descr.attributes.items():
                 try:
-                    value = attr.to_db(getattr(obj, name))
+                    value = attr.to_primitive(
+                        getattr(obj, name), for_db=for_db)
                 except AttributeError:
                     # if we are dealing with an extended type, we may not
                     # have the attribute set on the instance
@@ -251,8 +252,10 @@ class TypeRegistry(object):
                     else:
                         value = None
 
-                if value is not None or include_none:
-                    properties[name] = value
+                if for_db and value is None:
+                    continue
+
+                properties[name] = value
 
         return properties
 
@@ -301,13 +304,9 @@ class TypeRegistry(object):
             descr = self.get_descriptor_by_id(cls_id)
 
             for attr_name, attr in descr.attributes.items():
-                try:
-                    value = properties[attr_name]
-                except KeyError:
-                    pass
-                else:
-                    value = attr.to_python(value)
-                    setattr(obj, attr_name, value)
+                value = properties.get(attr_name)
+                value = attr.to_python(value)
+                setattr(obj, attr_name, value)
 
         return obj
 
@@ -441,7 +440,10 @@ class Attribute(AttributeBase):
         return value
 
     @staticmethod
-    def to_db(value):
+    def to_primitive(value, for_db):
+        """ Serialize ``value`` to a primitive type suitable for inserting
+            into the database or passing to e.g. ``json.dumps``
+        """
         return value
 
 

@@ -412,10 +412,11 @@ class Storage(object):
             query_args = {
                 'type_id': get_type_id(obj_type),
                 'rel_props': self.type_registry.object_to_dict(
-                    InstanceOf(None, None)),
+                    InstanceOf(None, None), for_db=True),
             }
 
-        query_args['props'] = self.type_registry.object_to_dict(obj, False)
+        query_args['props'] = self.type_registry.object_to_dict(
+            obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 
