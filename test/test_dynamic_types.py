@@ -155,4 +155,4 @@ def test_add_attr_to_type_via_2nd_storage(storage):
     rows = storage.query('START n=node:shrub(id="spam") RETURN n')
     (result,) = next(rows)
 
-    assert hasattr(result, 'newattr')
+    assert result.newattr is None
