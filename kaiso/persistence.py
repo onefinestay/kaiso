@@ -1,3 +1,7 @@
+from logging import getLogger
+
+from py2neo import cypher, neo4j
+
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
 from kaiso.exceptions import UniqueConstraintError, UnknownType
@@ -10,8 +14,6 @@ from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
     AttributedBase, get_index_name, get_type_id, is_indexable)
-from logging import getLogger
-from py2neo import cypher, neo4j
 
 
 log = getLogger(__name__)
@@ -53,6 +55,8 @@ class Storage(object):
     InstanceOf and IsA relationships are automatically generated,
     when persisting an object.
     """
+    _type_registry_cache = None
+
     def __init__(self, connection_uri):
         """ Initializes a Storage object.
 
@@ -61,6 +65,11 @@ class Storage(object):
         """
         self._conn = get_connection(connection_uri)
         self.type_system = TypeSystem(id='TypeSystem')
+        self.type_registry = TypeRegistry()
+        idx_name = get_index_name(TypeSystem)
+        self._conn.get_or_create_index(neo4j.Node, idx_name)
+        self.save(self.type_system)
+        self.reload_types()
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
@@ -126,8 +135,32 @@ class Storage(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _load_types(self):
+    def _query_type_digest(self):
+        query = join_lines(
+            'START %s' % get_start_clause(self.type_system, 'ts',
+                                          self.type_registry),
+            'MATCH ts -[:DEFINES|ISA|DECLAREDON*]- n '
+            'RETURN sum(id(n))'
+        )
 
+        rows = self.query(query)
+        (digest,) = next(rows)
+        return digest
+
+    def reload_types(self):
+        """Reload the type registry for this instance from the graph
+        database.
+        """
+        current_digest = self._query_type_digest()
+        if Storage._type_registry_cache:
+            cached_registry, digest = Storage._type_registry_cache
+            if current_digest == digest:
+                log.debug('using cached type registry, digest: %s',
+                    current_digest)
+                self.type_registry = cached_registry.clone()
+                return
+
+        self.type_registry = TypeRegistry()
         registry = self.type_registry
 
         for type_id, bases, attrs in self.get_type_hierarchy():
@@ -143,6 +176,11 @@ class Storage(object):
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
                 registry.create(str(type_id), bases, attrs)
+
+        Storage._type_registry_cache = (
+            self.type_registry.clone(),
+            current_digest
+        )
 
     def _get_changes(self, persistable):
         changes = {}
@@ -235,6 +273,7 @@ class Storage(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
+        Storage._type_registry_cache = None
         return cls
 
     def _update(self, persistable, existing, changes):
@@ -625,23 +664,16 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def delete_all_data(self):
-        """ Removes all nodes, relationships and indexes in the store.
+    def destroy(self):
+        """ Removes all nodes, relationships and indexes in the store. This
+            object will no longer be usable after calling this method.
+            Construct a new Storage to re-initialise the database for kaiso.
 
             WARNING: This will destroy everything in your Neo4j database.
+
         """
         self._conn.clear()
         for index_name in self._conn.get_indexes(neo4j.Node).keys():
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
-
-    def initialize(self):
-        self.type_registry = TypeRegistry()
-        self.type_registry.initialize()
-
-        idx_name = get_index_name(TypeSystem)
-        self._conn.get_or_create_index(neo4j.Node, idx_name)
-        self.save(self.type_system)
-
-        self._load_types()
