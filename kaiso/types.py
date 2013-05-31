@@ -234,6 +234,9 @@ class Attribute(AttributeBase):
 
     @staticmethod
     def to_primitive(value, for_db):
+        """ Serialize ``value`` to a primitive type suitable for inserting
+            into the database or passing to e.g. ``json.dumps``
+        """
         return value
 
 
