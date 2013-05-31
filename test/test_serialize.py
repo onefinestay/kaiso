@@ -115,16 +115,11 @@ def test_obj_with_attrs(type_registry):
     assert obj.ham is None
 
 
-def test_dynamic_typex(type_registry):
+def test_dynamic_type(type_registry):
     Foobar = type_registry.create_type('Foobar', (Entity,), {})
 
     dct = type_registry.object_to_dict(Foobar)
     assert dct == {'__type__': 'PersistableType', 'id': 'Foobar'}
-
-    # since Foobar is only registered with DynamicType
-    # INVALID: we only have one shared type registry now
-    # with pytest.raises(UnknownType):
-    #    obj = type_registry.dict_to_object(dct)
 
     obj = type_registry.dict_to_object(dct)
     assert obj is Foobar
