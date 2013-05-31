@@ -45,20 +45,20 @@ def get_attr_filter(obj, type_registry):
     return index_filter
 
 
-class Storage(object):
-    """ Provides a queryable object store.
+class Manager(object):
+    """Manage the interface to graph-based queryable object store.
 
-    The object store can store any object as long as it's type is registered.
+    The any object can be saved as long as its type is registered.
     This includes instances of Entity, PersistableType
     and subclasses of either.
 
-    InstanceOf and IsA relationships are automatically generated,
+    InstanceOf and IsA relationships are automatically generated
     when persisting an object.
     """
     _type_registry_cache = None
 
     def __init__(self, connection_uri):
-        """ Initializes a Storage object.
+        """ Initializes a Manager object.
 
         Args:
             connection_uri: A URI used to connect to the graph database.
@@ -152,8 +152,8 @@ class Storage(object):
         database.
         """
         current_digest = self._query_type_digest()
-        if Storage._type_registry_cache:
-            cached_registry, digest = Storage._type_registry_cache
+        if Manager._type_registry_cache:
+            cached_registry, digest = Manager._type_registry_cache
             if current_digest == digest:
                 log.debug('using cached type registry, digest: %s',
                     current_digest)
@@ -177,7 +177,7 @@ class Storage(object):
                 attrs = dict((attr.name, attr) for attr in attrs)
                 registry.create_type(str(type_id), bases, attrs)
 
-        Storage._type_registry_cache = (
+        Manager._type_registry_cache = (
             self.type_registry.clone(),
             current_digest
         )
@@ -272,7 +272,7 @@ class Storage(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
-        Storage._type_registry_cache = None
+        Manager._type_registry_cache = None
         return cls
 
     def _update(self, persistable, existing, changes):
@@ -667,7 +667,7 @@ class Storage(object):
     def destroy(self):
         """ Removes all nodes, relationships and indexes in the store. This
             object will no longer be usable after calling this method.
-            Construct a new Storage to re-initialise the database for kaiso.
+            Construct a new Manager to re-initialise the database for kaiso.
 
             WARNING: This will destroy everything in your Neo4j database.
 
