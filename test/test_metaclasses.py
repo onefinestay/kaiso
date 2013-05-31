@@ -1,4 +1,4 @@
-from kaiso.types import collected
+from kaiso.types import collected_static_classes
 from kaiso.types import PersistableType, Entity
 from kaiso.attributes import String
 
@@ -11,7 +11,7 @@ def test_class_collection():
     class CollectBar(Entity):
         baz = String()
 
-    assert "CollectFoo" in collected
-    assert "CollectBar" in collected
-    assert "Entity" in collected
-    assert "String" in collected
+    assert "CollectFoo" in collected_static_classes
+    assert "CollectBar" in collected_static_classes
+    assert "Entity" in collected_static_classes
+    assert "String" in collected_static_classes

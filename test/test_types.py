@@ -10,8 +10,8 @@ def test_register_duplicate():
 
     with pytest.raises(TypeAlreadyRegistered):
         # this declares a dynamic type
-        type_registry.create('Duplicate', (Entity,), {})
-        type_registry.create('Duplicate', (Entity,), {})
+        type_registry.create_type('Duplicate', (Entity,), {})
+        type_registry.create_type('Duplicate', (Entity,), {})
 
 
 def test_collect_duplicate():

@@ -12,7 +12,7 @@ def test_get_clsss_by_id_returns_static_type(type_registry):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    type_registry.create("FooType", (), attrs)
+    type_registry.create_type("FooType", (), attrs)
 
     # check that cls_id 'FooType' gives us the static FooType
     assert type_registry.get_class_by_id("FooType") == FooType
@@ -22,7 +22,7 @@ def test_get_descriptor_returns_dynamic_type(type_registry):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create("FooType", (), attrs)
+    DynamicFooType = type_registry.create_type("FooType", (), attrs)
 
     # check that the descriptor for FooType is the same as the descriptor for
     # DynamicFooType
@@ -37,7 +37,7 @@ def test_get_index_entries(type_registry):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create("FooType", (), attrs)
+    DynamicFooType = type_registry.create_type("FooType", (), attrs)
 
     # check index entries for the types
     assert list(type_registry.get_index_entries(FooType)) == [
@@ -73,7 +73,7 @@ def test_is_dynamic_type(type_registry):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create("FooType", (), attrs)
+    DynamicFooType = type_registry.create_type("FooType", (), attrs)
 
     assert type_registry.is_dynamic_type(DynamicFooType) is True
     assert not type_registry.is_dynamic_type(FooType) is True
@@ -83,7 +83,7 @@ def test_is_static_type(type_registry):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create("FooType", (), attrs)
+    DynamicFooType = type_registry.create_type("FooType", (), attrs)
 
     assert type_registry.is_static_type(FooType) is True
     assert not type_registry.is_static_type(DynamicFooType) is True

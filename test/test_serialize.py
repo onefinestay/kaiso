@@ -116,7 +116,7 @@ def test_obj_with_attrs(type_registry):
 
 
 def test_dynamic_typex(type_registry):
-    Foobar = type_registry.create('Foobar', (Entity,), {})
+    Foobar = type_registry.create_type('Foobar', (Entity,), {})
 
     dct = type_registry.object_to_dict(Foobar)
     assert dct == {'__type__': 'PersistableType', 'id': 'Foobar'}
@@ -133,7 +133,7 @@ def test_dynamic_typex(type_registry):
 def test_dynamic_typed_object(type_registry):
 
     attrs = {'id': String()}
-    Foobar = type_registry.create('Foobar', (Entity,), attrs)
+    Foobar = type_registry.create_type('Foobar', (Entity,), attrs)
 
     foo = Foobar(id='spam')
     dct = type_registry.object_to_dict(foo)
@@ -148,7 +148,7 @@ def test_dynamic_typed_object(type_registry):
 def test_extend_declared_type_using_dynamic_type(type_registry):
 
     attrs = {'id': Uuid()}
-    DynEntity = type_registry.create('Entity', (AttributedBase,), attrs)
+    DynEntity = type_registry.create_type('Entity', (AttributedBase,), attrs)
 
     foo = DynEntity()
     dct = type_registry.object_to_dict(foo)
@@ -163,7 +163,7 @@ def test_extend_declared_type_using_dynamic_type(type_registry):
 
 def test_extend_declared_type_using_declared_type(type_registry):
     attrs = {'id': String()}
-    type_registry.create('Entity', (AttributedBase,), attrs)
+    type_registry.create_type('Entity', (AttributedBase,), attrs)
 
     dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity', 'id': None}
@@ -174,7 +174,7 @@ def test_extend_declared_type_with_default_using_declared_type(type_registry):
         'id': String(default='foobar'),
         'spam': Uuid()
     }
-    type_registry.create('Entity', (AttributedBase,), attrs)
+    type_registry.create_type('Entity', (AttributedBase,), attrs)
 
     dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity', 'id': 'foobar', 'spam': None}
