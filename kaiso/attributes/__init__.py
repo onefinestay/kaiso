@@ -23,6 +23,8 @@ class Uuid(Attribute):
 
     @staticmethod
     def to_primitive(value, for_db):
+        if value is None:
+            return None
         return str(value)
 
     @staticmethod
@@ -51,6 +53,8 @@ class String(DefaultableAttribute):
 class Tuple(DefaultableAttribute):
     @staticmethod
     def to_primitive(value, for_db):
+        if value is None:
+            return None
         return list(value)
 
     @staticmethod
