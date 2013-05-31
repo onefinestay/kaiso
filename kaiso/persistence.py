@@ -370,10 +370,11 @@ class Storage(object):
             query_args = {
                 'type_id': obj_type.get_descriptor(obj_type).type_id,
                 'rel_props': object_to_dict(
-                    InstanceOf(None, None), self._dynamic_meta),
+                    InstanceOf(None, None), self._dynamic_meta, for_db=True),
             }
 
-        query_args['props'] = object_to_dict(obj, self._dynamic_meta, False)
+        query_args['props'] = object_to_dict(
+            obj, self._dynamic_meta, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
 

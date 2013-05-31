@@ -96,20 +96,20 @@ def test_relationship():
 def test_obj_with_attrs():
     spam = Spam(id=None)
 
-    dct = object_to_dict(spam, PersistableMeta, include_none=False)
+    dct = object_to_dict(spam, PersistableMeta, for_db=True)
     assert dct == {'__type__': 'Spam', 'ham': 'eggs'}
 
-    dct = object_to_dict(spam, PersistableMeta, include_none=True)
+    dct = object_to_dict(spam, PersistableMeta, for_db=False)
     assert dct == {'__type__': 'Spam', 'id': None, 'ham': 'eggs'}
 
     obj = dict_to_object(dct, PersistableMeta)
     assert obj.id == spam.id
     assert obj.ham == spam.ham
 
-    dct.pop('ham')  # removing an attr with defaults
+    dct.pop('ham')  # removing an attr
     obj = dict_to_object(dct, PersistableMeta)
     assert obj.id == spam.id
-    assert obj.ham == spam.ham
+    assert obj.ham is None
 
 
 def test_dynamic_type():
