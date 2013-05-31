@@ -35,7 +35,7 @@ profiles = [
             {
                 "filters": [
                     {
-                        "compareValue": "PersistableMeta",
+                        "compareValue": "PersistableType",
                         "id": 1,
                         "method": "==",
                         "propertyName": "__type__",

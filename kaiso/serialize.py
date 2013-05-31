@@ -1,8 +1,6 @@
 from kaiso.attributes.bases import get_attibute_for_type
-from kaiso.exceptions import DeserialisationError
 from kaiso.iter_helpers import unique
 from kaiso.relationships import InstanceOf, IsA
-from kaiso.types import DefaultableAttribute, Descriptor, PersistableMeta
 
 
 def get_changes(old, new):
@@ -33,10 +31,10 @@ def get_type_relationships(obj):
         (object, InstanceOf, type),
         (type, IsA, object),
         (type, InstanceOf, type),
-        (PersistableMeta, IsA, type),
-        (PersistableMeta, InstanceOf, type),
+        (PersistableType, IsA, type),
+        (PersistableType, InstanceOf, type),
         (Entity, IsA, object),
-        (Entity, InstanceOf, PersistableMeta),
+        (Entity, InstanceOf, PersistableType),
         (<Entity object>, InstanceOf, Entity)
 
     Args:
@@ -72,110 +70,3 @@ def object_to_db_value(obj):
 
 def dict_to_db_values_dict(data):
     return dict((k, object_to_db_value(v)) for k, v in data.items())
-
-
-def object_to_dict(obj, type_registry, for_db=False):
-    """ Converts a persistable object to a dict.
-
-    The generated dict will contain a __type__ key, for which the value
-    will be the type_id as given by the descriptor for type(obj).
-
-    If the object is a class, dict will contain an id-key with the value
-    being the type_id given by the descriptor for the object.
-
-    For any other object all the attributes as given by the object's
-    type descriptpr will be added to the dict and encoded as required.
-
-    Args:
-        obj: A persistable  object.
-
-    Returns:
-        Dictionary with attributes encoded in basic types
-        and type information for deserialization.
-        e.g.
-        {
-            '__type__': 'Entity',
-            'attr1' : 1234
-        }
-    """
-    obj_type = type(obj)
-
-    descr = type_registry.get_descriptor(obj_type)
-
-    properties = {
-        '__type__': descr.type_id,
-    }
-
-    if isinstance(obj, type):
-        properties['id'] = type_registry.get_descriptor(obj).type_id
-
-    else:
-        for name, attr in descr.attributes.items():
-            try:
-                value = attr.to_primitive(getattr(obj, name), for_db=for_db)
-            except AttributeError:
-                # if we are dealing with an extended type, we may not
-                # have the attribute set on the instance
-                if isinstance(attr, DefaultableAttribute):
-                    value = attr.default
-                else:
-                    value = None
-
-            if for_db and value is None:
-                continue
-
-            properties[name] = value
-
-    return properties
-
-
-def dict_to_object(properties, type_registry):
-    """ Converts a dict into a persistable object.
-
-    The properties dict needs at least a __type__ key containing the name
-    of any registered class.
-    The type key defines the type of the object to return.
-
-    If the registered class for the __type__ is a meta-class,
-    i.e. a subclass of <type>, a name key is assumed to be present and
-    the registered class idendified by it's value is returned.
-
-    If the registered class for the __type__ is standard class,
-    i.e. an instance of <type>, and object of that class will be created
-    with attributes as defined by the remaining key-value pairs.
-
-    Args:
-        properties: A dict like object.
-
-    Returns:
-        A persistable object.
-    """
-
-    try:
-        type_id = properties['__type__']
-    except KeyError:
-        raise DeserialisationError(
-            'properties "{}" missing __type__ key'.format(properties))
-
-    if type_id == Descriptor(PersistableMeta).type_id:
-        # we are looking at a class object
-        cls_id = properties['id']
-    else:
-        # we are looking at an instance object
-        cls_id = type_id
-
-    cls = type_registry.get_class_by_id(cls_id)
-
-    if cls_id != type_id:
-        return cls
-    else:
-        obj = cls.__new__(cls)
-
-        descr = type_registry.get_descriptor_by_id(cls_id)
-
-        for attr_name, attr in descr.attributes.items():
-            value = properties.get(attr_name)
-            value = attr.to_python(value)
-            setattr(obj, attr_name, value)
-
-    return obj

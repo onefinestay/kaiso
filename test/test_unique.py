@@ -4,7 +4,7 @@ import string
 import pytest
 
 from kaiso.exceptions import UniqueConstraintError
-from kaiso.types import PersistableMeta, Entity, Relationship
+from kaiso.types import Entity, Relationship
 from kaiso.attributes import Integer, String
 
 
@@ -108,13 +108,17 @@ class TestReplace(object):
         assert rows[0][0].extra is None
 
     def test_no_existing_index(self, storage):
-        name = ''.join(random.choice(string.ascii_letters) for i in range(20))
+        name = ''.join(random.choice(string.ascii_letters) for _ in range(20))
 
         # we have no way of removing indexes from the db, so create a new
         # type that we haven't seen before to test the case where
         # the index does not exist
-        RandomThing = PersistableMeta(
+        RandomThing = type(
             name, (Entity,), {'code': String(unique=True)})
+
+        # Register the type manaually
+        # Could we create this as a dynamic type and this test still be valid?
+        storage.type_registry.register(RandomThing)
 
         obj = RandomThing(code='a')
         storage.save(obj)

@@ -1,6 +1,321 @@
 from inspect import getmembers, getmro
+from kaiso.exceptions import (
+    UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
+    DeserialisationError)
 
-from kaiso.exceptions import UnknownType, TypeAlreadyRegistered
+
+class Persistable(object):
+    """ The base of all persistable objects.
+
+    Any object stored in the db must inherit from this class.
+    Any object having Persistable as it's base are considered persistable.
+    """
+
+collected_static_classes = {}
+
+
+def collect_class(cls):
+    """ Collect a class as it is defined at import time. Called by the
+    PersistableType metaclass at class creation time.
+    """
+    name = cls.__name__
+    if name in collected_static_classes:
+        raise TypeAlreadyCollected(
+            "Type `{}` already defined.".format(name)
+        )
+    collected_static_classes[name] = cls
+
+
+class PersistableType(type, Persistable):
+    """ Metaclass for static persistable types.
+
+    Collects classes as they are declared so that they can be registered with
+    the TypeRegistry later.
+    """
+    def __new__(mcs, name, bases, dct):
+        cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
+        # DynamicType must inherit from PersistableType, but we only want to
+        # collect statically defined classes
+        if mcs is not DynamicType:
+            collect_class(cls)
+        return cls
+
+
+class DynamicType(PersistableType):
+    """ Metaclass for dynamic persistable types
+
+    Extends PersistableType, but the classes it produces will not be
+    collected.
+    """
+
+
+class TypeRegistry(object):
+    """ Keeps track of statically and dynamically declared types.
+    """
+    _static_descriptors = {}
+    _builtin_types = (PersistableType, DynamicType)
+
+    def __init__(self):
+        self._descriptors = {
+            'static': self._static_descriptors,
+            'dynamic': {}
+        }
+
+        if not self._static_descriptors:
+            for type_ in self._builtin_types:
+                self.register(type_)
+        self._sync_static_descriptors()
+
+    @classmethod
+    def _sync_static_descriptors(cls):
+        # exit early if there've been no changes to the statically
+        # collected types
+        num_registered = len(cls._static_descriptors)
+        static_registered = num_registered - len(cls._builtin_types)
+        if static_registered == len(collected_static_classes):
+            return
+
+        for name, collected_cls in collected_static_classes.iteritems():
+            if name not in cls._static_descriptors:
+                cls._static_descriptors[name] = Descriptor(collected_cls)
+
+    def is_registered(self, cls):
+        """ Determine if ``cls`` is a registered type.
+
+        ``cls`` may be the name of the class, or the class object itself.
+
+        Arguments:
+            - cls: The class object or a class name as a string
+
+        Returns:
+            True if ``cls`` is registered as a static or dynamic type, False
+            otherwise.
+        """
+        name = cls.__name__ if isinstance(cls, type) else cls
+        return (name in self._descriptors['static'] or
+                name in self._descriptors['dynamic'])
+
+    def is_dynamic_type(self, cls):
+        """ Determine if ``cls`` is a dynamic type.
+
+        ``cls`` does not need to be registered with this type registry.
+
+        Arguments:
+            - cls: The class object to inspect
+
+        Returns:
+            True if ``cls`` is a dynamic type, False otherwise
+        """
+        return type(cls) is DynamicType
+
+    def is_static_type(self, cls):
+        """ Determine if ``cls`` is a static type.
+
+        ``cls`` does not need to be registered with this type registry.
+
+        Arguments:
+            - cls: The class object to inspect
+
+        Returns:
+            True if ``cls`` is a static type, False otherwise
+        """
+        return type(cls) is PersistableType
+
+    def create_type(self, cls_id, bases, attrs):
+        """ Create and register a dynamic type
+        """
+        cls = DynamicType(cls_id, bases, attrs)
+        self.register(cls)
+        return cls
+
+    def register(self, cls):
+        """ Register a type
+        """
+        name = cls.__name__
+        registry = "dynamic" if type(cls) is DynamicType else "static"
+        if name in self._descriptors[registry]:
+            raise TypeAlreadyRegistered(cls)
+        self._descriptors[registry][name] = Descriptor(cls)
+
+    def get_class_by_id(self, cls_id):
+        """ Return the class for a given ``cls_id``, preferring statically
+        registered classes.
+
+        Returns the statically registered class with the given ``cls_id``, iff
+        one exists, and otherwise returns any dynamically registered class
+        with that id.
+
+        Arguments:
+            cls_id: id of the class to return
+            registry: type of registered class to prefer
+
+        Returns:
+            The class that was registered with ``cls_id``
+        """
+        self._sync_static_descriptors()
+        try:
+            return self._descriptors['static'][cls_id].cls
+        except KeyError:
+            return self.get_descriptor_by_id(cls_id).cls
+
+    def get_descriptor(self, cls):
+        name = cls.__name__
+        return self.get_descriptor_by_id(name)
+
+    def get_descriptor_by_id(self, cls_id):
+        """ Return the Descriptor for a given ``cls_id``.
+
+        Returns the descriptor for the class registered with the given
+        ``cls_id``. If dynamic types have not been loaded yet, return the
+        descriptor of the statically registered class.
+
+        Arguments:
+            cls_id: id of the class
+
+        Returns:
+            The Descriptor for that cls_id
+
+        Raises:
+            UnknownType if no type has been registered with the given id.
+        """
+        self._sync_static_descriptors()
+        if not self.is_registered(cls_id):
+            raise UnknownType('Unknown type "{}"'.format(cls_id))
+
+        try:
+            return self._descriptors['dynamic'][cls_id]
+        except KeyError:
+            return self._descriptors['static'][cls_id]
+
+    def get_index_entries(self, obj):
+        if isinstance(obj, PersistableType):
+            yield (get_index_name(PersistableType), 'id', obj.__name__)
+        else:
+            obj_type = type(obj)
+            descr = self.get_descriptor(obj_type)
+
+            for name, attr in descr.attributes.items():
+                if attr.unique:
+                    declaring_class = get_declaring_class(descr.cls, name)
+
+                    index_name = get_index_name(declaring_class)
+                    key = name
+                    value = attr.to_primitive(getattr(obj, name), for_db=True)
+
+                    if value is not None:
+                        yield (index_name, key, value)
+
+    def object_to_dict(self, obj, for_db=False):
+        """ Converts a persistable object to a dict.
+
+        The generated dict will contain a __type__ key, for which the value
+        will be the type_id as given by the descriptor for type(obj).
+
+        If the object is a class, dict will contain an id-key with the value
+        being the type_id given by the descriptor for the object.
+
+        For any other object all the attributes as given by the object's
+        type descriptpr will be added to the dict and encoded as required.
+
+        Args:
+            obj: A persistable  object.
+
+        Returns:
+            Dictionary with attributes encoded in basic types
+            and type information for deserialization.
+            e.g.
+            {
+                '__type__': 'Entity',
+                'attr1' : 1234
+            }
+        """
+        obj_type = type(obj)
+
+        properties = {
+            '__type__': get_type_id(obj_type)
+        }
+
+        if isinstance(obj, type):
+            properties['id'] = get_type_id(obj)
+
+        else:
+            descr = self.get_descriptor(obj_type)
+            for name, attr in descr.attributes.items():
+                try:
+                    value = attr.to_primitive(
+                        getattr(obj, name), for_db=for_db)
+                except AttributeError:
+                    # if we are dealing with an extended type, we may not
+                    # have the attribute set on the instance
+                    if isinstance(attr, DefaultableAttribute):
+                        value = attr.default
+                    else:
+                        value = None
+
+                if for_db and value is None:
+                    continue
+
+                properties[name] = value
+
+        return properties
+
+    def dict_to_object(self, properties):
+        """ Converts a dict into a persistable object.
+
+        The properties dict needs at least a __type__ key containing the name
+        of any registered class.
+        The type key defines the type of the object to return.
+
+        If the registered class for the __type__ is a meta-class,
+        i.e. a subclass of <type>, a name key is assumed to be present and
+        the registered class idendified by it's value is returned.
+
+        If the registered class for the __type__ is standard class,
+        i.e. an instance of <type>, and object of that class will be created
+        with attributes as defined by the remaining key-value pairs.
+
+        Args:
+            properties: A dict like object.
+
+        Returns:
+            A persistable object.
+        """
+
+        try:
+            type_id = properties['__type__']
+        except KeyError:
+            raise DeserialisationError(
+                'properties "{}" missing __type__ key'.format(properties))
+
+        if type_id == get_type_id(PersistableType):
+            # we are looking at a class object
+            cls_id = properties['id']
+        else:
+            # we are looking at an instance object
+            cls_id = type_id
+
+        cls = self.get_class_by_id(cls_id)
+
+        if cls_id != type_id:
+            return cls
+        else:
+            obj = cls.__new__(cls)
+
+            descr = self.get_descriptor_by_id(cls_id)
+
+            for attr_name, attr in descr.attributes.items():
+                value = properties.get(attr_name)
+                value = attr.to_python(value)
+                setattr(obj, attr_name, value)
+
+        return obj
+
+    def clone(self):
+        """Return a copy of this TypeRegistry that maintains an independent
+        dynamic type registry"""
+        clone = TypeRegistry()
+        clone._descriptors['dynamic'] = self._descriptors['dynamic'].copy()
+        return clone
 
 
 def get_declaring_class(cls, attr_name):
@@ -31,32 +346,19 @@ def get_index_name(cls):
     Returns:
         An index name.
     """
-    if issubclass(cls, PersistableMeta):
-        return cls.index_name
+    if issubclass(cls, PersistableType):
+        return PersistableType.__name__.lower()
     else:
         return cls.__name__.lower()
 
 
-def get_index_entries(obj):
-    """ Returns tuples of (index-name, key, value) for a persistable object.
-
-    It can be used to create queryies with index lookups.
-
-    Args:
-        obj: A persistable object.
-
-    Returns:
-        Generator yielding tuples (index_name, key, value)
+def get_type_id(cls):
+    """ Returns the type_id for a class.
     """
-
-    cls = type(obj)
-
-    if issubclass(cls, PersistableMeta):
-        meta_cls = cls
+    if issubclass(cls, PersistableType):
+        return PersistableType.__name__
     else:
-        meta_cls = type(cls)
-
-    return meta_cls.get_index_entries(obj)
+        return cls.__name__
 
 
 def is_indexable(cls):
@@ -79,15 +381,6 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
-
-    @property
-    def type_id(self):
-        cls = self.cls
-
-        if issubclass(cls, PersistableMeta):
-            return cls.type_id
-        else:
-            return cls.__name__
 
     @property
     def relationships(self):
@@ -124,94 +417,8 @@ class Descriptor(object):
         return declared
 
 
-class Persistable(object):
-    """ The base of all persistable objects.
-
-    Any object stored in the db must inherit from this class.
-    Any object having Persistable as it's base are considered persistable.
-    """
-
-
-class DiscriptorType(type):
-    def __init__(cls, name, bases, dct):  # pylint:disable-msg=W0613
-        super(DiscriptorType, cls).__init__(cls)
-        cls.descriptors = {}
-        cls.register(cls)
-
-
 class AttributeBase(object):
     name = None
-
-
-class PersistableMeta(type, Persistable):
-    __metaclass__ = DiscriptorType
-
-    index_name = 'persistablemeta'
-    type_id = 'PersistableMeta'
-
-    def __new__(mcs, name, bases, dct):
-        for attr_name, attr in dct.items():
-            if isinstance(attr, AttributeBase):
-                attr.name = attr_name
-
-        cls = super(PersistableMeta, mcs).__new__(mcs, name, bases, dct)
-        mcs.register(cls)
-        return cls
-
-    @classmethod
-    def register(mcs, cls):
-        name = cls.__name__
-        if name in mcs.descriptors:
-            raise TypeAlreadyRegistered(cls)
-        mcs.descriptors[name] = Descriptor(cls)
-
-    @classmethod
-    def get_class_by_id(mcs, cls_id):
-        try:
-            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
-                return PersistableMeta.get_class_by_id(cls_id)
-        except UnknownType:
-            pass
-
-        return mcs.get_descriptor_by_id(cls_id).cls
-
-    @classmethod
-    def get_descriptor(mcs, cls):
-        name = cls.__name__
-        return mcs.get_descriptor_by_id(name)
-
-    @classmethod
-    def get_descriptor_by_id(mcs, cls_id):
-        try:
-            return mcs.descriptors[cls_id]
-        except KeyError:
-            if mcs is not PersistableMeta and issubclass(mcs, PersistableMeta):
-                return PersistableMeta.get_descriptor_by_id(cls_id)
-
-            raise UnknownType('Unknown type "{}"'.format(cls_id))
-
-    @classmethod
-    def get_index_entries(mcs, obj):
-        if isinstance(obj, type):
-            yield (mcs.index_name, 'id', obj.__name__)
-        else:
-            obj_type = type(obj)
-            descr = mcs.get_descriptor(obj_type)
-
-            for name, attr in descr.attributes.items():
-                if attr.unique:
-                    declaring_class = get_declaring_class(descr.cls, name)
-
-                    index_name = get_index_name(declaring_class)
-                    key = name
-                    value = attr.to_primitive(getattr(obj, name), for_db=True)
-
-                    if value is not None:
-                        yield (index_name, key, value)
-
-
-PersistableMeta.register(type)
-PersistableMeta.register(object)
 
 
 def _is_attribute(obj):
@@ -219,7 +426,7 @@ def _is_attribute(obj):
 
 
 class Attribute(AttributeBase):
-    __metaclass__ = PersistableMeta
+    __metaclass__ = PersistableType
 
     unique = None
     required = None
@@ -254,13 +461,13 @@ class AttributedBase(Persistable):
     Sets default values during instance creation and applies kwargs
     passed to __init__.
     """
-    __metaclass__ = PersistableMeta
+    __metaclass__ = PersistableType
 
     def __new__(cls, *args, **kwargs):
 
         obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
 
-        descriptor = type(cls).get_descriptor(cls)
+        descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
@@ -277,7 +484,7 @@ class AttributedBase(Persistable):
 class Entity(AttributedBase):
     def __getattribute__(self, name):
         cls = type(self)
-        descriptor = type(cls).get_descriptor(cls)
+        descriptor = Descriptor(cls)
         try:
             rel_reference = descriptor.relationships[name]
         except KeyError:
