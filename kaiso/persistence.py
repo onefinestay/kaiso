@@ -664,7 +664,7 @@ class Storage(object):
         for row in self._execute(query, **params):
             yield tuple(self._convert_row(row))
 
-    def delete_all_data(self):
+    def destroy(self):
         """ Removes all nodes, relationships and indexes in the store. This
             object will no longer be usable after calling this method.
             Construct a new Storage to re-initialise the database for kaiso.

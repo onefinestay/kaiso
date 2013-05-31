@@ -319,7 +319,7 @@ def test_delete_class(storage):
 
 
 @pytest.mark.usefixtures('storage')
-def test_delete_all_data(storage):
+def test_destroy(storage):
 
     thing1 = Thing()
     thing2 = Thing()
@@ -328,7 +328,7 @@ def test_delete_all_data(storage):
     storage.save(thing2)
     storage.save(IndexedRelated(thing1, thing2))
 
-    storage.delete_all_data()
+    storage.destroy()
 
     rows = storage.query('START n=node(*) RETURN count(n)')
     assert next(rows) == (0,)
