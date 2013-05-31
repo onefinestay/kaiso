@@ -280,8 +280,8 @@ class TypeRegistry(object):
         return obj
 
     def clone(self):
-        """Return a copy of this TypeRegistry that is dissasociated with this
-        instance's internal state."""
+        """Return a copy of this TypeRegistry that maintains an independent
+        dynamic type registry"""
         clone = TypeRegistry()
         clone._descriptors['dynamic'] = self._descriptors['dynamic'].copy()
         return clone
