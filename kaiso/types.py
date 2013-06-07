@@ -133,6 +133,7 @@ class TypeRegistry(object):
         """
         name = cls.__name__
         registry = "dynamic" if type(cls) is DynamicType else "static"
+
         if name in self._descriptors[registry]:
             raise TypeAlreadyRegistered(cls)
         self._descriptors[registry][name] = Descriptor(cls)
