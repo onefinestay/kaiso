@@ -177,7 +177,6 @@ class Manager(object):
             if cls is None:
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
-                print type_id
                 registry.create_type(str(type_id), bases, attrs)
 
         Manager._type_registry_cache = (
