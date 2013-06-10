@@ -139,7 +139,9 @@ class Manager(object):
         query = join_lines(
             'START %s' % get_start_clause(self.type_system, 'ts',
                                           self.type_registry),
-            'MATCH ts -[:DEFINES|ISA|DECLAREDON*]- n '
+            'MATCH',
+            '   ts -[:DEFINES]-> () <-[:ISA*0..]- () <-[:DECLAREDON*0..]- n',
+            'WITH DISTINCT n',
             'RETURN sum(id(n))'
         )
 
@@ -155,8 +157,8 @@ class Manager(object):
         if Manager._type_registry_cache:
             cached_registry, digest = Manager._type_registry_cache
             if current_digest == digest:
-                log.debug('using cached type registry, digest: %s',
-                    current_digest)
+                log.debug(
+                    'using cached type registry, digest: %s', current_digest)
                 self.type_registry = cached_registry.clone()
                 return
 
@@ -450,7 +452,7 @@ class Manager(object):
             'MATCH',
             match,
             where,
-            'WITH tpe, length(p) AS level',
+            'WITH tpe, max(length(p)) AS level',
             'MATCH',
             '    tpe <-[:DECLAREDON*0..]- attr,',
             '    tpe -[:ISA*0..1]-> base',
