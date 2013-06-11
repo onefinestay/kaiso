@@ -366,14 +366,15 @@ class Manager(object):
                 query_args = changes
 
         try:
-            (result,) = next(self._execute(query, **query_args))
+            (node_or_rel,) = next(self._execute(query, **query_args))
         except StopIteration:
             # this can happen, if no attributes where changed on a type
-            result = persistable
+            pass
 
         if isinstance(persistable, Relationship):
-            self._index_object(persistable, result)
-        return result
+            self._index_object(persistable, node_or_rel)
+
+        return persistable
 
     def _add(self, obj):
         """ Adds an object to the data store.
