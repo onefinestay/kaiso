@@ -1,7 +1,5 @@
-import uuid
-
 from mock import ANY
-from kaiso.types import Entity, PersistableType
+from kaiso.types import Entity
 from kaiso.attributes import Uuid, String
 
 

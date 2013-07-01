@@ -18,6 +18,16 @@ collected_static_classes = {}
 
 @contextmanager
 def collector(type_map=None):
+    """ Allows code-defined types to be collected into a custom dict.
+
+    Example:
+
+    with collector() as type_map:
+        class Foobar(Entity):
+            pass
+
+    type_map == {'Foobar': Foobar}
+    """
     global collected_static_classes
 
     if type_map is None:
@@ -48,6 +58,8 @@ class PersistableType(type, Persistable):
 
     Collects classes as they are declared so that they can be registered with
     the TypeRegistry later.
+
+    Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
