@@ -1,5 +1,6 @@
-from mock import ANY
+import uuid
 
+from mock import ANY
 from kaiso.types import Entity, PersistableType
 from kaiso.attributes import Uuid, String
 
@@ -76,23 +77,16 @@ def test_is_dynamic_type(type_registry):
     DynamicFooType = type_registry.create_type("FooType", (), attrs)
 
     assert type_registry.is_dynamic_type(DynamicFooType) is True
-    assert not type_registry.is_dynamic_type(FooType) is True
+    assert type_registry.is_dynamic_type(FooType) is True
 
 
-def test_is_static_type(type_registry):
+def test_get_registered_types(type_registry):
+    initial_classes = set(type_registry.get_registered_types())
+    assert Entity in initial_classes
 
-    # create a dynamic FooType
-    attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create_type("FooType", (), attrs)
+    # nothing should change about the set of registered types
+    # when creating one through the create_type API
+    type_registry.create_type("FooType", (), {})
+    classes = set(type_registry.get_registered_types())
 
-    assert type_registry.is_static_type(FooType) is True
-    assert not type_registry.is_static_type(DynamicFooType) is True
-
-
-def test_is_static_type_not_registered(type_registry):
-
-    #create a new static type (which won't be registered)
-    NewFooType = PersistableType("NewFooType", (Entity,), {})
-
-    assert not type_registry.is_registered(NewFooType) is True
-    assert type_registry.is_static_type(NewFooType) is True
+    assert initial_classes == classes

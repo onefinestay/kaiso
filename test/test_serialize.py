@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError
-from kaiso.attributes import String, Uuid, Choice
+from kaiso.attributes import String, Uuid, Choice, Outgoing
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes, dict_to_db_values_dict)
