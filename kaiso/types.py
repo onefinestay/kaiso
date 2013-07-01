@@ -1,4 +1,6 @@
+from contextlib import contextmanager
 from inspect import getmembers, getmro
+
 from kaiso.exceptions import (
     UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
     DeserialisationError)
@@ -14,11 +16,36 @@ class Persistable(object):
 collected_static_classes = {}
 
 
+@contextmanager
+def collector(type_map=None):
+    """ Allows code-defined types to be collected into a custom dict.
+
+    Example:
+
+    with collector() as type_map:
+        class Foobar(Entity):
+            pass
+
+    type_map == {'Foobar': Foobar}
+    """
+    global collected_static_classes
+
+    if type_map is None:
+        type_map = {}
+
+    orig = collected_static_classes
+    try:
+        collected_static_classes = type_map
+        yield type_map
+    finally:
+        collected_static_classes = orig
+
+
 def collect_class(cls):
     """ Collect a class as it is defined at import time. Called by the
     PersistableType metaclass at class creation time.
     """
-    name = cls.__name__
+    name = get_type_id(cls)
     if name in collected_static_classes:
         raise TypeAlreadyCollected(
             "Type `{}` already defined.".format(name)
@@ -31,29 +58,20 @@ class PersistableType(type, Persistable):
 
     Collects classes as they are declared so that they can be registered with
     the TypeRegistry later.
+
+    Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
-        # DynamicType must inherit from PersistableType, but we only want to
-        # collect statically defined classes
-        if mcs is not DynamicType:
-            collect_class(cls)
+        collect_class(cls)
         return cls
-
-
-class DynamicType(PersistableType):
-    """ Metaclass for dynamic persistable types
-
-    Extends PersistableType, but the classes it produces will not be
-    collected.
-    """
 
 
 class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
     _static_descriptors = {}
-    _builtin_types = (PersistableType, DynamicType)
+    _builtin_types = (PersistableType, )
 
     def __init__(self):
         self._descriptors = {
@@ -91,58 +109,54 @@ class TypeRegistry(object):
             True if ``cls`` is registered as a static or dynamic type, False
             otherwise.
         """
-        name = cls.__name__ if isinstance(cls, type) else cls
+        name = get_type_id(cls) if isinstance(cls, type) else cls
+
         return (name in self._descriptors['static'] or
                 name in self._descriptors['dynamic'])
 
     def is_dynamic_type(self, cls):
-        """ Determine if ``cls`` is a dynamic type.
-
-        ``cls`` does not need to be registered with this type registry.
-
-        Arguments:
-            - cls: The class object to inspect
-
-        Returns:
-            True if ``cls`` is a dynamic type, False otherwise
-        """
-        return type(cls) is DynamicType
-
-    def is_static_type(self, cls):
-        """ Determine if ``cls`` is a static type.
-
-        ``cls`` does not need to be registered with this type registry.
-
-        Arguments:
-            - cls: The class object to inspect
-
-        Returns:
-            True if ``cls`` is a static type, False otherwise
-        """
-        return type(cls) is PersistableType
+        class_id = get_type_id(cls)
+        return (class_id in self._descriptors['dynamic'])
 
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
-        cls = DynamicType(cls_id, bases, attrs)
-        self.register(cls)
+
+        with collector():
+            cls = PersistableType(cls_id, bases, attrs)
+
+        self.register(cls, dynamic=True)
+
         return cls
 
-    def register(self, cls):
+    def register(self, cls, dynamic=False):
         """ Register a type
         """
-        name = cls.__name__
-        registry = "dynamic" if type(cls) is DynamicType else "static"
+        if dynamic:
+            descriptors = self._descriptors['dynamic']
+        else:
+            descriptors = self._descriptors['static']
 
-        if name in self._descriptors[registry]:
+        name = get_type_id(cls)
+        if name in descriptors:
             raise TypeAlreadyRegistered(cls)
-        self._descriptors[registry][name] = Descriptor(cls)
+
+        descriptors[name] = Descriptor(cls)
+
+    def get_registered_types(self):
+        """ Yields all code-defined classes.
+        """
+        self._sync_static_descriptors()
+        for descr in self._static_descriptors.values():
+            cls = descr.cls
+            if issubclass(cls, Entity):
+                yield cls
 
     def get_class_by_id(self, cls_id):
         """ Return the class for a given ``cls_id``, preferring statically
         registered classes.
 
-        Returns the statically registered class with the given ``cls_id``, iff
+        Returns the statically registered class with the given ``cls_id``, if
         one exists, and otherwise returns any dynamically registered class
         with that id.
 
@@ -160,7 +174,7 @@ class TypeRegistry(object):
             return self.get_descriptor_by_id(cls_id).cls
 
     def get_descriptor(self, cls):
-        name = cls.__name__
+        name = get_type_id(cls)
         return self.get_descriptor_by_id(name)
 
     def get_descriptor_by_id(self, cls_id):
