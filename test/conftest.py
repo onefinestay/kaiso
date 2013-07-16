@@ -37,15 +37,15 @@ def manager_factory(request):
     from kaiso.persistence import Manager
 
     neo4j_uri = request.config.getoption('neo4j_uri')
-    def make_manager():
-        return Manager(neo4j_uri)
+    def make_manager(**kwargs):
+        return Manager(neo4j_uri, **kwargs)
 
     return make_manager
 
 
 @pytest.fixture
 def manager(request, manager_factory):
-    manager_factory().destroy()
+    manager_factory(skip_type_loading=True).destroy()
     _manager = manager_factory()
     return _manager
 

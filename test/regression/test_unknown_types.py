@@ -20,7 +20,8 @@ def test_unknown_attr(manager, manager_factory):
         SET n.__type__ = "UnknownAttribute";
     """)
 
-    next(result)
+    # force query evaluation
+    list(result)
 
     # should succeed
-    manager_factory()
+    manager_factory(skip_type_loading=True)
