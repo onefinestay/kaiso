@@ -62,6 +62,8 @@ class PersistableType(type, Persistable):
     Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
+        # if name == 'Thing':
+            # import ipdb; ipdb.set_trace()
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         collect_class(cls)
         return cls
@@ -252,13 +254,21 @@ class TypeRegistry(object):
 
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
+            descr = self.get_descriptor(obj)
+            attributes = descr.class_attributes.items()
+            for name, attr in attributes:
+                obj_value = getattr(obj, name)
+                value = attr.to_primitive(obj_value.value, for_db=for_db)
+                properties[name] = value
 
         else:
             descr = self.get_descriptor(obj_type)
-            for name, attr in descr.attributes.items():
+            attributes = descr.attributes.items()
+
+            for name, attr in attributes:
                 try:
-                    value = attr.to_primitive(
-                        getattr(obj, name), for_db=for_db)
+                    obj_value = getattr(obj, name)
+                    value = attr.to_primitive(obj_value, for_db=for_db)
                 except AttributeError:
                     # if we are dealing with an extended type, we may not
                     # have the attribute set on the instance
@@ -423,6 +433,10 @@ class Descriptor(object):
         return attributes
 
     @property
+    def class_attributes(self):
+        return dict(getmembers(self.cls, _is_class_attribute))
+
+    @property
     def declared_attributes(self):
         declared = {}
         for name, attr in getmembers(self.cls, _is_attribute):
@@ -435,9 +449,29 @@ class Descriptor(object):
 class AttributeBase(object):
     name = None
 
+    @staticmethod
+    def to_python(value):
+        return value
+
+    @staticmethod
+    def to_primitive(value, for_db):
+        """ Serialize ``value`` to a primitive type suitable for inserting
+            into the database or passing to e.g. ``json.dumps``
+        """
+        return value
+
 
 def _is_attribute(obj):
     return isinstance(obj, Attribute)
+
+
+def _is_class_attribute(obj):
+    return isinstance(obj, ClassAttribute)
+
+
+class ClassAttribute(AttributeBase):
+    def __init__(self, value):
+        self.value = value
 
 
 class Attribute(AttributeBase):
@@ -449,17 +483,6 @@ class Attribute(AttributeBase):
     def __init__(self, unique=False, required=False):
         self.unique = unique
         self.required = required
-
-    @staticmethod
-    def to_python(value):
-        return value
-
-    @staticmethod
-    def to_primitive(value, for_db):
-        """ Serialize ``value`` to a primitive type suitable for inserting
-            into the database or passing to e.g. ``json.dumps``
-        """
-        return value
 
 
 class DefaultableAttribute(Attribute):
@@ -486,6 +509,9 @@ class AttributedBase(Persistable):
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
+
+        for name, attr in descriptor.class_attributes.items():
+            setattr(obj, name, attr.value)
 
         return obj
 

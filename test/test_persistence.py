@@ -8,7 +8,7 @@ from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship
-from kaiso.types import PersistableType, Entity
+from kaiso.types import PersistableType, Entity, ClassAttribute, collector
 
 
 class Thing(Entity):
@@ -24,6 +24,11 @@ class Thing(Entity):
 
 class OtherThing(Entity):
     id = Uuid(unique=True)
+
+
+class ClassAttrThing(Entity):
+    id = Uuid(unique=True)
+    cls_attr = ClassAttribute("spam")
 
 
 class NonUnique(Entity):
@@ -646,3 +651,44 @@ def test_serialize_deserialize(manager):
 
     obj = manager.deserialize(dct)
     assert obj is Entity
+
+
+# class attributes
+
+def test_serialize_class(manager):
+    cls_dict = manager.serialize(ClassAttrThing)
+    assert cls_dict == {
+        '__type__': 'PersistableType',
+        'id': 'ClassAttrThing',
+        'cls_attr': 'spam',
+    }
+
+
+def test_serialize_obj(manager):
+    instance = ClassAttrThing()
+
+    instance_dict = manager.serialize(instance)
+    assert 'cls_attr' not in instance_dict
+
+
+def test_attr():
+    assert ClassAttrThing.cls_attr.value == 'spam'
+    assert ClassAttrThing().cls_attr == 'spam'
+
+
+def test_save_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid(unique=True)
+            cls_attr = ClassAttribute("spam")
+
+    manager.save_collected_classes(classes)
+    manager.reload_types()
+
+    data = {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+        'cls_attr': 'ham',
+    }
+    cls = manager.deserialize(data)
+    assert cls.cls_attr.value == 'ham'
