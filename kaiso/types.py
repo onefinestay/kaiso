@@ -466,10 +466,6 @@ def _is_attribute(obj):
     return isinstance(obj, AttributeBase)
 
 
-def _is_class_attribute(obj):
-    return isinstance(obj, ClassAttribute)
-
-
 class ClassAttribute(AttributeBase):
     unique = False
     value = None
@@ -480,6 +476,10 @@ class ClassAttribute(AttributeBase):
     @property
     def default(self):
         return self.value
+
+
+def _is_class_attribute(obj):
+    return isinstance(obj, ClassAttribute)
 
 
 class Attribute(AttributeBase):
@@ -515,9 +515,6 @@ class AttributedBase(Persistable):
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
-
-        # for name, attr in descriptor.class_attributes.items():
-            # setattr(obj, name, attr.value)
 
         return obj
 
