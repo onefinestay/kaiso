@@ -656,7 +656,6 @@ def test_serialize_deserialize(manager):
 
 # class attributes
 
-@pytest.mark.clasattr
 def test_serialize_class(manager):
     cls_dict = manager.serialize(ClassAttrThing)
     assert cls_dict == {
@@ -666,7 +665,6 @@ def test_serialize_class(manager):
     }
 
 
-@pytest.mark.clasattr
 def test_serialize_obj(manager):
     instance = ClassAttrThing()
 
@@ -674,13 +672,11 @@ def test_serialize_obj(manager):
     assert 'cls_attr' not in instance_dict
 
 
-@pytest.mark.clasattr
 def test_attr():
     assert ClassAttrThing.cls_attr.value == 'spam'
     assert ClassAttrThing().cls_attr == 'spam'
 
 
-@pytest.mark.clasattr
 def test_load_class_attr(manager):
     with collector() as classes:
         class DynamicClassAttrThing(Entity):
