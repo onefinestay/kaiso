@@ -165,10 +165,7 @@ class Manager(object):
         self.type_registry = TypeRegistry()
         registry = self.type_registry
 
-        # import ipdb; ipdb.set_trace()
         for type_id, bases, attrs in self.get_type_hierarchy():
-            # if type_id == 'DynamicClassAttrThing':
-                # import ipdb; ipdb.set_trace()
             try:
                 cls = registry.get_class_by_id(type_id)
 

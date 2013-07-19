@@ -62,8 +62,6 @@ class PersistableType(type, Persistable):
     Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
-        # if name == 'Thing':
-            # import ipdb; ipdb.set_trace()
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         collect_class(cls)
         return cls
@@ -255,17 +253,19 @@ class TypeRegistry(object):
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
             descr = self.get_descriptor(obj)
-            attributes = descr.class_attributes.items()
+            attributes = descr.attributes.items()
             for name, attr in attributes:
+                if not _is_class_attribute(attr):
+                    continue
                 obj_value = getattr(obj, name)
                 value = attr.to_primitive(obj_value.value, for_db=for_db)
                 properties[name] = value
 
         else:
             descr = self.get_descriptor(obj_type)
-            attributes = descr.attributes.items()
-
-            for name, attr in attributes:
+            for name, attr in descr.attributes.items():
+                if _is_class_attribute(attr):
+                    continue
                 try:
                     obj_value = getattr(obj, name)
                     value = attr.to_primitive(obj_value, for_db=for_db)
@@ -312,10 +312,6 @@ class TypeRegistry(object):
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
-        # if 'cls_attr' in properties:
-            # import ipdb; ipdb.set_trace()
-        # if properties.get('id') == 'DynamicClassAttrThing':
-            # import ipdb; ipdb.set_trace()
         if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
@@ -332,9 +328,7 @@ class TypeRegistry(object):
 
             descr = self.get_descriptor_by_id(cls_id)
 
-            attributes = descr.attributes
-            attributes.update(descr.class_attributes)
-            for attr_name, attr in attributes.items():
+            for attr_name, attr in descr.attributes.items():
                 value = properties.get(attr_name)
                 value = attr.to_python(value)
                 setattr(obj, attr_name, value)
@@ -433,6 +427,9 @@ class Descriptor(object):
             attributes['unique'] = Attribute()
             attributes['required'] = Attribute()
 
+            if issubclass(self.cls, ClassAttribute):
+                attributes['value'] = Attribute()
+
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
 
@@ -442,25 +439,6 @@ class Descriptor(object):
     def declared_attributes(self):
         declared = {}
         for name, attr in getmembers(self.cls, _is_attribute):
-            if get_declaring_class(self.cls, name) == self.cls:
-                declared[name] = attr
-
-        return declared
-
-    @property
-    def class_attributes(self):
-        attributes = dict(getmembers(self.cls, _is_class_attribute))
-
-        if issubclass(self.cls, AttributeBase):
-            # as above
-            if issubclass(self.cls, ClassAttribute):
-                attributes['value'] = Attribute()
-        return attributes
-
-    @property
-    def declared_class_attributes(self):
-        declared = {}
-        for name, attr in getmembers(self.cls, _is_class_attribute):
             if get_declaring_class(self.cls, name) == self.cls:
                 declared[name] = attr
 
@@ -485,7 +463,7 @@ class AttributeBase(object):
 
 
 def _is_attribute(obj):
-    return isinstance(obj, Attribute)
+    return isinstance(obj, AttributeBase)
 
 
 def _is_class_attribute(obj):
@@ -538,8 +516,8 @@ class AttributedBase(Persistable):
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
 
-        for name, attr in descriptor.class_attributes.items():
-            setattr(obj, name, attr.value)
+        # for name, attr in descriptor.class_attributes.items():
+            # setattr(obj, name, attr.value)
 
         return obj
 
