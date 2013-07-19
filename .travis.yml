@@ -8,8 +8,7 @@ before_install:
   - sudo apt-get update -qq
   - sudo apt-get install neo4j
 
-# use sudo to work around neo4j bug
-
+# use sudo to work around neo4j bug: https://github.com/neo4j/neo4j/issues/984
 install:
   - sudo python setup.py -q install
   - sudo pip install -r test_requirements.txt
