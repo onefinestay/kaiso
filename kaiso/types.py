@@ -312,6 +312,8 @@ class TypeRegistry(object):
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
+        if 'cls_attr' in properties:
+            import ipdb; ipdb.set_trace()
         if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
@@ -419,7 +421,7 @@ class Descriptor(object):
     def attributes(self):
         attributes = dict(getmembers(self.cls, _is_attribute))
 
-        if issubclass(self.cls, Attribute):
+        if issubclass(self.cls, AttributeBase):
             # Because we don't have the attrs on the base Attribute classes
             # declared using Attribute instances, we have to pretend we did,
             # so that they behave like them.
@@ -430,11 +432,10 @@ class Descriptor(object):
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
 
-        return attributes
+            if issubclass(self.cls, ClassAttribute):
+                attributes['value'] = Attribute()
 
-    @property
-    def class_attributes(self):
-        return dict(getmembers(self.cls, _is_class_attribute))
+        return attributes
 
     @property
     def declared_attributes(self):
@@ -445,8 +446,23 @@ class Descriptor(object):
 
         return declared
 
+    @property
+    def class_attributes(self):
+        return dict(getmembers(self.cls, _is_class_attribute))
+
+    @property
+    def declared_class_attributes(self):
+        declared = {}
+        for name, attr in getmembers(self.cls, _is_class_attribute):
+            if get_declaring_class(self.cls, name) == self.cls:
+                declared[name] = attr
+
+        return declared
+
 
 class AttributeBase(object):
+    __metaclass__ = PersistableType
+
     name = None
 
     @staticmethod
@@ -462,7 +478,7 @@ class AttributeBase(object):
 
 
 def _is_attribute(obj):
-    return isinstance(obj, Attribute)
+    return isinstance(obj, AttributeBase)
 
 
 def _is_class_attribute(obj):
@@ -470,13 +486,18 @@ def _is_class_attribute(obj):
 
 
 class ClassAttribute(AttributeBase):
+    unique = False
+    value = None
+
     def __init__(self, value):
         self.value = value
 
+    @property
+    def default(self):
+        return self.value
+
 
 class Attribute(AttributeBase):
-    __metaclass__ = PersistableType
-
     unique = None
     required = None
 
