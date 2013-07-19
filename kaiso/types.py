@@ -312,8 +312,10 @@ class TypeRegistry(object):
             raise DeserialisationError(
                 'properties "{}" missing __type__ key'.format(properties))
 
-        if 'cls_attr' in properties:
-            import ipdb; ipdb.set_trace()
+        # if 'cls_attr' in properties:
+            # import ipdb; ipdb.set_trace()
+        # if properties.get('id') == 'DynamicClassAttrThing':
+            # import ipdb; ipdb.set_trace()
         if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
@@ -330,7 +332,9 @@ class TypeRegistry(object):
 
             descr = self.get_descriptor_by_id(cls_id)
 
-            for attr_name, attr in descr.attributes.items():
+            attributes = descr.attributes
+            attributes.update(descr.class_attributes)
+            for attr_name, attr in attributes.items():
                 value = properties.get(attr_name)
                 value = attr.to_python(value)
                 setattr(obj, attr_name, value)
@@ -432,9 +436,6 @@ class Descriptor(object):
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
 
-            if issubclass(self.cls, ClassAttribute):
-                attributes['value'] = Attribute()
-
         return attributes
 
     @property
@@ -448,7 +449,13 @@ class Descriptor(object):
 
     @property
     def class_attributes(self):
-        return dict(getmembers(self.cls, _is_class_attribute))
+        attributes = dict(getmembers(self.cls, _is_class_attribute))
+
+        if issubclass(self.cls, AttributeBase):
+            # as above
+            if issubclass(self.cls, ClassAttribute):
+                attributes['value'] = Attribute()
+        return attributes
 
     @property
     def declared_class_attributes(self):
@@ -478,7 +485,7 @@ class AttributeBase(object):
 
 
 def _is_attribute(obj):
-    return isinstance(obj, AttributeBase)
+    return isinstance(obj, Attribute)
 
 
 def _is_class_attribute(obj):

@@ -681,11 +681,10 @@ def test_attr():
 
 
 @pytest.mark.clasattr
-def test_save_class_attr(manager):
+def test_load_class_attr(manager):
     with collector() as classes:
         class DynamicClassAttrThing(Entity):
-            # id = Uuid(unique=True)
-            string = String(default="default value")
+            id = Uuid(unique=True)
             cls_attr = ClassAttribute("spam")
 
     manager.save_collected_classes(classes)
