@@ -7,8 +7,9 @@ from py2neo import cypher
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
+from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship
-from kaiso.types import PersistableType, Entity
+from kaiso.types import PersistableType, Entity, ClassAttribute, collector
 
 
 class Thing(Entity):
@@ -24,6 +25,11 @@ class Thing(Entity):
 
 class OtherThing(Entity):
     id = Uuid(unique=True)
+
+
+class ClassAttrThing(Entity):
+    id = Uuid(unique=True)
+    cls_attr = ClassAttribute("spam")
 
 
 class NonUnique(Entity):
@@ -646,3 +652,55 @@ def test_serialize_deserialize(manager):
 
     obj = manager.deserialize(dct)
     assert obj is Entity
+
+
+# class attributes
+
+def test_serialize_class(manager):
+    cls_dict = manager.serialize(ClassAttrThing)
+    assert cls_dict == {
+        '__type__': 'PersistableType',
+        'id': 'ClassAttrThing',
+        'cls_attr': 'spam',
+    }
+
+
+def test_serialize_obj(manager):
+    instance = ClassAttrThing()
+
+    instance_dict = manager.serialize(instance)
+    assert 'cls_attr' not in instance_dict
+
+
+def test_attr():
+    assert ClassAttrThing.cls_attr.value == 'spam'
+    assert ClassAttrThing().cls_attr == 'spam'
+
+
+def test_load_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid(unique=True)
+            cls_attr = ClassAttribute("spam")
+
+    manager.save_collected_classes(classes)
+
+    query_str = join_lines(
+        "START",
+        get_start_clause(DynamicClassAttrThing, 'cls', manager.type_registry),
+        """
+            MATCH attr -[:DECLAREDON]-> cls
+            WHERE attr.name = "cls_attr"
+            SET attr.value={value}
+        """
+    )
+    list(manager.query(query_str, value="ham"))
+
+    manager.reload_types()
+
+    data = {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+    }
+    cls = manager.deserialize(data)
+    assert cls.cls_attr.value == 'ham'
