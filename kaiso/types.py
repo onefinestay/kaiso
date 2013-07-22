@@ -252,13 +252,23 @@ class TypeRegistry(object):
 
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
+            descr = self.get_descriptor(obj)
+            attributes = descr.attributes.items()
+            for name, attr in attributes:
+                if not _is_class_attribute(attr):
+                    continue
+                obj_value = getattr(obj, name)
+                value = attr.to_primitive(obj_value.value, for_db=for_db)
+                properties[name] = value
 
         else:
             descr = self.get_descriptor(obj_type)
             for name, attr in descr.attributes.items():
+                if _is_class_attribute(attr):
+                    continue
                 try:
-                    value = attr.to_primitive(
-                        getattr(obj, name), for_db=for_db)
+                    obj_value = getattr(obj, name)
+                    value = attr.to_primitive(obj_value, for_db=for_db)
                 except AttributeError:
                     # if we are dealing with an extended type, we may not
                     # have the attribute set on the instance
@@ -409,13 +419,16 @@ class Descriptor(object):
     def attributes(self):
         attributes = dict(getmembers(self.cls, _is_attribute))
 
-        if issubclass(self.cls, Attribute):
+        if issubclass(self.cls, AttributeBase):
             # Because we don't have the attrs on the base Attribute classes
             # declared using Attribute instances, we have to pretend we did,
             # so that they behave like them.
             attributes['name'] = Attribute()
             attributes['unique'] = Attribute()
             attributes['required'] = Attribute()
+
+            if issubclass(self.cls, ClassAttribute):
+                attributes['value'] = Attribute()
 
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
@@ -433,22 +446,9 @@ class Descriptor(object):
 
 
 class AttributeBase(object):
-    name = None
-
-
-def _is_attribute(obj):
-    return isinstance(obj, Attribute)
-
-
-class Attribute(AttributeBase):
     __metaclass__ = PersistableType
 
-    unique = None
-    required = None
-
-    def __init__(self, unique=False, required=False):
-        self.unique = unique
-        self.required = required
+    name = None
 
     @staticmethod
     def to_python(value):
@@ -460,6 +460,31 @@ class Attribute(AttributeBase):
             into the database or passing to e.g. ``json.dumps``
         """
         return value
+
+
+def _is_attribute(obj):
+    return isinstance(obj, AttributeBase)
+
+
+class ClassAttribute(AttributeBase):
+    unique = False
+    value = None
+
+    def __init__(self, value):
+        self.value = value
+
+
+def _is_class_attribute(obj):
+    return isinstance(obj, ClassAttribute)
+
+
+class Attribute(AttributeBase):
+    unique = None
+    required = None
+
+    def __init__(self, unique=False, required=False):
+        self.unique = unique
+        self.required = required
 
 
 class DefaultableAttribute(Attribute):
@@ -485,7 +510,11 @@ class AttributedBase(Persistable):
         descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
-            setattr(obj, name, attr.default)
+            if _is_class_attribute(attr):
+                value = attr.value
+            else:
+                value = attr.default
+            setattr(obj, name, value)
 
         return obj
 
