@@ -7,7 +7,11 @@ from kaiso.types import Entity
 fixture = pytest.mark.usefixtures('storage')
 
 
-def test_unknown_attr(manager, manager_factory):
+def test_skip_type_loading(manager, manager_factory):
+    # Type loading will fail if the database contains references to an unknown
+    # attribute or base (i.e. __type__ refers to a class not known by Python).
+    # Test we can skip it when creating a manager. (e.g. for the one we use to
+    # call ``destroy``)
 
     class Unknown(Entity):
         id = Integer(default=1)
