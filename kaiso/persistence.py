@@ -57,7 +57,7 @@ class Manager(object):
     """
     _type_registry_cache = None
 
-    def __init__(self, connection_uri):
+    def __init__(self, connection_uri, skip_type_loading=False):
         """ Initializes a Manager object.
 
         Args:
@@ -69,7 +69,8 @@ class Manager(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
-        self.reload_types()
+        if not skip_type_loading:
+            self.reload_types()
 
     def _execute(self, query, **params):
         """ Runs a cypher query returning only raw rows of data.
