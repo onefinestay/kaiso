@@ -514,6 +514,15 @@ class Manager(object):
         else:
             return self._update(persistable, existing, changes)
 
+    def save_collected_classes(self, collection):
+        classes = collection.values()
+
+        for cls in classes:
+            self.type_registry.register(cls, dynamic=True)
+
+        for cls in classes:
+            self.save(cls)
+
     def get(self, cls, **attr_filter):
         attr_filter = dict_to_db_values_dict(attr_filter)
 
