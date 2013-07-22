@@ -473,10 +473,6 @@ class ClassAttribute(AttributeBase):
     def __init__(self, value):
         self.value = value
 
-    @property
-    def default(self):
-        return self.value
-
 
 def _is_class_attribute(obj):
     return isinstance(obj, ClassAttribute)
@@ -514,7 +510,11 @@ class AttributedBase(Persistable):
         descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
-            setattr(obj, name, attr.default)
+            if _is_class_attribute(attr):
+                value = attr.value
+            else:
+                value = attr.default
+            setattr(obj, name, value)
 
         return obj
 
