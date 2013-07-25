@@ -329,6 +329,8 @@ class TypeRegistry(object):
             descr = self.get_descriptor_by_id(cls_id)
 
             for attr_name, attr in descr.attributes.items():
+                if _is_class_attribute(attr):
+                    continue
                 value = properties.get(attr_name)
                 value = attr.to_python(value)
                 setattr(obj, attr_name, value)

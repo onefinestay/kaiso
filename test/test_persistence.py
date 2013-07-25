@@ -704,3 +704,45 @@ def test_load_class_attr(manager):
     }
     cls = manager.deserialize(data)
     assert cls.cls_attr.value == 'ham'
+
+
+def test_class_att_overriding(manager):
+    with collector() as classes:
+        class A(Entity):
+            id = Uuid()
+            cls_attr = ClassAttribute("spam")
+
+        class B(A):
+            cls_attr = ClassAttribute("ham")
+
+        class C(B):
+            pass
+
+    manager.save_collected_classes(classes)
+    manager.reload_types()
+
+    a = A()
+    b = B()
+    c = C()
+
+    assert a.cls_attr == "spam"
+    assert b.cls_attr == "ham"
+    assert c.cls_attr == "ham"
+
+    manager.save(a)
+    manager.save(b)
+    manager.save(c)
+
+    query_str = join_lines(
+        "START",
+        get_start_clause(A, 'A', manager.type_registry),
+        """
+            MATCH node -[:INSTANCEOF]-> () -[:ISA*0..]-> A
+            return node
+        """
+    )
+
+    results = list(manager.query(query_str))
+
+    for col, in results:
+        assert col.cls_attr == col.__class__.cls_attr.value
