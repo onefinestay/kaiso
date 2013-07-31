@@ -746,3 +746,25 @@ def test_class_att_overriding(manager):
 
     for col, in results:
         assert col.cls_attr == col.__class__.cls_attr.value
+
+
+def test_class_attr_inheritence(manager):
+    with collector() as classes:
+        class A(Entity):
+            attr = ClassAttribute(True)
+
+        class B(A):
+            pass
+
+        class C(B):
+            attr = ClassAttribute(False)
+
+        class D(C):
+            pass
+
+    manager.save_collected_classes(classes)
+
+    assert A().attr == True
+    assert B().attr == True
+    assert C().attr == False
+    assert D().attr == False
