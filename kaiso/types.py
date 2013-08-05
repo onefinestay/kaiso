@@ -86,7 +86,6 @@ class TypeRegistry(object):
 
         self._sync_static_descriptors()
 
-    #@classmethod
     def _sync_static_descriptors(cls):
         for name, collected_cls in collected_static_classes.iteritems():
             if name not in cls._static_descriptors:

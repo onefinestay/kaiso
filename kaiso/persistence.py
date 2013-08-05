@@ -179,7 +179,9 @@ class Manager(object):
                 base_classes = []
                 for base in bases:
                     if base == 'Entity':
-                        # For the root of types we need to use the real
+                        # Entity is the base of all persisted types and will
+                        # not have any data defined bases, thus we need to
+                        # always use the code defined one
                         base_cls = Entity
                     else:
                         base_cls = registry.get_descriptor_by_id(base).cls

@@ -178,7 +178,7 @@ def test_incorrect_attributes(manager):
     # treat Foobar as a code defined class
     manager.type_registry.register(Foobar, dynamic=False)
 
-    # treat Shur as a class defined in data
+    # treat Shrub as a class defined in data
     manager.type_registry.register(Shrub, dynamic=True)
     manager.save(Shrub)
 
@@ -195,4 +195,6 @@ def test_incorrect_attributes(manager):
         RETURN shrub '''))
 
     assert len(rows) == 1
-    assert rows[0][0].spam == 'ham'
+    queried_shrub = rows[0][0]
+    assert queried_shrub.spam == 'ham'
+    assert not isinstance(queried_shrub, Foobar)
