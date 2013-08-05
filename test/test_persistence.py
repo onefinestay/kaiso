@@ -684,18 +684,6 @@ def test_load_class_attr(manager):
             cls_attr = "spam"
 
     manager.save_collected_classes(classes)
-
-    # query_str = join_lines(
-        # "START",
-        # get_start_clause(DynamicClassAttrThing, 'cls', manager.type_registry),
-        # """
-            # MATCH attr -[:DECLAREDON]-> cls
-            # WHERE attr.name = "cls_attr"
-            # SET attr.value={value}
-        # """
-    # )
-    # list(manager.query(query_str, value="ham"))
-
     manager.reload_types()
 
     data = {
@@ -765,13 +753,48 @@ def test_class_attr_inheritence(manager):
 
     manager.save_collected_classes(classes)
 
-    assert A().attr == True
-    assert B().attr == True
-    assert C().attr == False
-    assert D().attr == False
+    assert A().attr is True
+    assert B().attr is True
+    assert C().attr is False
+    assert D().attr is False
 
 
 def test_reserved_attribute_name():
     with pytest.raises(TypeError):
         class Nope(Entity):
             __type__ = String()
+
+
+def test_class_attr_class_serialization(manager):
+    with collector() as classes:
+        class A(Entity):
+            id = Uuid()
+            cls_attr = "spam"
+
+        class B(A):
+            cls_attr = "ham"
+
+        class C(B):
+            pass
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(C) == {
+        '__type__': 'PersistableType',
+        'id': 'C',
+        'cls_attr': 'ham',
+    }
+
+    # we don't want inherited attributes in the db
+    query_str = join_lines(
+        "START",
+        get_start_clause(C, 'C', manager.type_registry),
+        """
+            RETURN C
+        """
+    )
+
+    (db_attrs,) = next(manager._execute(query_str))
+    properties = db_attrs.get_properties()
+    assert 'cls_attr' not in properties

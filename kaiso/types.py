@@ -6,6 +6,10 @@ from kaiso.exceptions import (
     DeserialisationError)
 
 
+# at some point, rename id to __name__ and just skip all dunder attrs
+INTERNAL_CLASS_ATTRS = ['__type__', 'id']
+
+
 class Persistable(object):
     """ The base of all persistable objects.
 
@@ -124,10 +128,6 @@ class TypeRegistry(object):
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
-
-        for name, attr in attrs.items():
-            if _is_stored_class_attribute(attr):
-                attrs[name] = attr.value
 
         with collector():
             cls = PersistableType(cls_id, bases, attrs)
@@ -260,7 +260,12 @@ class TypeRegistry(object):
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
             descr = self.get_descriptor(obj)
-            for name, attr in descr.class_attributes.items():
+            if for_db:
+                attributes = descr.declared_class_attributes
+            else:
+                attributes = descr.class_attributes
+
+            for name, attr in attributes.items():
                 properties[name] = getattr(obj, name)
 
         else:
@@ -315,28 +320,27 @@ class TypeRegistry(object):
         if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
-        else:
-            # we are looking at an instance object
-            cls_id = type_id
-
-        cls = self.get_class_by_id(cls_id)
-
-        if cls_id != type_id:
+            cls = self.get_class_by_id(cls_id)
             descr = self.get_descriptor_by_id(cls_id)
-            for attr_name, attr in descr.stored_class_attributes.items():
-                value = properties.get(attr_name)
-                # these are already native (only support native class attrs)
+
+            for attr_name, value in properties.items():
+                if attr_name in INTERNAL_CLASS_ATTRS:
+                    continue
+                # these are already native (we only support native class attrs)
                 setattr(cls, attr_name, value)
             return cls
-        else:
-            obj = cls.__new__(cls)
 
-            descr = self.get_descriptor_by_id(cls_id)
+        # we are looking at an instance object
+        cls_id = type_id
+        cls = self.get_class_by_id(cls_id)
+        obj = cls.__new__(cls)
 
-            for attr_name, attr in descr.attributes.items():
-                value = properties.get(attr_name)
-                value = attr.to_python(value)
-                setattr(obj, attr_name, value)
+        descr = self.get_descriptor_by_id(cls_id)
+
+        for attr_name, attr in descr.attributes.items():
+            value = properties.get(attr_name)
+            value = attr.to_python(value)
+            setattr(obj, attr_name, value)
 
         return obj
 
@@ -432,9 +436,6 @@ class Descriptor(object):
             attributes['unique'] = Attribute()
             attributes['required'] = Attribute()
 
-            if issubclass(self.cls, ClassAttribute):
-                attributes['value'] = Attribute()
-
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
 
@@ -451,31 +452,21 @@ class Descriptor(object):
 
     @property
     def class_attributes(self):
-        # TODO: value ends up both as `attr_name` prop on class and as
-        # `value` prop on attr. Get rid of one!
         attributes = {}
         for name, value in getmembers(self.cls, _is_class_attribute):
             if name.startswith('__'):
                 continue
-            # attributes[name] = ClassAttribute(value=value)
-            attributes[name] = ClassAttribute()
+            attributes[name] = value
         return attributes
 
     @property
     def declared_class_attributes(self):
         declared = {}
-        for name, value in getmembers(self.cls, _is_class_attribute):
-            if name.startswith('__'):
-                continue
+        for name, value in self.class_attributes.items():
             if get_declaring_class(self.cls, name) == self.cls:
-                # declared[name] = ClassAttribute(value=value)
-                declared[name] = ClassAttribute()
+                declared[name] = value
 
         return declared
-
-    @property
-    def stored_class_attributes(self):
-        return dict(getmembers(self.cls, _is_stored_class_attribute))
 
 
 class AttributeBase(object):
@@ -499,21 +490,10 @@ def _is_attribute(obj):
     return isinstance(obj, AttributeBase)
 
 
-class ClassAttribute(AttributeBase):
-    value = None
-
-    # def __init__(self, value):
-        # self.value = value
-
-
 def _is_class_attribute(obj):
-    supported_types = (str, int, bool, list, float)
+    supported_types = (basestring, int, bool, list, float)
     # TODO: use types.NoneType
     return obj is None or isinstance(obj, supported_types)
-
-
-def _is_stored_class_attribute(obj):
-    return isinstance(obj, ClassAttribute)
 
 
 class Attribute(AttributeBase):
@@ -548,11 +528,7 @@ class AttributedBase(Persistable):
         descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
-            if _is_stored_class_attribute(attr):
-                value = attr.value
-            else:
-                value = attr.default
-            setattr(obj, name, value)
+            setattr(obj, name, attr.default)
 
         return obj
 

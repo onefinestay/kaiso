@@ -12,8 +12,9 @@ from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
-    Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
-    AttributedBase, get_index_name, get_type_id, is_indexable)
+    INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
+    Relationship, TypeRegistry, AttributedBase, get_index_name, get_type_id,
+    is_indexable)
 
 
 log = getLogger(__name__)
@@ -166,7 +167,7 @@ class Manager(object):
         self.type_registry = TypeRegistry()
         registry = self.type_registry
 
-        for type_id, bases, attrs in self.get_type_hierarchy():
+        for type_id, bases, class_attrs, attrs in self.get_type_hierarchy():
             try:
                 cls = registry.get_class_by_id(type_id)
 
@@ -178,6 +179,10 @@ class Manager(object):
             if cls is None:
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 attrs = dict((attr.name, attr) for attr in attrs)
+                for attr_name, value in class_attrs.items():
+                    if attr_name in INTERNAL_CLASS_ATTRS:
+                        continue
+                    attrs[attr_name] = value
                 registry.create_type(str(type_id), bases, attrs)
 
         Manager._type_registry_cache = (
@@ -458,7 +463,7 @@ class Manager(object):
             'MATCH',
             '    tpe <-[:DECLAREDON*0..]- attr,',
             '    tpe -[:ISA*0..1]-> base',
-            'WITH tpe.id AS type_id, level,',
+            'WITH tpe.id AS type_id, level, tpe AS class_attrs,',
             '    filter(',
             '        bse_id in collect(distinct base.id): bse_id <> tpe.id)',
             '    AS bases,',
@@ -466,10 +471,22 @@ class Manager(object):
             '        attr in collect(distinct attr): attr.id? <> tpe.id)',
             '    AS attrs',
             'ORDER BY level',
-            'RETURN type_id, bases, attrs')
+            'RETURN type_id, bases, class_attrs, attrs')
 
-        rows = self.query(query, **query_args)
-        return rows
+        # we can't use self.query since we don't want to convert the
+        # class_attrs dict
+        def convert_row(row):
+            type_id, bases, class_attrs, attrs = row
+            return (
+                type_id,
+                [self._convert_value(v) for v in bases],
+                class_attrs.get_properties(),
+                [self._convert_value(v) for v in attrs],
+            )
+
+        params = dict_to_db_values_dict(query_args)
+        for row in self._execute(query, **params):
+            yield convert_row(row)
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.

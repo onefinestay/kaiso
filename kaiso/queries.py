@@ -98,8 +98,7 @@ def get_create_types_query(cls, root, type_registry):
     for name, cls in classes.items():
 
         descriptor = type_registry.get_descriptor(cls)
-        attributes = descriptor.declared_class_attributes
-        attributes.update(descriptor.declared_attributes)
+        attributes = descriptor.declared_attributes
         for attr_name, attr in attributes.iteritems():
             key = "%s_%s" % (name, attr_name)
 
@@ -114,7 +113,8 @@ def get_create_types_query(cls, root, type_registry):
             query_args[key] = attr_dict
 
     for key, cls in classes.iteritems():
-        query_args['%s_props' % key] = type_registry.object_to_dict(cls)
+        query_args['%s_props' % key] = type_registry.object_to_dict(
+            cls, for_db=True)
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
