@@ -62,6 +62,9 @@ class PersistableType(type, Persistable):
     Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
+        if "__type__" in dct:
+            raise TypeError("__type__ is a reserved attribute")
+
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         collect_class(cls)
         return cls
@@ -121,6 +124,10 @@ class TypeRegistry(object):
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
         """
+
+        for name, attr in attrs.items():
+            if _is_stored_class_attribute(attr):
+                attrs[name] = attr.value
 
         with collector():
             cls = PersistableType(cls_id, bases, attrs)
@@ -253,19 +260,12 @@ class TypeRegistry(object):
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
             descr = self.get_descriptor(obj)
-            attributes = descr.attributes.items()
-            for name, attr in attributes:
-                if not _is_class_attribute(attr):
-                    continue
-                obj_value = getattr(obj, name)
-                value = attr.to_primitive(obj_value.value, for_db=for_db)
-                properties[name] = value
+            for name, attr in descr.class_attributes.items():
+                properties[name] = getattr(obj, name)
 
         else:
             descr = self.get_descriptor(obj_type)
             for name, attr in descr.attributes.items():
-                if _is_class_attribute(attr):
-                    continue
                 try:
                     obj_value = getattr(obj, name)
                     value = attr.to_primitive(obj_value, for_db=for_db)
@@ -322,6 +322,11 @@ class TypeRegistry(object):
         cls = self.get_class_by_id(cls_id)
 
         if cls_id != type_id:
+            descr = self.get_descriptor_by_id(cls_id)
+            for attr_name, attr in descr.stored_class_attributes.items():
+                value = properties.get(attr_name)
+                # these are already native (only support native class attrs)
+                setattr(cls, attr_name, value)
             return cls
         else:
             obj = cls.__new__(cls)
@@ -329,8 +334,6 @@ class TypeRegistry(object):
             descr = self.get_descriptor_by_id(cls_id)
 
             for attr_name, attr in descr.attributes.items():
-                if _is_class_attribute(attr):
-                    continue
                 value = properties.get(attr_name)
                 value = attr.to_python(value)
                 setattr(obj, attr_name, value)
@@ -446,6 +449,34 @@ class Descriptor(object):
 
         return declared
 
+    @property
+    def class_attributes(self):
+        # TODO: value ends up both as `attr_name` prop on class and as
+        # `value` prop on attr. Get rid of one!
+        attributes = {}
+        for name, value in getmembers(self.cls, _is_class_attribute):
+            if name.startswith('__'):
+                continue
+            # attributes[name] = ClassAttribute(value=value)
+            attributes[name] = ClassAttribute()
+        return attributes
+
+    @property
+    def declared_class_attributes(self):
+        declared = {}
+        for name, value in getmembers(self.cls, _is_class_attribute):
+            if name.startswith('__'):
+                continue
+            if get_declaring_class(self.cls, name) == self.cls:
+                # declared[name] = ClassAttribute(value=value)
+                declared[name] = ClassAttribute()
+
+        return declared
+
+    @property
+    def stored_class_attributes(self):
+        return dict(getmembers(self.cls, _is_stored_class_attribute))
+
 
 class AttributeBase(object):
     __metaclass__ = PersistableType
@@ -469,14 +500,19 @@ def _is_attribute(obj):
 
 
 class ClassAttribute(AttributeBase):
-    unique = False
     value = None
 
-    def __init__(self, value):
-        self.value = value
+    # def __init__(self, value):
+        # self.value = value
 
 
 def _is_class_attribute(obj):
+    supported_types = (str, int, bool, list, float)
+    # TODO: use types.NoneType
+    return obj is None or isinstance(obj, supported_types)
+
+
+def _is_stored_class_attribute(obj):
     return isinstance(obj, ClassAttribute)
 
 
@@ -512,7 +548,7 @@ class AttributedBase(Persistable):
         descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
-            if _is_class_attribute(attr):
+            if _is_stored_class_attribute(attr):
                 value = attr.value
             else:
                 value = attr.default

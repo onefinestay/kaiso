@@ -220,6 +220,7 @@ class Manager(object):
             modified_attrs = {}
 
             descr = registry.get_descriptor(persistable)
+            # TODO: classattrs
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr

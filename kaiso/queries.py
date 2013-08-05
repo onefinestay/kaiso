@@ -98,7 +98,8 @@ def get_create_types_query(cls, root, type_registry):
     for name, cls in classes.items():
 
         descriptor = type_registry.get_descriptor(cls)
-        attributes = descriptor.declared_attributes
+        attributes = descriptor.declared_class_attributes
+        attributes.update(descriptor.declared_attributes)
         for attr_name, attr in attributes.iteritems():
             key = "%s_%s" % (name, attr_name)
 

@@ -9,7 +9,7 @@ from kaiso.attributes import (
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship
-from kaiso.types import PersistableType, Entity, ClassAttribute, collector
+from kaiso.types import PersistableType, Entity, collector
 
 
 class Thing(Entity):
@@ -29,7 +29,7 @@ class OtherThing(Entity):
 
 class ClassAttrThing(Entity):
     id = Uuid(unique=True)
-    cls_attr = ClassAttribute("spam")
+    cls_attr = "spam"
 
 
 class NonUnique(Entity):
@@ -673,7 +673,7 @@ def test_serialize_obj(manager):
 
 
 def test_attr():
-    assert ClassAttrThing.cls_attr.value == 'spam'
+    assert ClassAttrThing.cls_attr == 'spam'
     assert ClassAttrThing().cls_attr == 'spam'
 
 
@@ -681,39 +681,40 @@ def test_load_class_attr(manager):
     with collector() as classes:
         class DynamicClassAttrThing(Entity):
             id = Uuid(unique=True)
-            cls_attr = ClassAttribute("spam")
+            cls_attr = "spam"
 
     manager.save_collected_classes(classes)
 
-    query_str = join_lines(
-        "START",
-        get_start_clause(DynamicClassAttrThing, 'cls', manager.type_registry),
-        """
-            MATCH attr -[:DECLAREDON]-> cls
-            WHERE attr.name = "cls_attr"
-            SET attr.value={value}
-        """
-    )
-    list(manager.query(query_str, value="ham"))
+    # query_str = join_lines(
+        # "START",
+        # get_start_clause(DynamicClassAttrThing, 'cls', manager.type_registry),
+        # """
+            # MATCH attr -[:DECLAREDON]-> cls
+            # WHERE attr.name = "cls_attr"
+            # SET attr.value={value}
+        # """
+    # )
+    # list(manager.query(query_str, value="ham"))
 
     manager.reload_types()
 
     data = {
         '__type__': 'PersistableType',
         'id': 'DynamicClassAttrThing',
+        'cls_attr': 'ham'
     }
     cls = manager.deserialize(data)
-    assert cls.cls_attr.value == 'ham'
+    assert cls.cls_attr == 'ham'
 
 
 def test_class_att_overriding(manager):
     with collector() as classes:
         class A(Entity):
             id = Uuid()
-            cls_attr = ClassAttribute("spam")
+            cls_attr = "spam"
 
         class B(A):
-            cls_attr = ClassAttribute("ham")
+            cls_attr = "ham"
 
         class C(B):
             pass
@@ -745,19 +746,19 @@ def test_class_att_overriding(manager):
     results = list(manager.query(query_str))
 
     for col, in results:
-        assert col.cls_attr == col.__class__.cls_attr.value
+        assert col.cls_attr == col.__class__.cls_attr
 
 
 def test_class_attr_inheritence(manager):
     with collector() as classes:
         class A(Entity):
-            attr = ClassAttribute(True)
+            attr = True
 
         class B(A):
             pass
 
         class C(B):
-            attr = ClassAttribute(False)
+            attr = False
 
         class D(C):
             pass
@@ -768,3 +769,9 @@ def test_class_attr_inheritence(manager):
     assert B().attr == True
     assert C().attr == False
     assert D().attr == False
+
+
+def test_reserved_attribute_name():
+    with pytest.raises(TypeError):
+        class Nope(Entity):
+            __type__ = String()
