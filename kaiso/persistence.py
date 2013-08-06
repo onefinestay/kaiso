@@ -15,7 +15,6 @@ from kaiso.types import (
     Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
     AttributedBase, Entity, get_index_name, get_type_id, is_indexable)
 
-
 log = getLogger(__name__)
 
 
@@ -463,22 +462,27 @@ class Manager(object):
             'MATCH',
             match,
             where,
-            'WITH tpe, max(length(p)) AS level',
-            'MATCH',
-            '    tpe <-[:DECLAREDON*0..]- attr,',
-            '    tpe -[:ISA*0..1]-> base',
-            'WITH tpe.id AS type_id, level,',
-            '    filter(',
-            '        bse_id in collect(distinct base.id): bse_id <> tpe.id)',
-            '    AS bases,',
-            '    filter(',
-            '        attr in collect(distinct attr): attr.id? <> tpe.id)',
-            '    AS attrs',
-            'ORDER BY level',
-            'RETURN type_id, bases, attrs')
+            ''' WITH tpe, max(length(p)) AS level
+            MATCH
+                tpe <-[?:DECLAREDON*]- attr,
+                tpe -[isa?:ISA]-> base
 
-        rows = self.query(query, **query_args)
-        return rows
+            WITH tpe.id AS type_id, level,
+                filter(
+                    mro_bse in collect(DISTINCT [isa.mro, base.id]):
+                        not(LAST(mro_bse) is NULL)
+                ) AS mro_base_collection,
+
+                collect(DISTINCT attr) AS attrs
+
+            ORDER BY level
+            RETURN type_id, mro_base_collection, attrs
+            ''')
+
+        for type_id, mro_bases, attrs in self.query(query, **query_args):
+            # the bases are sorted on the mro on the IsA relationship
+            bases = tuple(base for mro, base in sorted(mro_bases))
+            yield type_id, bases, attrs
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.

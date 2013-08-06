@@ -8,7 +8,7 @@ from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
-from kaiso.relationships import Relationship
+from kaiso.relationships import Relationship, IsA
 from kaiso.types import PersistableType, Entity, ClassAttribute, collector
 
 
@@ -436,6 +436,38 @@ def test_get_type_hierarchy(manager):
     assert len(entities) == 2
     assert entities[0] == Colouring.__name__
     assert entities[1] == Carmine.__name__
+
+
+def test_get_type_hierarchy_bases_order(manager):
+    # before we introduced 'mro' on IsA, this test would fail because
+    # we removed and re-added one of the IsA relationships, which
+    # caused the types to be loaded in the incorrect order
+    manager.save(Beetroot)
+
+    is_a_props = manager.type_registry.object_to_dict(IsA())
+    is_a_props['mro'] = 1
+
+    list(manager.query(
+        ''' START
+                Beetroot=node:persistabletype(id="Beetroot"),
+                Flavouring=node:persistabletype(id="Colouring")
+            MATCH
+                Beetroot -[r:ISA]-> Flavouring
+            DELETE r
+            CREATE
+                Beetroot -[nr:ISA {is_a_props}]-> Flavouring
+            RETURN nr
+        ''', is_a_props=is_a_props))
+
+    result = [(nme, bases) for (nme, bases, _) in manager.get_type_hierarchy()]
+
+    assert set(result) == set((
+        ('Entity', tuple()),
+        ('Thing', ('Entity',)),
+        ('Colouring', ('Thing',)),
+        ('Flavouring', ('Thing',)),
+        ('Beetroot', ('Flavouring', 'Colouring')),
+    ))
 
 
 def test_type_hierarchy_object(manager):
