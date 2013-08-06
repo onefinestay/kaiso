@@ -86,10 +86,10 @@ class TypeRegistry(object):
 
         self._sync_static_descriptors()
 
-    def _sync_static_descriptors(cls):
+    def _sync_static_descriptors(self):
         for name, collected_cls in collected_static_classes.iteritems():
-            if name not in cls._static_descriptors:
-                cls._static_descriptors[name] = Descriptor(collected_cls)
+            if name not in self._static_descriptors:
+                self._static_descriptors[name] = Descriptor(collected_cls)
 
     def is_registered(self, cls):
         """ Determine if ``cls`` is a registered type.

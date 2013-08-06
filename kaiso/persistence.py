@@ -180,7 +180,7 @@ class Manager(object):
                 for base in bases:
                     if base == 'Entity':
                         # Entity is the base of all persisted types and will
-                        # not have any data defined bases, thus we need to
+                        # not have any data-defined bases, thus we need to
                         # always use the code defined one
                         base_cls = Entity
                     else:
