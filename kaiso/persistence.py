@@ -475,18 +475,15 @@ class Manager(object):
 
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
-        def convert_row(row):
+        params = dict_to_db_values_dict(query_args)
+        for row in self._execute(query, **params):
             type_id, bases, class_attrs, attrs = row
-            return (
+            yield (
                 type_id,
-                [self._convert_value(v) for v in bases],
+                bases,
                 class_attrs.get_properties(),
                 [self._convert_value(v) for v in attrs],
             )
-
-        params = dict_to_db_values_dict(query_args)
-        for row in self._execute(query, **params):
-            yield convert_row(row)
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.

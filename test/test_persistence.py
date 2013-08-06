@@ -798,3 +798,25 @@ def test_class_attr_class_serialization(manager):
     (db_attrs,) = next(manager._execute(query_str))
     properties = db_attrs.get_properties()
     assert 'cls_attr' not in properties
+
+
+def test_none_class_attr(manager):
+    with collector() as classes:
+        class A(Entity):
+            id = Uuid()
+            cls_attr = None
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(A) == {
+        '__type__': 'PersistableType',
+        'id': 'A',
+        'cls_attr': None,
+    }
+
+    manager.reload_types()
+    a = A()
+
+    assert A.cls_attr is None
+    assert a.cls_attr is None
