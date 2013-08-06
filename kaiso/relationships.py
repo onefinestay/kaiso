@@ -11,6 +11,7 @@ They may be used for querying and map to pyhton's issubclass()
 and isinstanceof() functionality.
 """
 from kaiso.types import Relationship
+from kaiso.attributes import Integer
 
 
 class IsA(Relationship):
@@ -19,6 +20,7 @@ class IsA(Relationship):
     It maps to python's issubclass(sub_class, base_class) as
     IsA(sub_class, base_class).
     """
+    mro = Integer(required=True)
 
 
 class InstanceOf(Relationship):
