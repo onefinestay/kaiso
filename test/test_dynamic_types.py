@@ -1,5 +1,5 @@
 from kaiso.attributes import String
-from kaiso.types import Entity
+from kaiso.types import Entity, collector
 
 
 def test_save_dynamic_type(manager):
@@ -139,6 +139,7 @@ def test_add_attr_to_type_via_2nd_manager(manager):
     (Shrub,) = next(manager.query(
         'START cls=node:persistabletype(id="Shrub") RETURN cls'))
     Shrub.newattr = String(default='eggs')
+
     manager.save(Shrub)
 
     # we want to query from an independent manager
@@ -155,3 +156,45 @@ def test_type_registry_independence(manager):
 
     manager.reload_types()
     assert not manager.type_registry.is_registered(Shrub)
+
+
+def test_incorrect_attributes(manager):
+
+    DynFoobar = manager.create_type(
+        'Foobar', (Entity,), {'spam': String(default='ham')})
+    manager.save(DynFoobar)
+
+    with collector():
+        class Foobar(Entity):
+            # we are re-declaring this attribute and it is not a proper one
+            spam = 123
+
+        class Shrub(Foobar):
+            # Shrub should inherit from the DynFoobar type in the graph
+            # and should have a ham attr of type String instead
+            # of inheriting from Foobar above with an incorrect attr
+            pass
+
+    # treat Foobar as a code defined class
+    manager.type_registry.register(Foobar, dynamic=False)
+
+    # treat Shrub as a class defined in data
+    manager.type_registry.register(Shrub, dynamic=True)
+    manager.save(Shrub)
+
+    # this is the same as creating a new manager using the same URL
+    manager.reload_types()
+
+    shrub = Shrub(spam='ham')
+    manager.save(shrub)
+
+    rows = list(manager.query(
+        ''' START Foobar = node:persistabletype(id="Shrub")
+        MATCH
+            shrub -[:INSTANCEOF]-> Foobar
+        RETURN shrub '''))
+
+    assert len(rows) == 1
+    queried_shrub = rows[0][0]
+    assert queried_shrub.spam == 'ham'
+    assert not isinstance(queried_shrub, Foobar)
