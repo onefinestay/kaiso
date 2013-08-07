@@ -70,10 +70,11 @@ class PersistableType(type, Persistable):
 class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
-    _static_descriptors = {}
     _builtin_types = (PersistableType, )
 
     def __init__(self):
+        self._static_descriptors = {}
+
         self._descriptors = {
             'static': self._static_descriptors,
             'dynamic': {}
@@ -82,20 +83,13 @@ class TypeRegistry(object):
         if not self._static_descriptors:
             for type_ in self._builtin_types:
                 self.register(type_)
+
         self._sync_static_descriptors()
 
-    @classmethod
-    def _sync_static_descriptors(cls):
-        # exit early if there've been no changes to the statically
-        # collected types
-        num_registered = len(cls._static_descriptors)
-        static_registered = num_registered - len(cls._builtin_types)
-        if static_registered == len(collected_static_classes):
-            return
-
+    def _sync_static_descriptors(self):
         for name, collected_cls in collected_static_classes.iteritems():
-            if name not in cls._static_descriptors:
-                cls._static_descriptors[name] = Descriptor(collected_cls)
+            if name not in self._static_descriptors:
+                self._static_descriptors[name] = Descriptor(collected_cls)
 
     def is_registered(self, cls):
         """ Determine if ``cls`` is a registered type.
