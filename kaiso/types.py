@@ -265,11 +265,12 @@ class TypeRegistry(object):
             properties['id'] = get_type_id(obj)
             descr = self.get_descriptor(obj)
             if for_db:
-                attributes = descr.declared_class_attributes
+                class_attributes = descr.declared_class_attributes
             else:
-                attributes = descr.class_attributes
+                class_attributes = descr.class_attributes
 
-            for name, attr in attributes.items():
+            for name, attr in class_attributes.items():
+                # note that we only support native types as class attributes
                 properties[name] = getattr(obj, name)
 
         else:
