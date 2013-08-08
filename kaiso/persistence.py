@@ -13,9 +13,8 @@ from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
-    Relationship, TypeRegistry, AttributedBase, get_index_name, get_type_id,
-    is_indexable)
-
+    Relationship, TypeRegistry, AttributedBase, Entity, get_index_name,
+    get_type_id, is_indexable)
 
 log = getLogger(__name__)
 
@@ -177,13 +176,25 @@ class Manager(object):
                 cls = None
 
             if cls is None:
-                bases = tuple(registry.get_class_by_id(base) for base in bases)
+                base_classes = []
+                for base in bases:
+                    if base == 'Entity':
+                        # Entity is the base of all persisted types and will
+                        # not have any data-defined bases, thus we need to
+                        # always use the code defined one
+                        base_cls = Entity
+                    else:
+                        base_cls = registry.get_descriptor_by_id(base).cls
+                    base_classes.append(base_cls)
+
                 attrs = dict((attr.name, attr) for attr in attrs)
+
                 for attr_name, value in class_attrs.items():
                     if attr_name in INTERNAL_CLASS_ATTRS:
                         continue
                     attrs[attr_name] = value
-                registry.create_type(str(type_id), bases, attrs)
+
+                registry.create_type(str(type_id), tuple(base_classes), attrs)
 
         Manager._type_registry_cache = (
             self.type_registry.clone(),
@@ -475,25 +486,32 @@ class Manager(object):
             'MATCH',
             match,
             where,
-            'WITH tpe, max(length(p)) AS level',
-            'MATCH',
-            '    tpe <-[:DECLAREDON*0..]- attr,',
-            '    tpe -[:ISA*0..1]-> base',
-            'WITH tpe.id AS type_id, level, tpe AS class_attrs,',
-            '    filter(',
-            '        bse_id in collect(distinct base.id): bse_id <> tpe.id)',
-            '    AS bases,',
-            '    filter(',
-            '        attr in collect(distinct attr): attr.id? <> tpe.id)',
-            '    AS attrs',
-            'ORDER BY level',
-            'RETURN type_id, bases, class_attrs, attrs')
+            ''' WITH tpe, max(length(p)) AS level
+            MATCH
+                tpe <-[?:DECLAREDON*]- attr,
+                tpe -[isa?:ISA]-> base
+
+            WITH tpe.id AS type_id, level, tpe AS class_attrs,
+                filter(
+                    idx_base in collect(DISTINCT [isa.base_index, base.id]):
+                        not(LAST(idx_base) is NULL)
+                ) AS bases,
+
+                collect(DISTINCT attr) AS attrs
+
+            ORDER BY level
+            RETURN type_id, bases, class_attrs, attrs
+            ''')
 
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
         params = dict_to_db_values_dict(query_args)
         for row in self._execute(query, **params):
             type_id, bases, class_attrs, attrs = row
+
+            # the bases are sorted using their index on the IsA relationship
+            bases = tuple(base for (_, base) in sorted(bases))
+
             yield (
                 type_id,
                 bases,

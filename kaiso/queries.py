@@ -55,7 +55,6 @@ def get_create_types_query(cls, root, type_registry):
 
     query_args = {
         'root_id': root.id,
-        'IsA_props': type_registry.object_to_dict(IsA()),
         'Defines_props': type_registry.object_to_dict(Defines()),
         'InstanceOf_props': type_registry.object_to_dict(InstanceOf()),
         'DeclaredOn_props': type_registry.object_to_dict(DeclaredOn()),
@@ -63,13 +62,15 @@ def get_create_types_query(cls, root, type_registry):
 
     # filter type relationships that we want to persist
     type_relationships = []
-    for cls1, rel_cls, cls2 in get_type_relationships(cls):
+    for cls1, rel_cls_idx, cls2 in get_type_relationships(cls):
         if issubclass(cls2, AttributedBase):
-            type_relationships.append((cls1, rel_cls, cls2))
+            type_relationships.append((cls1, rel_cls_idx, cls2))
 
     # process type relationships
     is_first = True
-    for cls1, rel_cls, cls2 in type_relationships:
+    isa_props_counter = 0
+
+    for cls1, (rel_cls, base_idx), cls2 in type_relationships:
 
         name1 = cls1.__name__
 
@@ -90,8 +91,18 @@ def get_create_types_query(cls, root, type_registry):
             rel_name = rel_cls.__name__
             rel_type = rel_name.upper()
 
-            ln = '%s -[:%s {%s_props}]-> %s' % (
-                abstr1, rel_type, rel_name, name2)
+            prop_name = "%s_props" % rel_name
+
+            if rel_cls is IsA:
+                prop_name = '%s_props_%d' % (rel_name, isa_props_counter)
+                isa_props_counter += 1
+
+                props = type_registry.object_to_dict(IsA(base_index=base_idx))
+                query_args[prop_name] = props
+
+            ln = '%s -[:%s {%s}]-> %s' % (
+                abstr1, rel_type, prop_name, name2)
+
         lines.append(ln)
 
     # process attributes
@@ -123,6 +134,7 @@ def get_create_types_query(cls, root, type_registry):
         (lines, ','),
         'RETURN %s' % ', '.join(quoted_names)
     )
+
     return query, classes.values(), query_args
 
 
