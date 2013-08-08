@@ -51,12 +51,13 @@ def get_type_relationships(obj):
             yield item
 
     if isinstance(obj, type):
-        for base in obj.__bases__:
+        for base_idx, base in enumerate(obj.__bases__):
             for item in get_type_relationships(base):
                 yield item
-            yield obj, IsA, base
 
-    yield obj, InstanceOf, obj_type
+            yield obj, (IsA, base_idx), base
+
+    yield obj, (InstanceOf, 0), obj_type
 
 
 def object_to_db_value(obj):
