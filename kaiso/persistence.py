@@ -199,9 +199,6 @@ class Manager(object):
 
         if isinstance(persistable, PersistableType):
             # this is a class, we need to get it and it's attrs
-            # loading it resets its class attributes, so capture these first
-            new_cls_attrs = registry.object_to_dict(persistable)
-
             idx_name = get_index_name(PersistableType)
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
@@ -216,17 +213,20 @@ class Manager(object):
                 'RETURN cls, collect(attr.name?)'
             )
 
-            rows = self.query(query, **query_args)
-            existing, attrs = next(rows, (None, None))
+            # don't use self.query since we don't want to convert the cls dict
+            rows = self._execute(query, **query_args)
+            existing_cls_attrs, attrs = next(rows, (None, None))
 
-            if existing is None:
+            if existing_cls_attrs is None:
                 # have not found the cls
                 return None, {}
 
-            existing_cls_attrs = registry.object_to_dict(existing)
+            existing_cls_attrs = existing_cls_attrs.get_properties()
+            new_cls_attrs = registry.object_to_dict(persistable)
+
             # If any existing keys in "new" are missing in "old", add `None`s.
-            # Unlike instance attributes, we can just set values to None
-            # which will remove the property from the node.
+            # Unlike instance attributes, we just need to remove the properties
+            # from the node, which we can achieve by setting the values to None
             for key in set(existing_cls_attrs) - set(new_cls_attrs):
                 new_cls_attrs[key] = None
             changes = get_changes(old=existing_cls_attrs, new=new_cls_attrs)
@@ -250,6 +250,9 @@ class Manager(object):
 
             if modified_attrs:
                 changes['attributes'] = modified_attrs
+
+            # we want to return the existing class
+            existing = registry.get_descriptor_by_id(type_id).cls
         else:
             existing = self.get(obj_type, **get_attr_filter(persistable,
                                                             registry))
