@@ -199,6 +199,9 @@ class Manager(object):
 
         if isinstance(persistable, PersistableType):
             # this is a class, we need to get it and it's attrs
+            # loading it resets its class attributes, so capture these first
+            new_cls_attrs = registry.object_to_dict(persistable)
+
             idx_name = get_index_name(PersistableType)
             self._conn.get_or_create_index(neo4j.Node, idx_name)
 
@@ -220,12 +223,19 @@ class Manager(object):
                 # have not found the cls
                 return None, {}
 
+            existing_cls_attrs = registry.object_to_dict(existing)
+            # If any existing keys in "new" are missing in "old", add `None`s.
+            # Unlike instance attributes, we can just set values to None
+            # which will remove the property from the node.
+            for key in set(existing_cls_attrs) - set(new_cls_attrs):
+                new_cls_attrs[key] = None
+            changes = get_changes(old=existing_cls_attrs, new=new_cls_attrs)
+
             attrs = set(attrs)
 
             modified_attrs = {}
 
             descr = registry.get_descriptor(persistable)
-            # TODO: classattrs
             for name, attr in descr.declared_attributes.items():
                 if name not in attrs:
                     modified_attrs[name] = attr
@@ -306,6 +316,9 @@ class Manager(object):
         if isinstance(persistable, type):
 
             query_args = {'type_id': get_type_id(persistable)}
+            class_attr_changes = {k: v for k, v in changes.items()
+                if k != 'attributes'}
+            query_args.update(class_attr_changes)
 
             where = []
 
