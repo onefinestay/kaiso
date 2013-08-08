@@ -20,7 +20,7 @@ class IsA(Relationship):
     It maps to python's issubclass(sub_class, base_class) as
     IsA(sub_class, base_class).
     """
-    mro = Integer(required=True)
+    base_index = Integer(required=True)
 
 
 class InstanceOf(Relationship):

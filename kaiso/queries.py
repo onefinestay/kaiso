@@ -62,15 +62,15 @@ def get_create_types_query(cls, root, type_registry):
 
     # filter type relationships that we want to persist
     type_relationships = []
-    for cls1, rel_cls_mro, cls2 in get_type_relationships(cls):
+    for cls1, rel_cls_idx, cls2 in get_type_relationships(cls):
         if issubclass(cls2, AttributedBase):
-            type_relationships.append((cls1, rel_cls_mro, cls2))
+            type_relationships.append((cls1, rel_cls_idx, cls2))
 
     # process type relationships
     is_first = True
     isa_props_counter = 0
 
-    for cls1, (rel_cls, mro), cls2 in type_relationships:
+    for cls1, (rel_cls, base_idx), cls2 in type_relationships:
 
         name1 = cls1.__name__
 
@@ -97,9 +97,7 @@ def get_create_types_query(cls, root, type_registry):
                 prop_name = '%s_props_%d' % (rel_name, isa_props_counter)
                 isa_props_counter += 1
 
-                props = type_registry.object_to_dict(IsA())
-                props['mro'] = mro
-
+                props = type_registry.object_to_dict(IsA(base_index=base_idx))
                 query_args[prop_name] = props
 
             ln = '%s -[:%s {%s}]-> %s' % (

@@ -439,13 +439,13 @@ def test_get_type_hierarchy(manager):
 
 
 def test_get_type_hierarchy_bases_order(manager):
-    # before we introduced 'mro' on IsA, this test would fail because
+    # before we introduced 'base_index' on IsA, this test would fail because
     # we removed and re-added one of the IsA relationships, which
     # caused the types to be loaded in the incorrect order
     manager.save(Beetroot)
 
     is_a_props = manager.type_registry.object_to_dict(IsA())
-    is_a_props['mro'] = 1
+    is_a_props['base_index'] = 1
 
     list(manager.query(
         ''' START

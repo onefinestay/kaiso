@@ -469,19 +469,19 @@ class Manager(object):
 
             WITH tpe.id AS type_id, level,
                 filter(
-                    mro_bse in collect(DISTINCT [isa.mro, base.id]):
-                        not(LAST(mro_bse) is NULL)
-                ) AS mro_base_collection,
+                    idx_base in collect(DISTINCT [isa.base_index, base.id]):
+                        not(LAST(idx_base) is NULL)
+                ) AS bases,
 
                 collect(DISTINCT attr) AS attrs
 
             ORDER BY level
-            RETURN type_id, mro_base_collection, attrs
+            RETURN type_id, bases, attrs
             ''')
 
-        for type_id, mro_bases, attrs in self.query(query, **query_args):
-            # the bases are sorted on the mro on the IsA relationship
-            bases = tuple(base for mro, base in sorted(mro_bases))
+        for type_id, bases, attrs in self.query(query, **query_args):
+            # the bases are sorted using their index on the IsA relationship
+            bases = tuple(base for (_, base) in sorted(bases))
             yield type_id, bases, attrs
 
     def serialize(self, obj):
