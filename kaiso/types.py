@@ -2,7 +2,6 @@ from __future__ import absolute_import  # local types.py and builtin types
 
 from contextlib import contextmanager
 from inspect import getmembers, getmro
-from types import NoneType
 
 from kaiso.exceptions import (
     UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
@@ -11,7 +10,7 @@ from kaiso.exceptions import (
 
 # at some point, rename id to __name__ and just skip all dunder attrs
 INTERNAL_CLASS_ATTRS = ['__type__', 'id']
-CLASS_ATTRIBUTE_TYPES = (NoneType, basestring, int, bool, list, float)
+CLASS_ATTRIBUTE_TYPES = (basestring, int, bool, list, float)
 
 
 class Persistable(object):

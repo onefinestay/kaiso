@@ -833,29 +833,6 @@ def test_class_attr_class_serialization(manager):
     assert 'cls_attr' not in properties
 
 
-def test_none_class_attr(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-            cls_attr = None
-
-    manager.save_collected_classes(classes)
-
-    # we want inherited attributes when we serialize
-    assert manager.serialize(DynamicClassAttrThing) == {
-        '__type__': 'PersistableType',
-        'id': 'DynamicClassAttrThing',
-        'cls_attr': None,
-    }
-
-    manager.reload_types()
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
-    thing = DynamicClassAttrThing()
-
-    assert DynamicClassAttrThing.cls_attr is None
-    assert thing.cls_attr is None
-
-
 def test_false_class_attr(manager):
     with collector() as classes:
         class DynamicClassAttrThing(Entity):
