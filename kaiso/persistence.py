@@ -180,8 +180,6 @@ class Manager(object):
                 attrs = dict((attr.name, attr) for attr in attrs)
 
                 for attr_name, value in class_attrs.items():
-                    if attr_name in INTERNAL_CLASS_ATTRS:
-                        continue
                     attrs[attr_name] = value
 
                 registry.create_type(str(type_id), bases, attrs)
