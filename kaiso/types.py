@@ -367,8 +367,9 @@ def get_declaring_class(cls, attr_name):
     # the attribute. Return the lowest class that defines (or overloads) the
     # attribute.
     for base in reversed(getmro(cls)):
-        attr = getattr(base, attr_name, False)
-        if attr and declared_attr is not attr:
+        sentinel = object()
+        attr = getattr(base, attr_name, sentinel)
+        if attr is not sentinel and declared_attr is not attr:
             declaring_class = base
             declared_attr = attr
 
