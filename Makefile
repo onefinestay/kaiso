@@ -13,4 +13,7 @@ pytest:
 flake8:
 	flake8 --ignore=E128 kaiso test
 
-test: pytest flake8
+coverage_check:
+	coverage report --fail-under=100
+
+test: pytest flake8 coverage_check
