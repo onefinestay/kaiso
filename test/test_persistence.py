@@ -849,10 +849,57 @@ def test_none_class_attr(manager):
     }
 
     manager.reload_types()
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
     thing = DynamicClassAttrThing()
 
     assert DynamicClassAttrThing.cls_attr is None
     assert thing.cls_attr is None
+
+
+def test_false_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = False
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(DynamicClassAttrThing) == {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+        'cls_attr': False,
+    }
+
+    manager.reload_types()
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
+    thing = DynamicClassAttrThing()
+
+    assert DynamicClassAttrThing.cls_attr is False
+    assert thing.cls_attr is False
+
+
+def test_true_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = True
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(DynamicClassAttrThing) == {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+        'cls_attr': True,
+    }
+
+    manager.reload_types()
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
+    thing = DynamicClassAttrThing()
+
+    assert DynamicClassAttrThing.cls_attr is True
+    assert thing.cls_attr is True
 
 
 def test_edit_class_attrs(manager):
