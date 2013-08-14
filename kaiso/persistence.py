@@ -501,11 +501,14 @@ class Manager(object):
 
             # the bases are sorted using their index on the IsA relationship
             bases = tuple(base for (_, base) in sorted(bases))
+            class_attrs = class_attrs.get_properties()
+            for internal_attr in INTERNAL_CLASS_ATTRS:
+                class_attrs.pop(internal_attr)
 
             yield (
                 type_id,
                 bases,
-                class_attrs.get_properties(),
+                class_attrs,
                 [self._convert_value(v) for v in attrs],
             )
 
