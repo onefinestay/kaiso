@@ -849,7 +849,8 @@ def test_false_class_attr(manager):
     }
 
     manager.reload_types()
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
     thing = DynamicClassAttrThing()
 
     assert DynamicClassAttrThing.cls_attr is False
@@ -872,7 +873,8 @@ def test_true_class_attr(manager):
     }
 
     manager.reload_types()
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id('DynamicClassAttrThing')
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
     thing = DynamicClassAttrThing()
 
     assert DynamicClassAttrThing.cls_attr is True
