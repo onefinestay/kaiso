@@ -4,7 +4,8 @@ from py2neo import cypher, neo4j
 
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
-from kaiso.exceptions import UniqueConstraintError, UnknownType
+from kaiso.exceptions import (
+    UniqueConstraintError, UnknownType, CannotUpdateType)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -118,6 +119,7 @@ class Manager(object):
                 yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
+
         indexes = self.type_registry.get_index_entries(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
@@ -500,6 +502,48 @@ class Manager(object):
         """ Creates a new class given the name, bases and attrs given.
         """
         return self.type_registry.create_type(name, bases, attrs)
+
+    def update_type(self, tpe, bases):
+        """ Change the bases of the given ``tpe``
+        """
+        if not isinstance(tpe, PersistableType):
+            raise RuntimeError("Object is not a PersistableType")
+
+        if not self.type_registry.is_dynamic_type(tpe):
+            raise CannotUpdateType("Type '{}' is defined in code and cannot"
+                                   "be updated.".format(get_type_id(tpe)))
+
+        descriptor = self.type_registry.get_descriptor(tpe)
+        if descriptor.declared_attributes:
+            raise CannotUpdateType("Type '{}' has attributes and cannot"
+                                   "be updated.".format(get_type_id(tpe)))
+
+        start_clauses = [get_start_clause(tpe, 'type', self.type_registry)]
+        create_clauses = []
+        query_args = {}
+
+        for index, base in enumerate(bases):
+            name = 'base_{}'.format(index)
+            start = get_start_clause(base, name, self.type_registry)
+            create = "type -[:ISA {%s_props}]-> %s" % (name, name)
+
+            query_args["{}_props".format(name)] = {'base_index': index}
+            start_clauses.append(start)
+            create_clauses.append(create)
+
+        query = join_lines(
+            "START %s" % ",".join(start_clauses),
+            "MATCH type -[r:ISA]-> ()",
+            "DELETE r",
+            "CREATE %s" % ",".join(create_clauses),
+            "RETURN type")
+
+        try:
+            next(self._execute(query, **query_args))
+        except StopIteration:
+            raise CannotUpdateType("Type or bases not found in the database.")
+
+        self.reload_types()
 
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.

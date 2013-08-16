@@ -40,3 +40,11 @@ class TypeAlreadyRegistered(Exception):
 
 class TypeAlreadyCollected(Exception):
     pass
+
+
+class CannotUpdateType(Exception):
+    """ Raised when trying to update a type defined in code """
+
+
+class RuntimeError(Exception):
+    pass
