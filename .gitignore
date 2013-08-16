@@ -1,4 +1,6 @@
+.cache
+.coverage
 _build
 dist
-.coverage
 htmlcov
+kaiso.egg-info
