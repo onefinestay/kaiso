@@ -459,7 +459,7 @@ def test_get_type_hierarchy_bases_order(manager):
             RETURN nr
         ''', is_a_props=is_a_props))
 
-    result = [(nme, bases) for (nme, bases, _, _)
+    result = [(nme, bases) for (nme, bases, _)
         in manager.get_type_hierarchy()]
 
     assert set(result) == set((

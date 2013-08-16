@@ -166,7 +166,7 @@ class Manager(object):
         self.type_registry = TypeRegistry()
         registry = self.type_registry
 
-        for type_id, bases, class_attrs, attrs in self.get_type_hierarchy():
+        for type_id, bases, attrs in self.get_type_hierarchy():
             try:
                 cls = registry.get_class_by_id(type_id)
 
@@ -177,11 +177,6 @@ class Manager(object):
 
             if cls is None:
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
-                attrs = dict((attr.name, attr) for attr in attrs)
-
-                for attr_name, value in class_attrs.items():
-                    attrs[attr_name] = value
-
                 registry.create_type(str(type_id), bases, attrs)
 
         Manager._type_registry_cache = (
@@ -495,20 +490,20 @@ class Manager(object):
         # class_attrs dict
         params = dict_to_db_values_dict(query_args)
         for row in self._execute(query, **params):
-            type_id, bases, class_attrs, attrs = row
+            type_id, bases, class_attrs, instance_attrs = row
 
             # the bases are sorted using their index on the IsA relationship
             bases = tuple(base for (_, base) in sorted(bases))
             class_attrs = class_attrs.get_properties()
             for internal_attr in INTERNAL_CLASS_ATTRS:
                 class_attrs.pop(internal_attr)
+            instance_attrs = [self._convert_value(v) for v in instance_attrs]
+            instance_attrs = {attr.name: attr for attr in instance_attrs}
 
-            yield (
-                type_id,
-                bases,
-                class_attrs,
-                [self._convert_value(v) for v in attrs],
-            )
+            attrs = class_attrs
+            attrs.update(instance_attrs)
+
+            yield (type_id, bases, attrs)
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.
