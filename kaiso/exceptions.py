@@ -46,5 +46,5 @@ class CannotUpdateType(Exception):
     """ Raised when trying to update a type defined in code """
 
 
-class RuntimeError(Exception):
-    pass
+class UnsupportedTypeError(Exception):
+    """ Raised when trying to interact with a non-Persistable type """

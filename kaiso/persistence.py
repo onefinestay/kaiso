@@ -5,7 +5,7 @@ from py2neo import cypher, neo4j
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
-    UniqueConstraintError, UnknownType, CannotUpdateType)
+    UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -15,6 +15,7 @@ from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
     AttributedBase, get_index_name, get_type_id, is_indexable)
+from kaiso.utils import dict_difference
 
 log = getLogger(__name__)
 
@@ -507,16 +508,24 @@ class Manager(object):
         """ Change the bases of the given ``tpe``
         """
         if not isinstance(tpe, PersistableType):
-            raise RuntimeError("Object is not a PersistableType")
+            raise UnsupportedTypeError("Object is not a PersistableType")
 
         if not self.type_registry.is_dynamic_type(tpe):
             raise CannotUpdateType("Type '{}' is defined in code and cannot"
                                    "be updated.".format(get_type_id(tpe)))
 
         descriptor = self.type_registry.get_descriptor(tpe)
-        if descriptor.declared_attributes:
-            raise CannotUpdateType("Type '{}' has attributes and cannot"
-                                   "be updated.".format(get_type_id(tpe)))
+        existing_attrs = dict_difference(descriptor.attributes,
+                                         descriptor.declared_attributes)
+        base_attrs = {}
+        for base in bases:
+            desc = self.type_registry.get_descriptor(base)
+            base_attrs.update(desc.attributes)
+        base_attrs = dict_difference(base_attrs,
+                                     descriptor.declared_attributes)
+
+        if existing_attrs != base_attrs:
+            raise CannotUpdateType("Inherited attributes are not identical")
 
         start_clauses = [get_start_clause(tpe, 'type', self.type_registry)]
         create_clauses = []

@@ -494,6 +494,11 @@ class DefaultableAttribute(Attribute):
         super(DefaultableAttribute, self).__init__(**kwargs)
         self.default = default
 
+    def __eq__(self, other):  # MJB!
+        same_type = type(self) is type(other)
+        equal_default = self.default == other.default
+        return same_type and equal_default
+
 
 class AttributedBase(Persistable):
     """ The base class for objects that can have Attributes.

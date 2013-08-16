@@ -1,8 +1,8 @@
 import pytest
 
-from kaiso.attributes import String
-from kaiso.exceptions import CannotUpdateType
-from kaiso.types import Entity
+from kaiso.attributes import String, Bool
+from kaiso.exceptions import CannotUpdateType, UnsupportedTypeError
+from kaiso.types import Entity, collector
 from kaiso.persistence import get_type_id
 
 
@@ -14,6 +14,10 @@ class Mammal(Animal):
     pass
 
 
+class WaterBound(Animal):
+    freshwater = Bool()
+
+
 class Cetacean(Mammal):
     pass
 
@@ -22,25 +26,43 @@ def test_cannot_reparent_non_type(manager):
 
     animal = Animal()
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(UnsupportedTypeError) as e:
         manager.update_type(animal, (Animal,))
+    assert e.value.message == "Object is not a PersistableType"
 
 
 def test_cannot_reparent_code_defined_types(manager):
 
     manager.save(Cetacean)
 
-    with pytest.raises(CannotUpdateType):
+    with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Cetacean, (Animal,))
+    assert "defined in code" in e.value.message
 
 
-def test_cannot_reparent_types_with_attributes(manager):
+def test_cannot_reparent_with_incompatible_attributes(manager):
 
-    Whale = manager.create_type('Whale', (Cetacean,), {'name': String()})
+    Whale = manager.create_type('Whale', (WaterBound,), {})
     manager.save(Whale)
 
-    with pytest.raises(CannotUpdateType):
+    with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
+    assert e.value.message == "Inherited attributes are not identical"
+
+    with collector() as collected:
+        class A(Entity):
+            foo = String()
+
+        class B(Entity):
+            foo = Bool()
+    manager.save_collected_classes(collected)
+
+    C = manager.create_type('C', (A,), {})
+    manager.save(C)
+
+    with pytest.raises(CannotUpdateType) as e:
+        manager.update_type(C, (B,))
+    assert e.value.message == "Inherited attributes are not identical"
 
 
 def test_reparent(manager):
@@ -77,6 +99,52 @@ def test_reparent_with_subtypes(manager):
     UpdatedOrca = manager.type_registry.get_class_by_id(get_type_id(Orca))
     assert UpdatedOrca.__bases__ == (UpdatedWhale,)
     assert issubclass(UpdatedOrca, Cetacean)
+
+
+def test_reparent_with_declared_attributes(manager):
+    """
+        (Mammal) <-[:ISA]- (Whale) <-[:ISA]- (Orca) <-[:DECLAREDON]- (name)
+    becomes:
+        (Mammal) <-[:ISA]- (Cetacean) <-[:ISA]- (Whale) <-[:ISA]- (Orca)
+                                                                     ^
+                                              (name) -[:DECLAREDON] -'
+    """
+    Whale = manager.create_type('Whale', (Mammal,), {})
+    Orca = manager.create_type('Orca', (Whale,), {'name': String()})
+    manager.save(Orca)
+
+    manager.save(Cetacean)
+    manager.update_type(Whale, (Cetacean,))
+
+    UpdatedWhale = manager.type_registry.get_class_by_id(get_type_id(Whale))
+    UpdatedOrca = manager.type_registry.get_class_by_id(get_type_id(Orca))
+    assert UpdatedOrca.__bases__ == (UpdatedWhale,)
+    assert issubclass(UpdatedOrca, Cetacean)
+
+    descriptor = manager.type_registry.get_descriptor(UpdatedOrca)
+    assert "name" in descriptor.declared_attributes
+
+
+def test_reparent_with_matching_attributes(manager):
+    """ Reparenting with different but identical attributes is allowed.
+    """
+    with collector() as collected:
+        class C(Entity):
+            foo = String()
+
+        class D(Entity):
+            foo = String()
+    manager.save_collected_classes(collected)
+
+    E = manager.create_type('E', (C,), {})
+    manager.save(E)
+
+    manager.update_type(E, (D,))
+
+    UpdatedD = manager.type_registry.get_class_by_id(get_type_id(D))
+    UpdatedE = manager.type_registry.get_class_by_id(get_type_id(E))
+    assert UpdatedE.__bases__ == (UpdatedD,)
+    assert issubclass(UpdatedE, UpdatedD)
 
 
 def test_reparent_with_instances(manager):
@@ -167,13 +235,15 @@ def test_reparent_missing_type(manager):
     Whale = manager.create_type('Whale', (Mammal,), {})
 
     manager.save(Cetacean)
-    with pytest.raises(CannotUpdateType):
+    with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
+    assert e.value.message == "Type or bases not found in the database."
 
 
 def test_reparent_to_missing_type(manager):
     Whale = manager.create_type('Whale', (Mammal,), {})
     manager.save(Whale)
 
-    with pytest.raises(CannotUpdateType):
+    with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
+    assert e.value.message == "Type or bases not found in the database."
