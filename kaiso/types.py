@@ -1,9 +1,16 @@
+from __future__ import absolute_import  # local types.py and builtin types
+
 from contextlib import contextmanager
 from inspect import getmembers, getmro
 
 from kaiso.exceptions import (
     UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
     DeserialisationError)
+
+
+# at some point, rename id to __name__ and just skip all dunder attrs
+INTERNAL_CLASS_ATTRS = ['__type__', 'id']
+CLASS_ATTRIBUTE_TYPES = (basestring, int, bool, list, float)
 
 
 class Persistable(object):
@@ -62,6 +69,9 @@ class PersistableType(type, Persistable):
     Collection can be controlled using the ``collector`` context manager.
     """
     def __new__(mcs, name, bases, dct):
+        if "__type__" in dct:
+            raise TypeError("__type__ is a reserved attribute")
+
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         collect_class(cls)
         return cls
@@ -253,19 +263,18 @@ class TypeRegistry(object):
         if isinstance(obj, type):
             properties['id'] = get_type_id(obj)
             descr = self.get_descriptor(obj)
-            attributes = descr.attributes.items()
-            for name, attr in attributes:
-                if not _is_class_attribute(attr):
-                    continue
-                obj_value = getattr(obj, name)
-                value = attr.to_primitive(obj_value.value, for_db=for_db)
-                properties[name] = value
+            if for_db:
+                class_attributes = descr.declared_class_attributes
+            else:
+                class_attributes = descr.class_attributes
+
+            for name, attr in class_attributes.items():
+                # note that we only support native types as class attributes
+                properties[name] = getattr(obj, name)
 
         else:
             descr = self.get_descriptor(obj_type)
             for name, attr in descr.attributes.items():
-                if _is_class_attribute(attr):
-                    continue
                 try:
                     obj_value = getattr(obj, name)
                     value = attr.to_primitive(obj_value, for_db=for_db)
@@ -315,23 +324,27 @@ class TypeRegistry(object):
         if type_id == get_type_id(PersistableType):
             # we are looking at a class object
             cls_id = properties['id']
-        else:
-            # we are looking at an instance object
-            cls_id = type_id
-
-        cls = self.get_class_by_id(cls_id)
-
-        if cls_id != type_id:
-            return cls
-        else:
-            obj = cls.__new__(cls)
-
+            cls = self.get_class_by_id(cls_id)
             descr = self.get_descriptor_by_id(cls_id)
 
-            for attr_name, attr in descr.attributes.items():
-                value = properties.get(attr_name)
-                value = attr.to_python(value)
-                setattr(obj, attr_name, value)
+            for attr_name, value in properties.items():
+                if attr_name in INTERNAL_CLASS_ATTRS:
+                    continue
+                # these are already native (we only support native class attrs)
+                setattr(cls, attr_name, value)
+            return cls
+
+        # we are looking at an instance object
+        cls_id = type_id
+        cls = self.get_class_by_id(cls_id)
+        obj = cls.__new__(cls)
+
+        descr = self.get_descriptor_by_id(cls_id)
+
+        for attr_name, attr in descr.attributes.items():
+            value = properties.get(attr_name)
+            value = attr.to_python(value)
+            setattr(obj, attr_name, value)
 
         return obj
 
@@ -354,8 +367,9 @@ def get_declaring_class(cls, attr_name):
     # the attribute. Return the lowest class that defines (or overloads) the
     # attribute.
     for base in reversed(getmro(cls)):
-        attr = getattr(base, attr_name, False)
-        if attr and declared_attr is not attr:
+        sentinel = object()
+        attr = getattr(base, attr_name, sentinel)
+        if attr is not sentinel and declared_attr is not attr:
             declaring_class = base
             declared_attr = attr
 
@@ -427,9 +441,6 @@ class Descriptor(object):
             attributes['unique'] = Attribute()
             attributes['required'] = Attribute()
 
-            if issubclass(self.cls, ClassAttribute):
-                attributes['value'] = Attribute()
-
             if issubclass(self.cls, DefaultableAttribute):
                 attributes['default'] = Attribute()
 
@@ -441,6 +452,24 @@ class Descriptor(object):
         for name, attr in getmembers(self.cls, _is_attribute):
             if get_declaring_class(self.cls, name) == self.cls:
                 declared[name] = attr
+
+        return declared
+
+    @property
+    def class_attributes(self):
+        attributes = {}
+        for name, value in getmembers(self.cls, _is_class_attribute):
+            if name.startswith('__'):
+                continue
+            attributes[name] = value
+        return attributes
+
+    @property
+    def declared_class_attributes(self):
+        declared = {}
+        for name, value in self.class_attributes.items():
+            if get_declaring_class(self.cls, name) == self.cls:
+                declared[name] = value
 
         return declared
 
@@ -466,16 +495,8 @@ def _is_attribute(obj):
     return isinstance(obj, AttributeBase)
 
 
-class ClassAttribute(AttributeBase):
-    unique = False
-    value = None
-
-    def __init__(self, value):
-        self.value = value
-
-
 def _is_class_attribute(obj):
-    return isinstance(obj, ClassAttribute)
+    return isinstance(obj, CLASS_ATTRIBUTE_TYPES)
 
 
 class Attribute(AttributeBase):
@@ -515,11 +536,7 @@ class AttributedBase(Persistable):
         descriptor = Descriptor(cls)
 
         for name, attr in descriptor.attributes.items():
-            if _is_class_attribute(attr):
-                value = attr.value
-            else:
-                value = attr.default
-            setattr(obj, name, value)
+            setattr(obj, name, attr.default)
 
         return obj
 

@@ -13,9 +13,11 @@ from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
-    Descriptor, Persistable, PersistableType, Relationship, TypeRegistry,
-    AttributedBase, get_index_name, get_type_id, is_indexable)
+    INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
+    Relationship, TypeRegistry, AttributedBase, get_index_name, get_type_id,
+    is_indexable)
 from kaiso.utils import dict_difference
+
 
 log = getLogger(__name__)
 
@@ -179,7 +181,6 @@ class Manager(object):
 
             if cls is None:
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
-                attrs = dict((attr.name, attr) for attr in attrs)
                 registry.create_type(str(type_id), bases, attrs)
 
         Manager._type_registry_cache = (
@@ -210,12 +211,23 @@ class Manager(object):
                 'RETURN cls, collect(attr.name?)'
             )
 
-            rows = self.query(query, **query_args)
-            existing, attrs = next(rows, (None, None))
+            # don't use self.query since we don't want to convert the cls dict
+            rows = self._execute(query, **query_args)
+            existing_cls_attrs, attrs = next(rows, (None, None))
 
-            if existing is None:
+            if existing_cls_attrs is None:
                 # have not found the cls
                 return None, {}
+
+            existing_cls_attrs = existing_cls_attrs.get_properties()
+            new_cls_attrs = registry.object_to_dict(persistable)
+
+            # If any existing keys in "new" are missing in "old", add `None`s.
+            # Unlike instance attributes, we just need to remove the properties
+            # from the node, which we can achieve by setting the values to None
+            for key in set(existing_cls_attrs) - set(new_cls_attrs):
+                new_cls_attrs[key] = None
+            changes = get_changes(old=existing_cls_attrs, new=new_cls_attrs)
 
             attrs = set(attrs)
 
@@ -236,6 +248,9 @@ class Manager(object):
 
             if modified_attrs:
                 changes['attributes'] = modified_attrs
+
+            # we want to return the existing class
+            existing = registry.get_descriptor_by_id(type_id).cls
         else:
             existing = self.get(obj_type, **get_attr_filter(persistable,
                                                             registry))
@@ -302,6 +317,9 @@ class Manager(object):
         if isinstance(persistable, type):
 
             query_args = {'type_id': get_type_id(persistable)}
+            class_attr_changes = {k: v for k, v in changes.items()
+                                  if k != 'attributes'}
+            query_args.update(class_attr_changes)
 
             where = []
 
@@ -460,7 +478,7 @@ class Manager(object):
                 tpe <-[?:DECLAREDON*]- attr,
                 tpe -[isa?:ISA]-> base
 
-            WITH tpe.id AS type_id, level,
+            WITH tpe.id AS type_id, level, tpe AS class_attrs,
                 filter(
                     idx_base in collect(DISTINCT [isa.base_index, base.id]):
                         not(LAST(idx_base) is NULL)
@@ -469,13 +487,27 @@ class Manager(object):
                 collect(DISTINCT attr) AS attrs
 
             ORDER BY level
-            RETURN type_id, bases, attrs
+            RETURN type_id, bases, class_attrs, attrs
             ''')
 
-        for type_id, bases, attrs in self.query(query, **query_args):
+        # we can't use self.query since we don't want to convert the
+        # class_attrs dict
+        params = dict_to_db_values_dict(query_args)
+        for row in self._execute(query, **params):
+            type_id, bases, class_attrs, instance_attrs = row
+
             # the bases are sorted using their index on the IsA relationship
             bases = tuple(base for (_, base) in sorted(bases))
-            yield type_id, bases, attrs
+            class_attrs = class_attrs.get_properties()
+            for internal_attr in INTERNAL_CLASS_ATTRS:
+                class_attrs.pop(internal_attr)
+            instance_attrs = [self._convert_value(v) for v in instance_attrs]
+            instance_attrs = {attr.name: attr for attr in instance_attrs}
+
+            attrs = class_attrs
+            attrs.update(instance_attrs)
+
+            yield (type_id, bases, attrs)
 
     def serialize(self, obj):
         """ Serialize ``obj`` to a dictionary.
@@ -541,10 +573,12 @@ class Manager(object):
             create_clauses.append(create)
 
         query = join_lines(
-            "START %s" % ",".join(start_clauses),
+            "START",
+            (start_clauses, ','),
             "MATCH type -[r:ISA]-> ()",
             "DELETE r",
-            "CREATE %s" % ",".join(create_clauses),
+            "CREATE",
+            (create_clauses, ','),
             "RETURN type")
 
         try:

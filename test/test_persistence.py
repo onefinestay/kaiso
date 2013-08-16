@@ -9,7 +9,7 @@ from kaiso.attributes import (
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship, IsA
-from kaiso.types import PersistableType, Entity, ClassAttribute, collector
+from kaiso.types import PersistableType, Entity, collector
 
 
 class Thing(Entity):
@@ -29,7 +29,7 @@ class OtherThing(Entity):
 
 class ClassAttrThing(Entity):
     id = Uuid(unique=True)
-    cls_attr = ClassAttribute("spam")
+    cls_attr = "spam"
 
 
 class NonUnique(Entity):
@@ -459,7 +459,8 @@ def test_get_type_hierarchy_bases_order(manager):
             RETURN nr
         ''', is_a_props=is_a_props))
 
-    result = [(nme, bases) for (nme, bases, _) in manager.get_type_hierarchy()]
+    result = [(nme, bases) for (nme, bases, _)
+        in manager.get_type_hierarchy()]
 
     assert set(result) == set((
         ('Entity', tuple()),
@@ -705,7 +706,7 @@ def test_serialize_obj(manager):
 
 
 def test_attr():
-    assert ClassAttrThing.cls_attr.value == 'spam'
+    assert ClassAttrThing.cls_attr == 'spam'
     assert ClassAttrThing().cls_attr == 'spam'
 
 
@@ -713,26 +714,253 @@ def test_load_class_attr(manager):
     with collector() as classes:
         class DynamicClassAttrThing(Entity):
             id = Uuid(unique=True)
-            cls_attr = ClassAttribute("spam")
+            cls_attr = "spam"
 
     manager.save_collected_classes(classes)
-
-    query_str = join_lines(
-        "START",
-        get_start_clause(DynamicClassAttrThing, 'cls', manager.type_registry),
-        """
-            MATCH attr -[:DECLAREDON]-> cls
-            WHERE attr.name = "cls_attr"
-            SET attr.value={value}
-        """
-    )
-    list(manager.query(query_str, value="ham"))
-
     manager.reload_types()
 
     data = {
         '__type__': 'PersistableType',
         'id': 'DynamicClassAttrThing',
+        'cls_attr': 'ham'
     }
     cls = manager.deserialize(data)
-    assert cls.cls_attr.value == 'ham'
+    assert cls.cls_attr == 'ham'
+
+
+def test_class_att_overriding(manager):
+    with collector() as classes:
+        class A(Entity):
+            id = Uuid()
+            cls_attr = "spam"
+
+        class B(A):
+            cls_attr = "ham"
+
+        class C(B):
+            pass
+
+    manager.save_collected_classes(classes)
+    manager.reload_types()
+
+    a = A()
+    b = B()
+    c = C()
+
+    assert a.cls_attr == "spam"
+    assert b.cls_attr == "ham"
+    assert c.cls_attr == "ham"
+
+    manager.save(a)
+    manager.save(b)
+    manager.save(c)
+
+    query_str = join_lines(
+        "START",
+        get_start_clause(A, 'A', manager.type_registry),
+        """
+            MATCH node -[:INSTANCEOF]-> () -[:ISA*0..]-> A
+            return node
+        """
+    )
+
+    results = list(manager.query(query_str))
+
+    for col, in results:
+        assert col.cls_attr == col.__class__.cls_attr
+
+
+def test_class_attr_inheritence(manager):
+    with collector() as classes:
+        class A(Entity):
+            attr = True
+
+        class B(A):
+            pass
+
+        class C(B):
+            attr = False
+
+        class D(C):
+            pass
+
+    manager.save_collected_classes(classes)
+
+    assert A().attr is True
+    assert B().attr is True
+    assert C().attr is False
+    assert D().attr is False
+
+
+def test_reserved_attribute_name():
+    with pytest.raises(TypeError):
+        class Nope(Entity):
+            __type__ = String()
+
+
+def test_class_attr_class_serialization(manager):
+    with collector() as classes:
+        class A(Entity):
+            id = Uuid()
+            cls_attr = "spam"
+
+        class B(A):
+            cls_attr = "ham"
+
+        class C(B):
+            pass
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(C) == {
+        '__type__': 'PersistableType',
+        'id': 'C',
+        'cls_attr': 'ham',
+    }
+
+    # we don't want inherited attributes in the db
+    query_str = join_lines(
+        "START",
+        get_start_clause(C, 'C', manager.type_registry),
+        """
+            RETURN C
+        """
+    )
+
+    (db_attrs,) = next(manager._execute(query_str))
+    properties = db_attrs.get_properties()
+    assert 'cls_attr' not in properties
+
+
+def test_false_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = False
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(DynamicClassAttrThing) == {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+        'cls_attr': False,
+    }
+
+    manager.reload_types()
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    thing = DynamicClassAttrThing()
+
+    assert DynamicClassAttrThing.cls_attr is False
+    assert thing.cls_attr is False
+
+
+def test_true_class_attr(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = True
+
+    manager.save_collected_classes(classes)
+
+    # we want inherited attributes when we serialize
+    assert manager.serialize(DynamicClassAttrThing) == {
+        '__type__': 'PersistableType',
+        'id': 'DynamicClassAttrThing',
+        'cls_attr': True,
+    }
+
+    manager.reload_types()
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    thing = DynamicClassAttrThing()
+
+    assert DynamicClassAttrThing.cls_attr is True
+    assert thing.cls_attr is True
+
+
+def test_edit_class_attrs(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = "spam"
+
+    manager.save_collected_classes(classes)
+
+    del DynamicClassAttrThing
+
+    # this is the same as creating a new manager using the same URL
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    assert DynamicClassAttrThing.cls_attr == "spam"
+
+    DynamicClassAttrThing.cls_attr = "ham"
+    manager.save(DynamicClassAttrThing)
+
+    del DynamicClassAttrThing
+
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    assert DynamicClassAttrThing.cls_attr == "ham"
+
+
+def test_add_class_attrs(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+
+    manager.save_collected_classes(classes)
+
+    del DynamicClassAttrThing
+
+    # this is the same as creating a new manager using the same URL
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+
+    DynamicClassAttrThing.cls_attr = "ham"
+    manager.save(DynamicClassAttrThing)
+
+    del DynamicClassAttrThing
+
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    assert DynamicClassAttrThing.cls_attr == "ham"
+
+
+def test_delete_class_attrs(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+            cls_attr = "spam"
+
+    manager.save_collected_classes(classes)
+
+    del DynamicClassAttrThing
+
+    # this is the same as creating a new manager using the same URL
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    assert DynamicClassAttrThing.cls_attr == "spam"
+
+    delattr(DynamicClassAttrThing, 'cls_attr')
+    manager.save(DynamicClassAttrThing)
+
+    del DynamicClassAttrThing
+
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+    assert not(hasattr(DynamicClassAttrThing, 'cls_attr'))
