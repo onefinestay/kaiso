@@ -129,10 +129,12 @@ class TypeRegistry(object):
         return (class_id in self._descriptors['dynamic'])
 
     def is_dynamic_attribute(self, cls, attr_name):
-        """ Determine whether ``attr_name`` on ``cls`` was added as a dynamic
-        attribute.
+        """ Determine whether ``attr_name``  was added as a dynamic attribute
+        on ``cls`` or one of its parent types.
 
-        Returns False if the attribute was not defined or defined in code.
+        Returns False if the attribute was not defined or was defined in code.
+        A dynamic re-definition of a static attribute on a parent type will
+        return True.
         """
         # declaring class must be found using the descriptor, because the
         # given ``cls`` may be the code-defined component of an augmented type
