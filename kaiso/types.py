@@ -134,13 +134,14 @@ class TypeRegistry(object):
         maybe_dynamic = self.get_descriptor_by_id(class_id).cls
         maybe_static = self.get_class_by_id(class_id)
 
-        if maybe_dynamic is maybe_static:
-            # type is purely dynamic or purely static
-            return self.is_dynamic_type(maybe_dynamic)
-
         def has_attribute(obj, attr_name):
             attr = getattr(obj, attr_name, None)
             return _is_attribute(attr)
+
+        if maybe_dynamic is maybe_static:
+            # type is purely dynamic or purely static
+            return (self.is_dynamic_type(maybe_dynamic) and
+                    has_attribute(cls, attr_name))
 
         is_dynamic_attr = has_attribute(maybe_dynamic, attr_name)
         is_static_attr = has_attribute(maybe_static, attr_name)
