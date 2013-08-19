@@ -81,7 +81,7 @@ class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
     _static_descriptors = {}
-    _builtin_types = (PersistableType, )
+    _builtin_types = (PersistableType,)
 
     def __init__(self):
         self._descriptors = {
@@ -127,6 +127,24 @@ class TypeRegistry(object):
     def is_dynamic_type(self, cls):
         class_id = get_type_id(cls)
         return (class_id in self._descriptors['dynamic'])
+
+    def is_dynamic_attribute(self, cls, attr_name):
+        class_id = get_type_id(cls)
+
+        maybe_dynamic = self.get_descriptor_by_id(class_id).cls
+        maybe_static = self.get_class_by_id(class_id)
+
+        if maybe_dynamic is maybe_static:
+            # type is purely dynamic or purely static
+            return self.is_dynamic_type(maybe_dynamic)
+
+        def has_attribute(obj, attr_name):
+            attr = getattr(obj, attr_name, None)
+            return _is_attribute(attr)
+
+        is_dynamic_attr = has_attribute(maybe_dynamic, attr_name)
+        is_static_attr = has_attribute(maybe_static, attr_name)
+        return is_dynamic_attr and not is_static_attr
 
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type

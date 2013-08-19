@@ -78,6 +78,30 @@ def test_is_dynamic_type(type_registry):
     assert type_registry.is_dynamic_type(FooType) is True
 
 
+def test_is_dynamic_attribute(type_registry):
+    attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
+
+    # test purely dynamic type
+    NewType = type_registry.create_type("NewType", (Entity,), attrs)
+    assert type_registry.is_dynamic_attribute(NewType, "extra")
+    assert not type_registry.is_dynamic_attribute(NewType, "nonexistant")
+
+    # test purely code-defined type
+    class BarType(Entity):
+        extra = String()
+    type_registry.register(BarType)
+    assert not type_registry.is_dynamic_attribute(BarType, "extra")
+    assert not type_registry.is_dynamic_attribute(BarType, "nonexistant")
+
+    # create a dynamic FooType
+    type_registry.create_type("FooType", (Entity,), attrs)
+
+    # test a mixed type
+    assert type_registry.is_dynamic_attribute(FooType, "extra")
+    assert not type_registry.is_dynamic_attribute(FooType, "id")
+    assert not type_registry.is_dynamic_attribute(FooType, "nonexistant")
+
+
 def test_get_registered_types(type_registry):
     initial_classes = set(type_registry.get_registered_types())
     assert Entity in initial_classes
