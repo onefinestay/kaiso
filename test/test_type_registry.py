@@ -1,6 +1,6 @@
 from mock import ANY
 from kaiso.types import Entity
-from kaiso.attributes import Uuid, String
+from kaiso.attributes import Uuid, String, Bool
 
 
 class FooType(Entity):
@@ -93,13 +93,30 @@ def test_is_dynamic_attribute(type_registry):
     assert not type_registry.is_dynamic_attribute(BarType, "extra")
     assert not type_registry.is_dynamic_attribute(BarType, "nonexistant")
 
-    # create a dynamic FooType
+    # augment FooType with an "extra" attr
     type_registry.create_type("FooType", (Entity,), attrs)
 
-    # test a mixed type
+    # test augmented type
     assert type_registry.is_dynamic_attribute(FooType, "extra")
     assert not type_registry.is_dynamic_attribute(FooType, "id")
     assert not type_registry.is_dynamic_attribute(FooType, "nonexistant")
+
+    # create static type with a dynamic subclass
+    class BazType(Entity):
+        name = String()
+        special = Bool()
+    type_registry.register(BazType)
+
+    attrs = {'special': Bool()}
+    SubBazType = type_registry.create_type("SubBazType", (BazType,), attrs)
+
+    # test the static type
+    assert not type_registry.is_dynamic_attribute(BazType, "name")
+    assert not type_registry.is_dynamic_attribute(BazType, "special")
+
+    # test the subtype overrides it
+    assert type_registry.is_dynamic_attribute(SubBazType, "special")
+    assert not type_registry.is_dynamic_attribute(SubBazType, "name")
 
 
 def test_get_registered_types(type_registry):

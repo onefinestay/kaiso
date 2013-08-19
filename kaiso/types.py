@@ -129,10 +129,23 @@ class TypeRegistry(object):
         return (class_id in self._descriptors['dynamic'])
 
     def is_dynamic_attribute(self, cls, attr_name):
-        class_id = get_type_id(cls)
+        """ Determine whether ``attr_name`` on ``cls`` was added as a dynamic
+        attribute.
 
-        maybe_dynamic = self.get_descriptor_by_id(class_id).cls
-        maybe_static = self.get_class_by_id(class_id)
+        Returns False if the attribute was not defined or defined in code.
+        """
+        # declaring class must be found using the descriptor, because the
+        # given ``cls`` may be the code-defined component of an augmented type
+        class_id = get_type_id(cls)
+        descriptor_cls = self.get_descriptor_by_id(class_id).cls
+        declaring_cls = get_declaring_class(descriptor_cls, attr_name)
+
+        if not declaring_cls:
+            return False  # attribute not found
+
+        declaring_class_id = get_type_id(declaring_cls)
+        maybe_dynamic = self.get_descriptor_by_id(declaring_class_id).cls
+        maybe_static = self.get_class_by_id(declaring_class_id)
 
         def has_attribute(obj, attr_name):
             attr = getattr(obj, attr_name, None)
