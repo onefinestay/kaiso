@@ -4,7 +4,8 @@ from py2neo import cypher, neo4j
 
 from kaiso.attributes import Outgoing, Incoming, String, Uuid
 from kaiso.connection import get_connection
-from kaiso.exceptions import UniqueConstraintError, UnknownType
+from kaiso.exceptions import (
+    UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -15,6 +16,8 @@ from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
     Relationship, TypeRegistry, AttributedBase, get_index_name, get_type_id,
     is_indexable)
+from kaiso.utils import dict_difference
+
 
 log = getLogger(__name__)
 
@@ -119,6 +122,7 @@ class Manager(object):
                 yield self._convert_value(value)
 
     def _index_object(self, obj, node_or_rel):
+
         indexes = self.type_registry.get_index_entries(obj)
         for index_name, key, value in indexes:
             if isinstance(obj, Relationship):
@@ -314,7 +318,7 @@ class Manager(object):
 
             query_args = {'type_id': get_type_id(persistable)}
             class_attr_changes = {k: v for k, v in changes.items()
-                if k != 'attributes'}
+                                  if k != 'attributes'}
             query_args.update(class_attr_changes)
 
             where = []
@@ -531,6 +535,58 @@ class Manager(object):
         """ Creates a new class given the name, bases and attrs given.
         """
         return self.type_registry.create_type(name, bases, attrs)
+
+    def update_type(self, tpe, bases):
+        """ Change the bases of the given ``tpe``
+        """
+        if not isinstance(tpe, PersistableType):
+            raise UnsupportedTypeError("Object is not a PersistableType")
+
+        if not self.type_registry.is_dynamic_type(tpe):
+            raise CannotUpdateType("Type '{}' is defined in code and cannot"
+                                   "be updated.".format(get_type_id(tpe)))
+
+        descriptor = self.type_registry.get_descriptor(tpe)
+        existing_attrs = dict_difference(descriptor.attributes,
+                                         descriptor.declared_attributes)
+        base_attrs = {}
+        for base in bases:
+            desc = self.type_registry.get_descriptor(base)
+            base_attrs.update(desc.attributes)
+        base_attrs = dict_difference(base_attrs,
+                                     descriptor.declared_attributes)
+
+        if existing_attrs != base_attrs:
+            raise CannotUpdateType("Inherited attributes are not identical")
+
+        start_clauses = [get_start_clause(tpe, 'type', self.type_registry)]
+        create_clauses = []
+        query_args = {}
+
+        for index, base in enumerate(bases):
+            name = 'base_{}'.format(index)
+            start = get_start_clause(base, name, self.type_registry)
+            create = "type -[:ISA {%s_props}]-> %s" % (name, name)
+
+            query_args["{}_props".format(name)] = {'base_index': index}
+            start_clauses.append(start)
+            create_clauses.append(create)
+
+        query = join_lines(
+            "START",
+            (start_clauses, ','),
+            "MATCH type -[r:ISA]-> ()",
+            "DELETE r",
+            "CREATE",
+            (create_clauses, ','),
+            "RETURN type")
+
+        try:
+            next(self._execute(query, **query_args))
+        except StopIteration:
+            raise CannotUpdateType("Type or bases not found in the database.")
+
+        self.reload_types()
 
     def save(self, persistable):
         """ Stores the given ``persistable`` in the graph database.
