@@ -126,7 +126,7 @@ def temp_neo4j_instance(uri):
     # append any NEO4J_WRAPPER_OPTS from the environment
     # e.g. -Djava.awt.headless=true to prevent foreground windows in OSX
     wrapper_opts = os.environ.get('NEO4J_WRAPPER_OPTS', '')
-    if wrapper_opts:
+    if wrapper_opts:  # pragma: no cover
         args.append(wrapper_opts)
 
     # finally add the class to run
