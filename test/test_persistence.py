@@ -460,7 +460,7 @@ def test_get_type_hierarchy_bases_order(manager):
         ''', is_a_props=is_a_props))
 
     result = [(nme, bases) for (nme, bases, _)
-        in manager.get_type_hierarchy()]
+              in manager.get_type_hierarchy()]
 
     assert set(result) == set((
         ('Entity', tuple()),
