@@ -5,6 +5,7 @@ from kaiso.attributes import Uuid, String, Bool
 
 class FooType(Entity):
     id = Uuid(unique=True)
+    cls_attr = "placeholder"
 
 
 def test_get_clsss_by_id_returns_static_type(type_registry):
@@ -79,45 +80,77 @@ def test_is_dynamic_type(type_registry):
 
 
 def test_has_code_defined_attribute(type_registry):
-    attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
+    attrs = {
+        'id': Uuid(unique=True),
+        'extra': String(unique=True),
+        'cls_attr': "placeholder"
+    }
 
     # test purely dynamic type
     NewType = type_registry.create_type("NewType", (Entity,), attrs)
     assert not type_registry.has_code_defined_attribute(NewType, "extra")
+    assert not type_registry.has_code_defined_attribute(NewType, "cls_attr")
     assert not type_registry.has_code_defined_attribute(NewType, "nonexistant")
 
     # test purely code-defined type
     class BarType(Entity):
         extra = String()
+        cls_attr = "placeholder"
+
     type_registry.register(BarType)
     assert type_registry.has_code_defined_attribute(BarType, "extra")
+    assert type_registry.has_code_defined_attribute(BarType, "cls_attr")
     assert not type_registry.has_code_defined_attribute(BarType, "nonexistant")
 
-    # augment FooType with an "extra" attr; redefine the "id" attr
+    # augment FooType with an "extra" attr; redefine "id" and "cls_attr" attrs
     type_registry.create_type("FooType", (Entity,), attrs)
 
     # test augmented type
     assert type_registry.has_code_defined_attribute(FooType, "id")
     assert not type_registry.has_code_defined_attribute(FooType, "extra")
+    assert type_registry.has_code_defined_attribute(FooType, "cls_attr")
     assert not type_registry.has_code_defined_attribute(FooType, "nonexistant")
 
     # create static type with a dynamic subclass
     class BazType(Entity):
         name = String()
         special = Bool()
+        cls_attr = "placeholder"
     type_registry.register(BazType)
 
-    attrs = {'special': Bool(), 'extra': Bool()}
+    attrs = {'special': Bool(), 'extra': Bool(), 'cls_attr': "placeholder"}
     SubBazType = type_registry.create_type("SubBazType", (BazType,), attrs)
 
     # test the static type
     assert type_registry.has_code_defined_attribute(BazType, "name")
     assert type_registry.has_code_defined_attribute(BazType, "special")
+    assert type_registry.has_code_defined_attribute(BazType, "cls_attr")
 
     # test the subtype does not override it
     assert type_registry.has_code_defined_attribute(SubBazType, "name")
     assert type_registry.has_code_defined_attribute(SubBazType, "special")
+    assert type_registry.has_code_defined_attribute(SubBazType, "cls_attr")
     assert not type_registry.has_code_defined_attribute(SubBazType, "extra")
+
+    # test augmented type after reload
+    class A(Entity):
+        foo = String()
+
+    class B(A):
+        pass
+    type_registry.register(A)
+    type_registry.register(B)
+
+    # augment the types
+    # A1 and B1 are the new types A and B would deserialize to
+    # after reloading the type hierarchy
+    A1 = type_registry.create_type("A", (Entity,), {})
+    B1 = type_registry.create_type("B", (Entity,), {})
+
+    assert type_registry.has_code_defined_attribute(A, "foo")
+    assert type_registry.has_code_defined_attribute(B, "foo")
+    assert type_registry.has_code_defined_attribute(A1, "foo")
+    assert type_registry.has_code_defined_attribute(B1, "foo")
 
 
 def test_get_registered_types(type_registry):

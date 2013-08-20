@@ -132,25 +132,26 @@ class TypeRegistry(object):
         """ Determine whether an attribute called ``attr_name`` was defined
         in code on ``cls`` or one of its parent types.
         """
-        declaring_cls = get_declaring_class(cls, attr_name,
+        # find the declaring class in the code-defined hierarchy
+        class_id = get_type_id(cls)
+        maybe_static = self.get_class_by_id(class_id)
+        declaring_cls = get_declaring_class(maybe_static, attr_name,
                                             prefer_subclass=False)
         if not declaring_cls:
             return False  # attribute not found
 
-        declaring_class_id = get_type_id(declaring_cls)
-        maybe_dynamic = self.get_descriptor_by_id(declaring_class_id).cls
-        maybe_static = self.get_class_by_id(declaring_class_id)
-
-        def has_attribute(obj, attr_name):
-            attr = getattr(obj, attr_name, None)
-            return _is_attribute(attr)
+        # given a declaring class, determine whether that class is dynamic or
+        # code-defined
+        cls = declaring_cls
+        class_id = get_type_id(cls)
+        maybe_dynamic = self.get_descriptor_by_id(class_id).cls
+        maybe_static = self.get_class_by_id(class_id)
 
         if maybe_dynamic is maybe_static:
             # type is purely dynamic or purely static
-            return (not self.is_dynamic_type(maybe_dynamic) and
-                    has_attribute(cls, attr_name))
+            return not self.is_dynamic_type(maybe_dynamic)
 
-        is_static_attr = has_attribute(maybe_static, attr_name)
+        is_static_attr = hasattr(maybe_static, attr_name)
         return is_static_attr
 
     def create_type(self, cls_id, bases, attrs):
