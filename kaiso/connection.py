@@ -123,6 +123,12 @@ def temp_neo4j_instance(uri):
     for key, value in startup_options.iteritems():
         args.append("-D{}={}".format(key, value))
 
+    # append any NEO4J_WRAPPER_OPTS from the environment
+    # e.g. -Djava.awt.headless=true to prevent foreground windows in OSX
+    wrapper_opts = os.environ.get('NEO4J_WRAPPER_OPTS', '')
+    if wrapper_opts:
+        args.append(wrapper_opts)
+
     # finally add the class to run
     args.append('org.neo4j.server.Bootstrapper')
     cmd.extend(args)
