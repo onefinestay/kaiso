@@ -78,28 +78,28 @@ def test_is_dynamic_type(type_registry):
     assert type_registry.is_dynamic_type(FooType) is True
 
 
-def test_is_dynamic_attribute(type_registry):
+def test_is_code_defined_attribute(type_registry):
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
 
     # test purely dynamic type
     NewType = type_registry.create_type("NewType", (Entity,), attrs)
-    assert type_registry.is_dynamic_attribute(NewType, "extra")
-    assert not type_registry.is_dynamic_attribute(NewType, "nonexistant")
+    assert not type_registry.has_code_defined_attribute(NewType, "extra")
+    assert not type_registry.has_code_defined_attribute(NewType, "nonexistant")
 
     # test purely code-defined type
     class BarType(Entity):
         extra = String()
     type_registry.register(BarType)
-    assert not type_registry.is_dynamic_attribute(BarType, "extra")
-    assert not type_registry.is_dynamic_attribute(BarType, "nonexistant")
+    assert type_registry.has_code_defined_attribute(BarType, "extra")
+    assert not type_registry.has_code_defined_attribute(BarType, "nonexistant")
 
-    # augment FooType with an "extra" attr
+    # augment FooType with an "extra" attr; redefine the "id" attr
     type_registry.create_type("FooType", (Entity,), attrs)
 
     # test augmented type
-    assert type_registry.is_dynamic_attribute(FooType, "extra")
-    assert not type_registry.is_dynamic_attribute(FooType, "id")
-    assert not type_registry.is_dynamic_attribute(FooType, "nonexistant")
+    assert type_registry.has_code_defined_attribute(FooType, "id")
+    assert not type_registry.has_code_defined_attribute(FooType, "extra")
+    assert not type_registry.has_code_defined_attribute(FooType, "nonexistant")
 
     # create static type with a dynamic subclass
     class BazType(Entity):
@@ -107,16 +107,17 @@ def test_is_dynamic_attribute(type_registry):
         special = Bool()
     type_registry.register(BazType)
 
-    attrs = {'special': Bool()}
+    attrs = {'special': Bool(), 'extra': Bool()}
     SubBazType = type_registry.create_type("SubBazType", (BazType,), attrs)
 
     # test the static type
-    assert not type_registry.is_dynamic_attribute(BazType, "name")
-    assert not type_registry.is_dynamic_attribute(BazType, "special")
+    assert type_registry.has_code_defined_attribute(BazType, "name")
+    assert type_registry.has_code_defined_attribute(BazType, "special")
 
-    # test the subtype overrides it
-    assert type_registry.is_dynamic_attribute(SubBazType, "special")
-    assert not type_registry.is_dynamic_attribute(SubBazType, "name")
+    # test the subtype does not override it
+    assert type_registry.has_code_defined_attribute(SubBazType, "name")
+    assert type_registry.has_code_defined_attribute(SubBazType, "special")
+    assert not type_registry.has_code_defined_attribute(SubBazType, "extra")
 
 
 def test_get_registered_types(type_registry):

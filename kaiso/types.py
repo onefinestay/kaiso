@@ -128,20 +128,12 @@ class TypeRegistry(object):
         class_id = get_type_id(cls)
         return (class_id in self._descriptors['dynamic'])
 
-    def is_dynamic_attribute(self, cls, attr_name):
-        """ Determine whether ``attr_name``  was added as a dynamic attribute
+    def has_code_defined_attribute(self, cls, attr_name):
+        """ Determine whether an attribute with ``attr_name`` defined in code
         on ``cls`` or one of its parent types.
-
-        Returns False if the attribute was not defined or was defined in code.
-        A dynamic re-definition of a static attribute on a parent type will
-        return True.
         """
-        # declaring class must be found using the descriptor, because the
-        # given ``cls`` may be the code-defined component of an augmented type
-        class_id = get_type_id(cls)
-        descriptor_cls = self.get_descriptor_by_id(class_id).cls
-        declaring_cls = get_declaring_class(descriptor_cls, attr_name)
-
+        declaring_cls = get_declaring_class(cls, attr_name,
+                                            prefer_subclass=False)
         if not declaring_cls:
             return False  # attribute not found
 
@@ -155,12 +147,11 @@ class TypeRegistry(object):
 
         if maybe_dynamic is maybe_static:
             # type is purely dynamic or purely static
-            return (self.is_dynamic_type(maybe_dynamic) and
+            return (not self.is_dynamic_type(maybe_dynamic) and
                     has_attribute(cls, attr_name))
 
-        is_dynamic_attr = has_attribute(maybe_dynamic, attr_name)
         is_static_attr = has_attribute(maybe_static, attr_name)
-        return is_dynamic_attr and not is_static_attr
+        return is_static_attr
 
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
@@ -390,22 +381,26 @@ class TypeRegistry(object):
         return clone
 
 
-def get_declaring_class(cls, attr_name):
+def get_declaring_class(cls, attr_name, prefer_subclass=True):
     """ Returns the class in the type heirarchy of ``cls`` that defined
         an attribute with name ``attr_name``.
+
+        If ``prefer_subclass`` is false, return the fu
     """
-    declaring_class = None
     declared_attr = None
+    declaring_class = None
 
     # Start at the top of the hierarchy and determine which of the MRO have
     # the attribute. Return the lowest class that defines (or overloads) the
-    # attribute.
+    # attribute, unless prefer_subclass is False.
     for base in reversed(getmro(cls)):
         sentinel = object()
         attr = getattr(base, attr_name, sentinel)
         if attr is not sentinel and declared_attr is not attr:
             declaring_class = base
             declared_attr = attr
+            if not prefer_subclass:
+                break
 
     return declaring_class
 
