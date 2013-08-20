@@ -3,5 +3,6 @@ def dict_difference(d1, d2):
 
     Keys and values must be equal.
     """
+    sentinel = object()
     return dict(((k, v) for (k, v) in d1.iteritems()
-                 if k not in d2 or d2[k] != v))
+                 if d2.get(k, sentinel) != v))
