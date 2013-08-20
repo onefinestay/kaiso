@@ -78,7 +78,7 @@ def test_is_dynamic_type(type_registry):
     assert type_registry.is_dynamic_type(FooType) is True
 
 
-def test_is_code_defined_attribute(type_registry):
+def test_has_code_defined_attribute(type_registry):
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
 
     # test purely dynamic type

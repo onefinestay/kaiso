@@ -129,8 +129,8 @@ class TypeRegistry(object):
         return (class_id in self._descriptors['dynamic'])
 
     def has_code_defined_attribute(self, cls, attr_name):
-        """ Determine whether an attribute with ``attr_name`` defined in code
-        on ``cls`` or one of its parent types.
+        """ Determine whether an attribute called ``attr_name`` was defined
+        in code on ``cls`` or one of its parent types.
         """
         declaring_cls = get_declaring_class(cls, attr_name,
                                             prefer_subclass=False)
