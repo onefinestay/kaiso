@@ -50,7 +50,7 @@ def get_create_types_query(cls, root, type_registry):
         A tuple containing:
         (cypher query, classes to create nodes for, the object names).
     """
-    lines = []
+    hierarchy_lines = []
     classes = {}
 
     query_args = {
@@ -77,7 +77,7 @@ def get_create_types_query(cls, root, type_registry):
         if name1 in classes:
             abstr1 = '`%s`' % (name1,)
         else:
-            abstr1 = '(`%s` {%s_props})' % (name1, name1)
+            abstr1 = '(`%s` {%s_id_props})' % (name1, name1)
 
         classes[name1] = cls1
 
@@ -103,7 +103,7 @@ def get_create_types_query(cls, root, type_registry):
             ln = '%s -[:%s {%s}]-> %s' % (
                 abstr1, rel_type, prop_name, name2)
 
-        lines.append(ln)
+        hierarchy_lines.append(ln)
 
     # process attributes
     for name, cls in classes.items():
@@ -115,7 +115,7 @@ def get_create_types_query(cls, root, type_registry):
 
             ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
                 key, name)
-            lines.append(ln)
+            hierarchy_lines.append(ln)
 
             attr_dict = type_registry.object_to_dict(
                 attr, for_db=True)
@@ -123,15 +123,28 @@ def get_create_types_query(cls, root, type_registry):
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
+    # processing class attributes
+    set_lines = []
     for key, cls in classes.iteritems():
-        query_args['%s_props' % key] = type_registry.object_to_dict(
-            cls, for_db=True)
+        # all attributes of the class to be set via the query
+        cls_props = type_registry.object_to_dict(cls, for_db=True)
+        query_args['%s_props' % key] = cls_props
+        set_lines.append('SET %s = {%s_props}' % (key, key))
+
+        # attributes which uniquely identify the class itself
+        # these are used in the CREATE UNIQUE part of the query
+        cls_id_props = {
+            '__type__': cls_props['__type__'],
+            'id': cls_props['id']
+        }
+        query_args['%s_id_props' % key] = cls_id_props
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
         'CREATE UNIQUE',
-        (lines, ','),
+        (hierarchy_lines, ','),
+        (set_lines, ''),
         'RETURN %s' % ', '.join(quoted_names)
     )
 

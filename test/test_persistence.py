@@ -964,3 +964,30 @@ def test_delete_class_attrs(manager):
     DynamicClassAttrThing = manager.type_registry.get_class_by_id(
         'DynamicClassAttrThing')
     assert not(hasattr(DynamicClassAttrThing, 'cls_attr'))
+
+
+def test_add_class_attrs_does_not_create_duplicate_types(manager):
+    with collector() as classes:
+        class DynamicClassAttrThing(Entity):
+            id = Uuid()
+    manager.save_collected_classes(classes)
+    del DynamicClassAttrThing
+    manager.reload_types()
+
+    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
+        'DynamicClassAttrThing')
+
+    DynamicClassAttrThing.cls_attr = "ham"
+    manager.save(DynamicClassAttrThing)
+
+    rows = manager.query(
+        ''' START base = node(*)
+            MATCH tpe -[r:ISA]-> base
+            RETURN tpe.id , r.__type__, base.id
+            ORDER BY tpe.id, base.id
+        ''')
+    result = list(rows)
+
+    assert result == [
+        ('DynamicClassAttrThing', 'IsA', 'Entity'),
+    ]
