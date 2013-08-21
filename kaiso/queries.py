@@ -4,11 +4,11 @@ from kaiso.types import (
 from kaiso.serialize import get_type_relationships
 
 
-def join_lines(*lines, **kwargs):
+def join_lines(*hierarchy_lines, **kwargs):
     rows = []
     sep = kwargs.get('sep', '\n')
 
-    for lne in lines:
+    for lne in hierarchy_lines:
         if isinstance(lne, tuple):
             (lne, s) = lne
             lne = '    ' + join_lines(sep=s + '\n    ', *lne)
@@ -50,7 +50,7 @@ def get_create_types_query(cls, root, type_registry):
         A tuple containing:
         (cypher query, classes to create nodes for, the object names).
     """
-    lines = []
+    hierarchy_lines = []
     classes = {}
 
     query_args = {
@@ -77,7 +77,7 @@ def get_create_types_query(cls, root, type_registry):
         if name1 in classes:
             abstr1 = '`%s`' % (name1,)
         else:
-            abstr1 = '(`%s` {%s_props})' % (name1, name1)
+            abstr1 = '(`%s` {%s_id_props})' % (name1, name1)
 
         classes[name1] = cls1
 
@@ -103,7 +103,7 @@ def get_create_types_query(cls, root, type_registry):
             ln = '%s -[:%s {%s}]-> %s' % (
                 abstr1, rel_type, prop_name, name2)
 
-        lines.append(ln)
+        hierarchy_lines.append(ln)
 
     # process attributes
     for name, cls in classes.items():
@@ -115,7 +115,7 @@ def get_create_types_query(cls, root, type_registry):
 
             ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
                 key, name)
-            lines.append(ln)
+            hierarchy_lines.append(ln)
 
             attr_dict = type_registry.object_to_dict(
                 attr, for_db=True)
@@ -123,15 +123,29 @@ def get_create_types_query(cls, root, type_registry):
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
+    # processing uniqe class attrs(__type__ and id) for the hierarchy
+    # and other attributes that need to be set on the class node
+    set_lines = []
     for key, cls in classes.iteritems():
-        query_args['%s_props' % key] = type_registry.object_to_dict(
-            cls, for_db=True)
+        cls_set_props = type_registry.object_to_dict(cls, for_db=True)
+
+        cls_id_props = {
+            '__type__': cls_set_props['__type__'],
+            'id': cls_set_props['id']
+        }
+        # attributes which uniquely identify the class itself
+        query_args['%s_id_props' % key] = cls_id_props
+
+        # all attributes of the class, to be set separately
+        query_args['%s_props' % key] = cls_set_props
+        set_lines.append('SET %s = {%s_props}' % (key, key))
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
         'START root=node:%s(id={root_id})' % get_index_name(type(root)),
         'CREATE UNIQUE',
-        (lines, ','),
+        (hierarchy_lines, ','),
+        (set_lines, ''),
         'RETURN %s' % ', '.join(quoted_names)
     )
 
