@@ -4,11 +4,11 @@ from kaiso.types import (
 from kaiso.serialize import get_type_relationships
 
 
-def join_lines(*hierarchy_lines, **kwargs):
+def join_lines(*lines, **kwargs):
     rows = []
     sep = kwargs.get('sep', '\n')
 
-    for lne in hierarchy_lines:
+    for lne in lines:
         if isinstance(lne, tuple):
             (lne, s) = lne
             lne = '    ' + join_lines(sep=s + '\n    ', *lne)
