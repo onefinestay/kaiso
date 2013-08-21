@@ -123,22 +123,21 @@ def get_create_types_query(cls, root, type_registry):
             attr_dict['name'] = attr_name
             query_args[key] = attr_dict
 
-    # processing uniqe class attrs(__type__ and id) for the hierarchy
-    # and other attributes that need to be set on the class node
+    # processing class attributes
     set_lines = []
     for key, cls in classes.iteritems():
-        cls_set_props = type_registry.object_to_dict(cls, for_db=True)
-
-        cls_id_props = {
-            '__type__': cls_set_props['__type__'],
-            'id': cls_set_props['id']
-        }
-        # attributes which uniquely identify the class itself
-        query_args['%s_id_props' % key] = cls_id_props
-
-        # all attributes of the class, to be set separately
-        query_args['%s_props' % key] = cls_set_props
+        # all attributes of the class to be set via the query
+        cls_props = type_registry.object_to_dict(cls, for_db=True)
+        query_args['%s_props' % key] = cls_props
         set_lines.append('SET %s = {%s_props}' % (key, key))
+
+        # attributes which uniquely identify the class itself
+        # these are used in the CREATE UNIQUE part of the query
+        cls_id_props = {
+            '__type__': cls_props['__type__'],
+            'id': cls_props['id']
+        }
+        query_args['%s_id_props' % key] = cls_id_props
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
