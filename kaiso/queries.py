@@ -51,6 +51,7 @@ def get_create_types_query(cls, root, type_registry):
         (cypher query, classes to create nodes for, the object names).
     """
     hierarchy_lines = []
+    set_lines = []
     classes = {}
 
     query_args = {
@@ -94,15 +95,14 @@ def get_create_types_query(cls, root, type_registry):
             prop_name = "%s_props" % rel_name
 
             if rel_cls is IsA:
-                prop_name = '%s_props_%d' % (rel_name, isa_props_counter)
+                prop_name = '%s_%d' % (rel_name, isa_props_counter)
                 isa_props_counter += 1
 
                 props = type_registry.object_to_dict(IsA(base_index=base_idx))
                 query_args[prop_name] = props
 
-            ln = '%s -[:%s {%s}]-> %s' % (
-                abstr1, rel_type, prop_name, name2)
-
+            ln = '%s -[%s:%s]-> %s' % (abstr1, prop_name, rel_type, name2)
+            set_lines.append('SET %s = {%s}' % (prop_name, prop_name))
         hierarchy_lines.append(ln)
 
     # process attributes
@@ -124,7 +124,6 @@ def get_create_types_query(cls, root, type_registry):
             query_args[key] = attr_dict
 
     # processing class attributes
-    set_lines = []
     for key, cls in classes.iteritems():
         # all attributes of the class to be set via the query
         cls_props = type_registry.object_to_dict(cls, for_db=True)

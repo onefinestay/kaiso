@@ -991,3 +991,46 @@ def test_add_class_attrs_does_not_create_duplicate_types(manager):
     assert result == [
         ('DynamicClassAttrThing', 'IsA', 'Entity'),
     ]
+
+
+def test_changing_bases_does_not_create_duplicate_types(manager):
+    with collector() as classes:
+        class ShrubBaseA(Entity):
+            id = Uuid()
+
+        class ShrubBaseB(Entity):
+            pass
+
+        class Shrub(ShrubBaseA):
+            pass
+
+    manager.save_collected_classes(classes)
+    del Shrub
+
+    manager.reload_types()
+
+    with collector() as classes:
+        class Shrub(ShrubBaseB, ShrubBaseA):
+            pass
+
+        class SubShrub(Shrub):
+            pass
+
+    manager.type_registry.register(SubShrub, dynamic=True)
+    manager.save(SubShrub)
+
+    rows = manager.query(
+        ''' START base = node(*)
+            MATCH tpe -[r:ISA]-> base
+            RETURN tpe.id , r.__type__, r.base_index, base.id
+            ORDER BY tpe.id, r.base_index, base.id
+        ''')
+    result = list(rows)
+
+    assert result == [
+        ('Shrub', 'IsA', 0, 'ShrubBaseB'),
+        ('Shrub', 'IsA', 1, 'ShrubBaseA'),
+        ('ShrubBaseA', 'IsA', 0, 'Entity'),
+        ('ShrubBaseB', 'IsA', 0, 'Entity'),
+        ('SubShrub', 'IsA', 0, 'Shrub'),
+    ]
