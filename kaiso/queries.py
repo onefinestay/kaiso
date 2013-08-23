@@ -101,7 +101,7 @@ def get_create_types_query(cls, root, type_registry):
                 props = type_registry.object_to_dict(IsA(base_index=base_idx))
                 query_args[prop_name] = props
 
-            ln = '%s -[%s:%s]-> %s' % (abstr1, prop_name, rel_type, name2)
+            ln = '%s -[%s:%s]-> `%s`' % (abstr1, prop_name, rel_type, name2)
             set_lines.append('SET `%s` = {%s}' % (prop_name, prop_name))
         hierarchy_lines.append(ln)
 

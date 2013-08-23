@@ -1038,7 +1038,22 @@ def test_changing_bases_does_not_create_duplicate_types(manager):
 
 def test_class_name_escaping(manager):
     with collector() as classes:
-        class Set(Entity):
+        class Match(Entity):
             id = Uuid()
+            where = Uuid()
+
+        class Set(Match):
+            pass
+
+        class Return(Set):
+            pass
+
+    manager.save_collected_classes(classes)
+
+
+def test_class_and_attr_name_clash(manager):
+    with collector() as classes:
+        class Foo(Entity):
+            Foo = Uuid()
 
     manager.save_collected_classes(classes)
