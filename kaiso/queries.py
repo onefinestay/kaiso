@@ -102,7 +102,7 @@ def get_create_types_query(cls, root, type_registry):
                 query_args[prop_name] = props
 
             ln = '%s -[%s:%s]-> %s' % (abstr1, prop_name, rel_type, name2)
-            set_lines.append('SET %s = {%s}' % (prop_name, prop_name))
+            set_lines.append('SET `%s` = {%s}' % (prop_name, prop_name))
         hierarchy_lines.append(ln)
 
     # process attributes
@@ -113,7 +113,7 @@ def get_create_types_query(cls, root, type_registry):
         for attr_name, attr in attributes.iteritems():
             key = "%s_%s" % (name, attr_name)
 
-            ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> %s' % (
+            ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> `%s`' % (
                 key, name)
             hierarchy_lines.append(ln)
 
@@ -128,7 +128,7 @@ def get_create_types_query(cls, root, type_registry):
         # all attributes of the class to be set via the query
         cls_props = type_registry.object_to_dict(cls, for_db=True)
         query_args['%s_props' % key] = cls_props
-        set_lines.append('SET %s = {%s_props}' % (key, key))
+        set_lines.append('SET `%s` = {%s_props}' % (key, key))
 
         # attributes which uniquely identify the class itself
         # these are used in the CREATE UNIQUE part of the query

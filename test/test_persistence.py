@@ -1034,3 +1034,11 @@ def test_changing_bases_does_not_create_duplicate_types(manager):
         ('ShrubBaseB', 'IsA', 0, 'Entity'),
         ('SubShrub', 'IsA', 0, 'Shrub'),
     ]
+
+
+def test_class_name_escaping(manager):
+    with collector() as classes:
+        class Set(Entity):
+            id = Uuid()
+
+    manager.save_collected_classes(classes)
