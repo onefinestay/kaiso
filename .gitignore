@@ -4,3 +4,4 @@ _build
 dist
 htmlcov
 kaiso.egg-info
+setup.cfg
