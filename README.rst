@@ -31,7 +31,7 @@ Let's define some basic classes
     class Animal(Entity):
         id = Uuid(unique=True)
         name = String()
-        likes = Outgoing(Knows)
+        knows = Outgoing(Knows)
 
 
     class Carnivore(Animal):
@@ -55,7 +55,11 @@ As with any orm, we can make some instances and persist them in our graph
 .. code:: python
 
     from kaiso.persistence import Manager
+
     manager = Manager("http://localhost:7474/db/data/")
+
+
+    # create some instances
 
     fred = Penguin(name="Fred")
     tom = Lion(name="Tom")
