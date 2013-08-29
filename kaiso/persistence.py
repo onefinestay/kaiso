@@ -719,15 +719,23 @@ class Manager(object):
             A tuple: with (number of nodes removed, number of rels removed)
         """
         if isinstance(obj, Relationship):
-            query = join_lines(
-                'START {}, {}',
-                'MATCH n1 -[rel]-> n2',
-                'DELETE rel',
-                'RETURN 0, count(rel)'
-            ).format(
-                get_start_clause(obj.start, 'n1', self.type_registry),
-                get_start_clause(obj.end, 'n2', self.type_registry),
-            )
+            if is_indexable(type(obj)):
+                query = join_lines(
+                    'START',
+                    get_start_clause(obj, 'rel', self.type_registry),
+                    'DELETE rel',
+                    'RETURN 0, count(rel)'
+                )
+            else:
+                query = join_lines(
+                    'START {}, {}',
+                    'MATCH n1 -[rel]-> n2',
+                    'DELETE rel',
+                    'RETURN 0, count(rel)'
+                ).format(
+                    get_start_clause(obj.start, 'n1', self.type_registry),
+                    get_start_clause(obj.end, 'n2', self.type_registry),
+                )
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
