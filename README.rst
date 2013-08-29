@@ -73,7 +73,7 @@ However, in addition, we can also see the type information in the graph:
 
 
 We can make use of the type information in our queries, e.g. to find all
-herbivores who know a carnivore:
+herbivores who know a carnivore::
 
     START
         Herbivore=node:persistabletype(id="Herbivore"),
