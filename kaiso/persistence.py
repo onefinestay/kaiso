@@ -9,7 +9,7 @@ from kaiso.exceptions import (
     UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
-    join_lines)
+    join_lines, MUTATING_CLAUSES)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf
 from kaiso.serialize import dict_to_db_values_dict, get_changes
@@ -147,7 +147,7 @@ class Manager(object):
             'RETURN COALESCE(ts.version?, "noversion")'
         )
 
-        rows = self.query(query)
+        rows = self._execute(query)
         (version,) = next(rows)
         return version
 
@@ -302,6 +302,8 @@ class Manager(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
+        # we can't tell whether the CREATE UNIQUE from get_create_types_query
+        # will have any affect, so we must invalidate.
         self.invalidate_type_system()
         return cls
 
@@ -354,7 +356,6 @@ class Manager(object):
                 'DELETE attr, r',
                 'RETURN n',
             )
-
             self._update_types(persistable)
         else:
             start_clause = get_start_clause(existing, 'n', registry)
@@ -433,7 +434,6 @@ class Manager(object):
             # object is an instance; create its type, its hierarchy and then
             # create the instance
             obj_type = type(obj)
-
             self._update_types(obj_type)
 
             idx_name = get_index_name(PersistableType)
@@ -739,6 +739,7 @@ class Manager(object):
                 get_start_clause(obj.start, 'n1', self.type_registry),
                 get_start_clause(obj.end, 'n2', self.type_registry),
             )
+            self.invalidate_type_system()
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
@@ -750,6 +751,7 @@ class Manager(object):
             ).format(
                 get_start_clause(obj, 'obj', self.type_registry)
             )
+            self.invalidate_type_system()
         else:
             query = join_lines(
                 'START {}',
@@ -761,9 +763,7 @@ class Manager(object):
             )
 
         # TODO: delete node/rel from indexes
-
         res = next(self._execute(query))
-        self.invalidate_type_system()
         return res
 
     def query(self, query, **params):
@@ -779,7 +779,7 @@ class Manager(object):
         params = dict_to_db_values_dict(params)
         result = self._execute(query, **params)
 
-        for mutating_clause in ('SET', 'DELETE', 'CREATE'):
+        for mutating_clause in MUTATING_CLAUSES:
             if mutating_clause in query.upper():
                 self.invalidate_type_system()
                 break

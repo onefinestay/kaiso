@@ -4,6 +4,9 @@ from kaiso.types import (
 from kaiso.serialize import get_type_relationships
 
 
+MUTATING_CLAUSES = ("SET", "CREATE", "DELETE")
+
+
 def join_lines(*lines, **kwargs):
     rows = []
     sep = kwargs.get('sep', '\n')

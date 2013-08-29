@@ -1122,3 +1122,96 @@ def test_reload_external_changes(manager, connection):
     descriptor = manager.type_registry.get_descriptor(Thing)
     assert "cls_attr" in descriptor.class_attributes
 
+
+def test_invalidate_type_system(manager):
+
+    with collector():
+        class TypeA(Entity):
+            id = Uuid(unique=True)
+
+        class TypeB(Entity):
+            pass
+
+        class BaseType(Entity):
+            pass
+
+    manager.type_registry.register(TypeA, dynamic=True)
+    manager.type_registry.register(TypeB, dynamic=True)
+    manager.type_registry.register(BaseType, dynamic=True)
+
+    versions = []
+
+    def is_distinct_version(v):
+        distinct = v not in versions
+        versions.append(v)
+        return distinct
+
+    v0 = manager._type_system_version()
+    assert is_distinct_version(v0)
+
+    manager.save(TypeA)  # create type
+    manager.save(BaseType)
+    v1 = manager._type_system_version()
+    assert is_distinct_version(v1)
+
+    manager.save(TypeA)  # save unchanged type
+    v1a = manager._type_system_version()
+    assert v1 == v1a
+
+    type_a = TypeA()
+    manager.save(type_a)  # create instance
+    v2 = manager._type_system_version()
+    assert is_distinct_version(v2)
+
+    type_b = TypeB()
+    manager.save(type_b)  # create instance & type
+    v3 = manager._type_system_version()
+    assert is_distinct_version(v3)
+
+    rel = Related(type_a, TypeA)
+    manager.save(rel)  # create relationship
+    v4 = manager._type_system_version()
+    assert is_distinct_version(v4)
+
+    manager.update_type(TypeA, (BaseType,))  # reparent
+    v5 = manager._type_system_version()
+    assert is_distinct_version(v5)
+
+    query = join_lines(
+        'START',
+        get_start_clause(TypeA, 'TypeA', manager.type_registry),
+        'SET TypeA.foo = {foo}',
+        'RETURN TypeA'
+    )
+    next(manager.query(query, foo="bar"))
+    v6 = manager._type_system_version()  # mutating SET clause
+    assert is_distinct_version(v6)
+
+    query = join_lines(
+        'START',
+        get_start_clause(TypeA, 'TypeA', manager.type_registry),
+        'CREATE TypeA -[r:SELFREFERENCE]-> TypeA',
+        'RETURN TypeA'
+    )
+    next(manager.query(query))
+    v5 = manager._type_system_version()  # mutating CREATE clause
+    assert is_distinct_version(v5)
+
+    query = join_lines(
+        'START',
+        get_start_clause(TypeA, 'TypeA', manager.type_registry),
+        'MATCH TypeA -[r:SELFREFERENCE]-> TypeA',
+        'DELETE r',
+        'RETURN TypeA'
+    )
+    next(manager.query(query))
+    v6 = manager._type_system_version()  # mutating DELETE clause
+    assert is_distinct_version(v6)
+
+    manager.delete(TypeA)  # delete type
+    v9 = manager._type_system_version()
+    assert is_distinct_version(v9)
+
+    manager.delete(type_a)  # delete instance
+    v9a = manager._type_system_version()
+    assert v9 == v9a
