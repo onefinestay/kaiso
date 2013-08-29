@@ -70,3 +70,28 @@ Using the Neo4j web interface to explore our graph, we find Tom and Fred:
 However, in addition, we can also see the type information in the graph:
 
 .. image:: docs/images/type_hierarchy.png
+
+
+We can make use of the type information in our queries, e.g. to find all
+herbivores who know a carnivore:
+
+    START
+        Herbivore=node:persistabletype(id="Herbivore"),
+        Carnivore=node:persistabletype(id="Carnivore")
+
+    MATCH
+        Carnivore <-[:ISA*]-()<-[:INSTANCEOF]-(carnivore),
+        Herbivore <-[:ISA*]-()<-[:INSTANCEOF]-(herbivore),
+
+        (herbivore)-[:KNOWS]->(carnivore)
+
+    RETURN
+        "The herbivore",
+        herbivore.name,
+        "knows the carnivore",
+        carnivore.name;
+
+::
+    ==> +---------------------------------------------------------------------+
+    ==> | "The herbivore" | "Fred"      | "knows the carnivore" | "Tom"       |
+    ==> +---------------------------------------------------------------------+
