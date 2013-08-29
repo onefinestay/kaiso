@@ -1,6 +1,8 @@
 import decimal
+import uuid
 
 import iso8601
+from mock import patch
 import pytest
 from py2neo import cypher
 
@@ -9,7 +11,7 @@ from kaiso.attributes import (
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship, IsA
-from kaiso.types import PersistableType, Entity, collector
+from kaiso.types import PersistableType, Entity, collector, get_type_id
 
 
 class Thing(Entity):
@@ -1057,3 +1059,66 @@ def test_class_and_attr_name_clash(manager):
             Foo = Uuid()
 
     manager.save_collected_classes(classes)
+
+
+def test_type_system_version(manager):
+    forced_uuid = uuid.uuid4()
+
+    with patch('kaiso.persistence.uuid') as patched_uuid:
+        patched_uuid.uuid4.return_value = forced_uuid
+        manager.invalidate_type_system()
+
+    assert manager._type_system_version() == str(forced_uuid)
+
+    new_version = manager.invalidate_type_system()
+    assert manager._type_system_version() == new_version
+
+
+def test_type_system_reload(manager_factory):
+    manager_factory(skip_type_loading=True).destroy()
+    manager1 = manager_factory()
+    manager2 = manager_factory()
+
+    manager1.save(Thing)
+    manager2.reload_types()
+
+    type_id = get_type_id(Thing)
+    assert manager2.type_registry.get_class_by_id(type_id) == Thing
+
+    Thing.cls_attr = "cls_attr"
+    manager1.save(Thing)
+    manager2.reload_types()
+
+    descriptor = manager2.type_registry.get_descriptor_by_id(type_id)
+    assert "cls_attr" in descriptor.class_attributes
+
+
+def test_reload_external_changes(manager, connection):
+
+    manager.save(Thing)
+    manager.reload_types()  # cache type registry
+
+    # update the graph as an external manager would
+    # (change a value and bump the typesystem version)
+    start_clauses = (
+        get_start_clause(Thing, 'Thing', manager.type_registry),
+        get_start_clause(manager.type_system, 'ts', manager.type_registry),
+    )
+    query = join_lines(
+        'START',
+        (start_clauses, ','),
+        'SET ts.version = {version}',
+        'SET Thing.cls_attr = {cls_attr}',
+        'RETURN Thing'
+    )
+    query_params = {
+        'cls_attr': 'placeholder',
+        'version': str(uuid.uuid4())
+    }
+    cypher.execute(connection, query, query_params)
+
+    # reloading types should see the difference
+    manager.reload_types()
+    descriptor = manager.type_registry.get_descriptor(Thing)
+    assert "cls_attr" in descriptor.class_attributes
+

@@ -1,4 +1,5 @@
 from logging import getLogger
+import uuid
 
 from py2neo import cypher, neo4j
 
@@ -26,11 +27,10 @@ class TypeSystem(AttributedBase):
     """ ``TypeSystem`` is a node that represents the root
     of the type hierarchy.
 
-    The current version of the hierarchy is tracked using
-    its version attribute.
+    Inside the database, the current version of the hierarchy is
+    tracked using a ``version`` attribute on the TypeSystem node.
     """
     id = String(unique=True)
-    version = Uuid()
 
 
 def get_attr_filter(obj, type_registry):
@@ -140,30 +140,40 @@ class Manager(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _query_type_digest(self):
+    def _type_system_version(self):
         query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts',
-                                          self.type_registry),
-            'MATCH',
-            '   ts -[:DEFINES]-> () <-[:ISA*0..]- () <-[:DECLAREDON*0..]- n',
-            'WITH DISTINCT n',
-            'RETURN sum(id(n))'
+            'START',
+            get_start_clause(self.type_system, 'ts', self.type_registry),
+            'RETURN COALESCE(ts.version?, "noversion")'
         )
 
         rows = self.query(query)
-        (digest,) = next(rows)
-        return digest
+        (version,) = next(rows)
+        return version
+
+    def invalidate_type_system(self):
+        query = join_lines(
+            'START',
+            get_start_clause(self.type_system, 'ts', self.type_registry),
+            'SET ts.version = {new_version}',
+            'RETURN ts.version'
+        )
+
+        new_version = Uuid.to_primitive(uuid.uuid4(), for_db=True)
+        rows = self._execute(query, new_version=new_version)
+        (version,) = next(rows)
+        return version
 
     def reload_types(self):
         """Reload the type registry for this instance from the graph
         database.
         """
-        current_digest = self._query_type_digest()
+        current_version = self._type_system_version()
         if Manager._type_registry_cache:
-            cached_registry, digest = Manager._type_registry_cache
-            if current_digest == digest:
+            cached_registry, version = Manager._type_registry_cache
+            if current_version == version:
                 log.debug(
-                    'using cached type registry, digest: %s', current_digest)
+                    'using cached type registry, version: %s', current_version)
                 self.type_registry = cached_registry.clone()
                 return
 
@@ -185,7 +195,7 @@ class Manager(object):
 
         Manager._type_registry_cache = (
             self.type_registry.clone(),
-            current_digest
+            current_version
         )
 
     def _get_changes(self, persistable):
@@ -292,7 +302,7 @@ class Manager(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
-        Manager._type_registry_cache = None
+        self.invalidate_type_system()
         return cls
 
     def _update(self, persistable, existing, changes):
@@ -388,6 +398,7 @@ class Manager(object):
 
         try:
             (result,) = next(self._execute(query, **query_args))
+            self.invalidate_type_system()
         except StopIteration:
             # this can happen, if no attributes where changed on a type
             result = persistable
@@ -417,7 +428,7 @@ class Manager(object):
             obj_type = type(obj)
 
             query = get_create_relationship_query(obj, self.type_registry)
-
+            self.invalidate_type_system()
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
@@ -442,7 +453,6 @@ class Manager(object):
             obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
-
         self._index_object(obj, node_or_rel)
 
         return obj
@@ -583,6 +593,7 @@ class Manager(object):
 
         try:
             next(self._execute(query, **query_args))
+            self.invalidate_type_system()
         except StopIteration:
             raise CannotUpdateType("Type or bases not found in the database.")
 
@@ -751,7 +762,9 @@ class Manager(object):
 
         # TODO: delete node/rel from indexes
 
-        return next(self._execute(query))
+        res = next(self._execute(query))
+        self.invalidate_type_system()
+        return res
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
@@ -764,7 +777,14 @@ class Manager(object):
             A generator with tuples containing stored objects or values.
         """
         params = dict_to_db_values_dict(params)
-        for row in self._execute(query, **params):
+        result = self._execute(query, **params)
+
+        for mutating_clause in ('SET', 'DELETE', 'CREATE'):
+            if mutating_clause in query.upper():
+                self.invalidate_type_system()
+                break
+
+        for row in result:
             yield tuple(self._convert_row(row))
 
     def destroy(self):
