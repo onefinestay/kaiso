@@ -14,7 +14,9 @@ In addition to objects, Kaiso also stores the class information in the graph.
 This allows us to use cypher to query instance information, but also to answer
 questions about our types.
 
-Let's define some basic classes::
+Let's define some basic classes
+
+.. code:: python
 
     from kaiso.attributes import Integer, Outgoing, String, Uuid
     from kaiso.types import Entity, Relationship
@@ -48,7 +50,9 @@ Let's define some basic classes::
         n_siblings = Integer()
 
 
-As with any orm, we can make some instances and persist them in our graph::
+As with any orm, we can make some instances and persist them in our graph
+
+.. code:: python
 
     from kaiso.persistence import Manager
     manager = Manager("http://localhost:7474/db/data/")
@@ -73,7 +77,9 @@ However, in addition, we can also see the type information in the graph:
 
 
 We can make use of the type information in our queries, e.g. to find all
-herbivores who know a carnivore::
+herbivores who know a carnivore
+
+.. code:: cypher
 
     START
         Herbivore=node:persistabletype(id="Herbivore"),
