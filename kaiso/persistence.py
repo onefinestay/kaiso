@@ -3,15 +3,15 @@ import uuid
 
 from py2neo import cypher, neo4j
 
-from kaiso.attributes import Outgoing, Incoming, String, Uuid
+from kaiso.attributes import Outgoing, Incoming, String
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
     UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
-    join_lines, MUTATING_CLAUSES)
+    join_lines)
 from kaiso.references import set_store_for_object
-from kaiso.relationships import InstanceOf
+from kaiso.relationships import InstanceOf, IsA, DeclaredOn
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
@@ -159,7 +159,7 @@ class Manager(object):
             'RETURN ts.version'
         )
 
-        new_version = Uuid.to_primitive(uuid.uuid4(), for_db=True)
+        new_version = uuid.uuid4().hex
         rows = self._execute(query, new_version=new_version)
         (version,) = next(rows)
         return version
@@ -303,7 +303,7 @@ class Manager(object):
             self._index_object(obj, node_or_rel)
 
         # we can't tell whether the CREATE UNIQUE from get_create_types_query
-        # will have any affect, so we must invalidate.
+        # will have any effect, so we must invalidate.
         self.invalidate_type_system()
         return cls
 
@@ -399,7 +399,6 @@ class Manager(object):
 
         try:
             (result,) = next(self._execute(query, **query_args))
-            self.invalidate_type_system()
         except StopIteration:
             # this can happen, if no attributes where changed on a type
             result = persistable
@@ -428,8 +427,10 @@ class Manager(object):
             # object is a relationship
             obj_type = type(obj)
 
+            if obj_type in (IsA, DeclaredOn):
+                self.invalidate_type_system()
             query = get_create_relationship_query(obj, self.type_registry)
-            self.invalidate_type_system()
+
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
@@ -503,6 +504,9 @@ class Manager(object):
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
         params = dict_to_db_values_dict(query_args)
+
+        print query.format(**params)
+
         for row in self._execute(query, **params):
             type_id, bases, class_attrs, instance_attrs = row
 
@@ -739,7 +743,9 @@ class Manager(object):
                 get_start_clause(obj.start, 'n1', self.type_registry),
                 get_start_clause(obj.end, 'n2', self.type_registry),
             )
-            self.invalidate_type_system()
+            rel_type = type(obj)
+            if rel_type in (IsA, DeclaredOn):
+                self.invalidate_type_system()
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
@@ -775,14 +781,13 @@ class Manager(object):
 
         Returns:
             A generator with tuples containing stored objects or values.
+
+        WARNING: If you use this method to modify the type hierarchy,
+        ensure to call ``manager.invalidate_type_hierarchy()`` afterwards.
+        Otherwise managers will continue to use cached versions.
         """
         params = dict_to_db_values_dict(params)
         result = self._execute(query, **params)
-
-        for mutating_clause in MUTATING_CLAUSES:
-            if mutating_clause in query.upper():
-                self.invalidate_type_system()
-                break
 
         for row in result:
             yield tuple(self._convert_row(row))

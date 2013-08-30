@@ -1062,13 +1062,13 @@ def test_class_and_attr_name_clash(manager):
 
 
 def test_type_system_version(manager):
-    forced_uuid = uuid.uuid4()
+    forced_uuid = uuid.uuid4().hex
 
     with patch('kaiso.persistence.uuid') as patched_uuid:
-        patched_uuid.uuid4.return_value = forced_uuid
+        patched_uuid.uuid4().hex = forced_uuid
         manager.invalidate_type_system()
 
-    assert manager._type_system_version() == str(forced_uuid)
+    assert manager._type_system_version() == forced_uuid
 
     new_version = manager.invalidate_type_system()
     assert manager._type_system_version() == new_version
@@ -1130,7 +1130,7 @@ def test_invalidate_type_system(manager):
             id = Uuid(unique=True)
 
         class TypeB(Entity):
-            pass
+            attr = String(unique=True)
 
         class BaseType(Entity):
             pass
@@ -1163,55 +1163,38 @@ def test_invalidate_type_system(manager):
     v2 = manager._type_system_version()
     assert is_distinct_version(v2)
 
-    type_b = TypeB()
+    type_b = TypeB(attr="value")
     manager.save(type_b)  # create instance & type
     v3 = manager._type_system_version()
     assert is_distinct_version(v3)
 
-    rel = Related(type_a, TypeA)
-    manager.save(rel)  # create relationship
+    isa = IsA(type_a, BaseType)
+    isa.base_index = 1
+    manager.save(isa)  # create a type-hierarchy relationship
     v4 = manager._type_system_version()
     assert is_distinct_version(v4)
+
+    rel = Related(type_a, type_b)
+    manager.save(rel)  # create a non-type-hierarchy relationship
+    v4a = manager._type_system_version()
+    assert v4 == v4a
 
     manager.update_type(TypeA, (BaseType,))  # reparent
     v5 = manager._type_system_version()
     assert is_distinct_version(v5)
 
-    query = join_lines(
-        'START',
-        get_start_clause(TypeA, 'TypeA', manager.type_registry),
-        'SET TypeA.foo = {foo}',
-        'RETURN TypeA'
-    )
-    next(manager.query(query, foo="bar"))
-    v6 = manager._type_system_version()  # mutating SET clause
+    manager.delete(isa)  # delete a type-hierarchy relationship
+    v6 = manager._type_system_version()
     assert is_distinct_version(v6)
 
-    query = join_lines(
-        'START',
-        get_start_clause(TypeA, 'TypeA', manager.type_registry),
-        'CREATE TypeA -[r:SELFREFERENCE]-> TypeA',
-        'RETURN TypeA'
-    )
-    next(manager.query(query))
-    v5 = manager._type_system_version()  # mutating CREATE clause
-    assert is_distinct_version(v5)
-
-    query = join_lines(
-        'START',
-        get_start_clause(TypeA, 'TypeA', manager.type_registry),
-        'MATCH TypeA -[r:SELFREFERENCE]-> TypeA',
-        'DELETE r',
-        'RETURN TypeA'
-    )
-    next(manager.query(query))
-    v6 = manager._type_system_version()  # mutating DELETE clause
-    assert is_distinct_version(v6)
+    manager.delete(rel)  # delete a non-type-hierarchy relationship
+    v6a = manager._type_system_version()
+    assert v6 == v6a
 
     manager.delete(TypeA)  # delete type
-    v9 = manager._type_system_version()
-    assert is_distinct_version(v9)
+    v7 = manager._type_system_version()
+    assert is_distinct_version(v7)
 
     manager.delete(type_a)  # delete instance
-    v9a = manager._type_system_version()
-    assert v9 == v9a
+    v7a = manager._type_system_version()
+    assert v7 == v7a
