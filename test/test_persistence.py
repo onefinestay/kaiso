@@ -225,6 +225,39 @@ def test_delete_relationship(manager):
     assert 'Related' not in rels
 
 
+def test_delete_indexed_relationship(manager):
+    """ Verify that indexed relationships can be deleted from the database
+    without needing references to the start and end nodes.
+    """
+    thing1 = Thing()
+    thing2 = Thing()
+    rel = IndexedRelated(thing1, thing2)
+
+    manager.save(thing1)
+    manager.save(thing2)
+    manager.save(rel)
+
+    # serialize and deserialize to remove references
+    rel = manager.deserialize(manager.serialize(rel))
+    assert not hasattr(rel, "start")
+
+    manager.delete(rel)
+
+    rows = manager.query("""
+        START n1 = node(*)
+        MATCH n1 -[r]-> n2
+        RETURN n1.id?, r.__type__
+    """)
+
+    result = list(rows)
+    ids = [item[0] for item in result]
+    rels = [item[1] for item in result]
+
+    assert str(thing1.id) in ids
+    assert str(thing2.id) in ids
+    assert 'Related' not in rels
+
+
 def test_update_relationship_end_points(manager):
     thing1 = Thing()
     thing2 = Thing()
