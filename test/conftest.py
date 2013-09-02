@@ -52,6 +52,14 @@ def manager(request, manager_factory):
 
 
 @pytest.fixture
+def connection(request):
+    from kaiso.connection import get_connection
+
+    neo4j_uri = request.config.getoption('neo4j_uri')
+    return get_connection(neo4j_uri)
+
+
+@pytest.fixture
 def type_registry(request):
     from kaiso.types import TypeRegistry
     registry = TypeRegistry()
