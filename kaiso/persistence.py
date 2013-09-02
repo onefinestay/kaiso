@@ -144,7 +144,7 @@ class Manager(object):
         query = join_lines(
             'START',
             get_start_clause(self.type_system, 'ts', self.type_registry),
-            'RETURN COALESCE(ts.version?, "noversion")'
+            'RETURN ts.version?'
         )
 
         rows = self._execute(query)
@@ -155,14 +155,11 @@ class Manager(object):
         query = join_lines(
             'START',
             get_start_clause(self.type_system, 'ts', self.type_registry),
-            'SET ts.version = {new_version}',
-            'RETURN ts.version'
+            'SET ts.version = {new_version}'
         )
 
         new_version = uuid.uuid4().hex
-        rows = self._execute(query, new_version=new_version)
-        (version,) = next(rows)
-        return version
+        next(self._execute(query, new_version=new_version), None)
 
     def reload_types(self):
         """Reload the type registry for this instance from the graph
@@ -221,15 +218,16 @@ class Manager(object):
                 'RETURN cls, collect(attr.name?)'
             )
 
-            # don't use self.query since we don't want to convert the cls dict
+            # don't use self.query since we don't want to convert the py2neo
+            # node into an object
             rows = self._execute(query, **query_args)
-            existing_cls_attrs, attrs = next(rows, (None, None))
+            cls_node, attrs = next(rows, (None, None))
 
-            if existing_cls_attrs is None:
+            if cls_node is None:
                 # have not found the cls
                 return None, {}
 
-            existing_cls_attrs = existing_cls_attrs.get_properties()
+            existing_cls_attrs = cls_node.get_properties()
             new_cls_attrs = registry.object_to_dict(persistable)
 
             # If any existing keys in "new" are missing in "old", add `None`s.
@@ -415,6 +413,7 @@ class Manager(object):
         """
 
         query_args = {}
+        invalidates_types = False
 
         if isinstance(obj, PersistableType):
             # object is a type; create the type and its hierarchy
@@ -428,7 +427,7 @@ class Manager(object):
             obj_type = type(obj)
 
             if obj_type in (IsA, DeclaredOn):
-                self.invalidate_type_system()
+                invalidates_types = True
             query = get_create_relationship_query(obj, self.type_registry)
 
         else:
@@ -454,6 +453,8 @@ class Manager(object):
             obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
+        if invalidates_types:
+            self.invalidate_type_system()
         self._index_object(obj, node_or_rel)
 
         return obj
@@ -504,8 +505,6 @@ class Manager(object):
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
         params = dict_to_db_values_dict(query_args)
-
-        print query.format(**params)
 
         for row in self._execute(query, **params):
             type_id, bases, class_attrs, instance_attrs = row
@@ -733,6 +732,8 @@ class Manager(object):
         Returns:
             A tuple: with (number of nodes removed, number of rels removed)
         """
+        invalidates_types = False
+
         if isinstance(obj, Relationship):
             if is_indexable(type(obj)):
                 query = join_lines(
@@ -753,7 +754,7 @@ class Manager(object):
                 )
             rel_type = type(obj)
             if rel_type in (IsA, DeclaredOn):
-                self.invalidate_type_system()
+                invalidates_types = True
 
         elif isinstance(obj, PersistableType):
             query = join_lines(
@@ -766,7 +767,7 @@ class Manager(object):
             ).format(
                 get_start_clause(obj, 'obj', self.type_registry)
             )
-            self.invalidate_type_system()
+            invalidates_types = True
         else:
             query = join_lines(
                 'START {}',
@@ -779,6 +780,8 @@ class Manager(object):
 
         # TODO: delete node/rel from indexes
         res = next(self._execute(query))
+        if invalidates_types:
+            self.invalidate_type_system()
         return res
 
     def query(self, query, **params):
@@ -791,9 +794,11 @@ class Manager(object):
         Returns:
             A generator with tuples containing stored objects or values.
 
-        WARNING: If you use this method to modify the type hierarchy,
-        ensure to call ``manager.invalidate_type_hierarchy()`` afterwards.
-        Otherwise managers will continue to use cached versions.
+        WARNING: If you use this method to modify the type hierarchy (i.e.
+        types, their declared attributes or their relationships), ensure
+        to call ``manager.invalidate_type_hierarchy()`` afterwards.
+        Otherwise managers will continue to use cached versions. Instances can
+        be modified without changing the type hierarchy.
         """
         params = dict_to_db_values_dict(params)
         result = self._execute(query, **params)

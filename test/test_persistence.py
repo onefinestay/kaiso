@@ -1103,8 +1103,8 @@ def test_type_system_version(manager):
 
     assert manager._type_system_version() == forced_uuid
 
-    new_version = manager.invalidate_type_system()
-    assert manager._type_system_version() == new_version
+    manager.invalidate_type_system()
+    assert manager._type_system_version() != forced_uuid
 
 
 def test_type_system_reload(manager_factory):
@@ -1188,8 +1188,7 @@ def test_invalidate_type_system(manager):
     assert is_distinct_version(v1)
 
     manager.save(TypeA)  # save unchanged type
-    v1a = manager._type_system_version()
-    assert v1 == v1a
+    assert manager._type_system_version() == v1
 
     type_a = TypeA()
     manager.save(type_a)  # create instance
@@ -1201,6 +1200,18 @@ def test_invalidate_type_system(manager):
     v3 = manager._type_system_version()
     assert is_distinct_version(v3)
 
+    type_b.new_attr = "value"
+    manager.save(type_b)  # add instance attribute
+    assert manager._type_system_version() == v3
+
+    type_b.new_attr = "new_value"
+    manager.save(type_b)  # modify instance attribute
+    assert manager._type_system_version() == v3
+
+    del type_b.new_attr
+    manager.save(type_b)  # delete instance attribute
+    assert manager._type_system_version() == v3
+
     isa = IsA(type_a, BaseType)
     isa.base_index = 1
     manager.save(isa)  # create a type-hierarchy relationship
@@ -1209,25 +1220,42 @@ def test_invalidate_type_system(manager):
 
     rel = Related(type_a, type_b)
     manager.save(rel)  # create a non-type-hierarchy relationship
-    v4a = manager._type_system_version()
-    assert v4 == v4a
+    assert manager._type_system_version() == v4
 
     manager.update_type(TypeA, (BaseType,))  # reparent
     v5 = manager._type_system_version()
     assert is_distinct_version(v5)
+
+    # update_type reloads the type hierarchy, so refresh references
+    TypeA = manager.type_registry.get_class_by_id('TypeA')
+    TypeB = manager.type_registry.get_class_by_id('TypeB')
+    BaseType = manager.type_registry.get_class_by_id('BaseType')
 
     manager.delete(isa)  # delete a type-hierarchy relationship
     v6 = manager._type_system_version()
     assert is_distinct_version(v6)
 
     manager.delete(rel)  # delete a non-type-hierarchy relationship
-    v6a = manager._type_system_version()
-    assert v6 == v6a
+    assert manager._type_system_version() == v6
 
     manager.delete(TypeA)  # delete type
     v7 = manager._type_system_version()
     assert is_distinct_version(v7)
 
     manager.delete(type_a)  # delete instance
-    v7a = manager._type_system_version()
-    assert v7 == v7a
+    assert manager._type_system_version() == v7
+
+    TypeB.cls_attr = "value"
+    manager.save(TypeB)  # add class attribute
+    v8 = manager._type_system_version()
+    assert is_distinct_version(v8)
+
+    TypeB.cls_attr = "new_value"
+    manager.save(TypeB)  # modify class attribute
+    v9 = manager._type_system_version()
+    assert is_distinct_version(v9)
+
+    del TypeB.cls_attr
+    manager.save(TypeB)  # delete class attribute
+    v10 = manager._type_system_version()
+    assert is_distinct_version(v10)
