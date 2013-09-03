@@ -1,8 +1,9 @@
 from logging import getLogger
+import uuid
 
 from py2neo import cypher, neo4j
 
-from kaiso.attributes import Outgoing, Incoming, String, Uuid
+from kaiso.attributes import Outgoing, Incoming, String
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
     UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
@@ -10,7 +11,7 @@ from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
 from kaiso.references import set_store_for_object
-from kaiso.relationships import InstanceOf
+from kaiso.relationships import InstanceOf, IsA, DeclaredOn
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
@@ -26,11 +27,10 @@ class TypeSystem(AttributedBase):
     """ ``TypeSystem`` is a node that represents the root
     of the type hierarchy.
 
-    The current version of the hierarchy is tracked using
-    its version attribute.
+    Inside the database, the current version of the hierarchy is
+    tracked using a ``version`` attribute on the TypeSystem node.
     """
     id = String(unique=True)
-    version = Uuid()
 
 
 def get_attr_filter(obj, type_registry):
@@ -140,30 +140,37 @@ class Manager(object):
         if not isinstance(obj, Relationship):
             set_store_for_object(obj, self)
 
-    def _query_type_digest(self):
+    def _type_system_version(self):
         query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts',
-                                          self.type_registry),
-            'MATCH',
-            '   ts -[:DEFINES]-> () <-[:ISA*0..]- () <-[:DECLAREDON*0..]- n',
-            'WITH DISTINCT n',
-            'RETURN sum(id(n))'
+            'START',
+            get_start_clause(self.type_system, 'ts', self.type_registry),
+            'RETURN ts.version?'
         )
 
-        rows = self.query(query)
-        (digest,) = next(rows)
-        return digest
+        rows = self._execute(query)
+        (version,) = next(rows)
+        return version
+
+    def invalidate_type_system(self):
+        query = join_lines(
+            'START',
+            get_start_clause(self.type_system, 'ts', self.type_registry),
+            'SET ts.version = {new_version}'
+        )
+
+        new_version = uuid.uuid4().hex
+        next(self._execute(query, new_version=new_version), None)
 
     def reload_types(self):
         """Reload the type registry for this instance from the graph
         database.
         """
-        current_digest = self._query_type_digest()
+        current_version = self._type_system_version()
         if Manager._type_registry_cache:
-            cached_registry, digest = Manager._type_registry_cache
-            if current_digest == digest:
+            cached_registry, version = Manager._type_registry_cache
+            if current_version == version:
                 log.debug(
-                    'using cached type registry, digest: %s', current_digest)
+                    'using cached type registry, version: %s', current_version)
                 self.type_registry = cached_registry.clone()
                 return
 
@@ -185,7 +192,7 @@ class Manager(object):
 
         Manager._type_registry_cache = (
             self.type_registry.clone(),
-            current_digest
+            current_version
         )
 
     def _get_changes(self, persistable):
@@ -211,15 +218,16 @@ class Manager(object):
                 'RETURN cls, collect(attr.name?)'
             )
 
-            # don't use self.query since we don't want to convert the cls dict
+            # don't use self.query since we don't want to convert the py2neo
+            # node into an object
             rows = self._execute(query, **query_args)
-            existing_cls_attrs, attrs = next(rows, (None, None))
+            cls_node, attrs = next(rows, (None, None))
 
-            if existing_cls_attrs is None:
+            if cls_node is None:
                 # have not found the cls
                 return None, {}
 
-            existing_cls_attrs = existing_cls_attrs.get_properties()
+            existing_cls_attrs = cls_node.get_properties()
             new_cls_attrs = registry.object_to_dict(persistable)
 
             # If any existing keys in "new" are missing in "old", add `None`s.
@@ -292,7 +300,9 @@ class Manager(object):
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
 
-        Manager._type_registry_cache = None
+        # we can't tell whether the CREATE UNIQUE from get_create_types_query
+        # will have any effect, so we must invalidate.
+        self.invalidate_type_system()
         return cls
 
     def _update(self, persistable, existing, changes):
@@ -344,7 +354,6 @@ class Manager(object):
                 'DELETE attr, r',
                 'RETURN n',
             )
-
             self._update_types(persistable)
         else:
             start_clause = get_start_clause(existing, 'n', registry)
@@ -404,6 +413,7 @@ class Manager(object):
         """
 
         query_args = {}
+        invalidates_types = False
 
         if isinstance(obj, PersistableType):
             # object is a type; create the type and its hierarchy
@@ -416,13 +426,14 @@ class Manager(object):
             # object is a relationship
             obj_type = type(obj)
 
+            if obj_type in (IsA, DeclaredOn):
+                invalidates_types = True
             query = get_create_relationship_query(obj, self.type_registry)
 
         else:
             # object is an instance; create its type, its hierarchy and then
             # create the instance
             obj_type = type(obj)
-
             self._update_types(obj_type)
 
             idx_name = get_index_name(PersistableType)
@@ -442,7 +453,8 @@ class Manager(object):
             obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
-
+        if invalidates_types:
+            self.invalidate_type_system()
         self._index_object(obj, node_or_rel)
 
         return obj
@@ -493,6 +505,7 @@ class Manager(object):
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
         params = dict_to_db_values_dict(query_args)
+
         for row in self._execute(query, **params):
             type_id, bases, class_attrs, instance_attrs = row
 
@@ -583,6 +596,7 @@ class Manager(object):
 
         try:
             next(self._execute(query, **query_args))
+            self.invalidate_type_system()
         except StopIteration:
             raise CannotUpdateType("Type or bases not found in the database.")
 
@@ -718,6 +732,8 @@ class Manager(object):
         Returns:
             A tuple: with (number of nodes removed, number of rels removed)
         """
+        invalidates_types = False
+
         if isinstance(obj, Relationship):
             if is_indexable(type(obj)):
                 query = join_lines(
@@ -736,6 +752,10 @@ class Manager(object):
                     get_start_clause(obj.start, 'n1', self.type_registry),
                     get_start_clause(obj.end, 'n2', self.type_registry),
                 )
+            rel_type = type(obj)
+            if rel_type in (IsA, DeclaredOn):
+                invalidates_types = True
+
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
@@ -747,6 +767,7 @@ class Manager(object):
             ).format(
                 get_start_clause(obj, 'obj', self.type_registry)
             )
+            invalidates_types = True
         else:
             query = join_lines(
                 'START {}',
@@ -758,8 +779,10 @@ class Manager(object):
             )
 
         # TODO: delete node/rel from indexes
-
-        return next(self._execute(query))
+        res = next(self._execute(query))
+        if invalidates_types:
+            self.invalidate_type_system()
+        return res
 
     def query(self, query, **params):
         """ Queries the store given a parameterized cypher query.
@@ -770,9 +793,17 @@ class Manager(object):
 
         Returns:
             A generator with tuples containing stored objects or values.
+
+        WARNING: If you use this method to modify the type hierarchy (i.e.
+        types, their declared attributes or their relationships), ensure
+        to call ``manager.invalidate_type_hierarchy()`` afterwards.
+        Otherwise managers will continue to use cached versions. Instances can
+        be modified without changing the type hierarchy.
         """
         params = dict_to_db_values_dict(params)
-        for row in self._execute(query, **params):
+        result = self._execute(query, **params)
+
+        for row in result:
             yield tuple(self._convert_row(row))
 
     def destroy(self):

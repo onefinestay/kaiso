@@ -81,7 +81,7 @@ class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
     _static_descriptors = {}
-    _builtin_types = (PersistableType, )
+    _builtin_types = (PersistableType,)
 
     def __init__(self):
         self._descriptors = {
