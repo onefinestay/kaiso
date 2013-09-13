@@ -18,9 +18,9 @@ class TemporaryStaticTypes(object):
         def foo(request):
             patcher = TemporaryStaticTypes()
             patcher.start()
+            request.addfinalizer(patcher.stop)
             class Foo(Entity):
                 pass
-            request.addfinalizer(patcher.stop)
             return Foo
     """
 
