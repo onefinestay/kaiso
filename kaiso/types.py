@@ -87,8 +87,10 @@ class TypeRegistry(object):
 
     @property
     def _static_descriptors(self):
-        return {type_id: Descriptor(cls)
-            for type_id, cls in collected_static_classes.iteritems()}
+        return {
+            type_id: Descriptor(cls)
+            for type_id, cls in collected_static_classes.iteritems()
+        }
 
     def is_registered(self, cls):
         """ Determine if ``cls`` is a registered type.
