@@ -84,7 +84,6 @@ class TypeRegistry(object):
 
     def __init__(self):
         self._dynamic_descriptors = {}
-        self._classes_in_db = []
 
     @property
     def _static_descriptors(self):
