@@ -119,17 +119,14 @@ class TypeRegistry(object):
         with collector():
             cls = PersistableType(cls_id, bases, attrs)
 
-        self.register(cls, dynamic=True)
+        self.register(cls)
 
         return cls
 
-    def register(self, cls, dynamic=False):
+    def register(self, cls):
         """ Register a type
         """
-        if dynamic:
-            descriptors = self._dynamic_descriptors
-        else:
-            descriptors = self._static_descriptors
+        descriptors = self._dynamic_descriptors
 
         name = get_type_id(cls)
         if name in descriptors:

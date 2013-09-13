@@ -1051,7 +1051,7 @@ def test_changing_bases_does_not_create_duplicate_types(manager):
         class SubShrub(Shrub):
             pass
 
-    manager.type_registry.register(SubShrub, dynamic=True)
+    manager.type_registry.register(SubShrub)
     manager.save(SubShrub)
 
     rows = manager.query(
@@ -1168,9 +1168,9 @@ def test_invalidate_type_system(manager):
         class BaseType(Entity):
             pass
 
-    manager.type_registry.register(TypeA, dynamic=True)
-    manager.type_registry.register(TypeB, dynamic=True)
-    manager.type_registry.register(BaseType, dynamic=True)
+    manager.type_registry.register(TypeA)
+    manager.type_registry.register(TypeB)
+    manager.type_registry.register(BaseType)
 
     versions = []
 

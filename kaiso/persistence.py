@@ -624,7 +624,7 @@ class Manager(object):
         classes = collection.values()
 
         for cls in classes:
-            self.type_registry.register(cls, dynamic=True)
+            self.type_registry.register(cls)
 
         for cls in classes:
             self.save(cls)
