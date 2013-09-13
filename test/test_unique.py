@@ -1,6 +1,7 @@
 import random
 import string
 
+import py2neo
 import pytest
 
 from kaiso.exceptions import UniqueConstraintError
@@ -118,6 +119,8 @@ class TestReplace(object):
 
         obj = RandomThing(code='a')
         manager.save(obj)
+        indexes = manager._conn.get_indexes(py2neo.neo4j.Node)
+        assert name.lower() in indexes
 
     def test_rel_uniqueness(self, manager):
         obj1 = UniqueThing(id=1, code='A', extra='lunch')
