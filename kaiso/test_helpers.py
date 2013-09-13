@@ -12,16 +12,20 @@ class TemporaryStaticTypes(object):
             class Foo(Entity):
                 pass
 
-    or as a pytest fixture
+    Though generally via the funcarg
 
         @pytest.fixture
-        def foo(request):
-            patcher = TemporaryStaticTypes()
-            patcher.start()
-            request.addfinalizer(patcher.stop)
+        def foo(temporary_static_types):
             class Foo(Entity):
                 pass
             return Foo
+
+    or
+        def test_foo(temporary_static_types):
+            class Foo(Entity):
+                pass
+
+            assert(...)
     """
 
     def start(self):

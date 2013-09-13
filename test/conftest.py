@@ -64,3 +64,11 @@ def type_registry(request):
     from kaiso.types import TypeRegistry
     registry = TypeRegistry()
     return registry
+
+
+@pytest.fixture
+def temporary_static_types(request, manager):
+    from kaiso.test_helpers import TemporaryStaticTypes
+    patcher = TemporaryStaticTypes()
+    patcher.start()
+    request.addfinalizer(patcher.stop)
