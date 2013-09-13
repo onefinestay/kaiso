@@ -80,32 +80,16 @@ class PersistableType(type, Persistable):
 class TypeRegistry(object):
     """ Keeps track of statically and dynamically declared types.
     """
-    _static_descriptors = {}
     _builtin_types = (PersistableType,)
 
     def __init__(self):
-        self._descriptors = {
-            'static': self._static_descriptors,
-            'dynamic': {}
-        }
+        self._dynamic_descriptors = {}
+        self._classes_in_db = []
 
-        if not self._static_descriptors:
-            for type_ in self._builtin_types:
-                self.register(type_)
-        self._sync_static_descriptors()
-
-    @classmethod
-    def _sync_static_descriptors(cls):
-        # exit early if there've been no changes to the statically
-        # collected types
-        num_registered = len(cls._static_descriptors)
-        static_registered = num_registered - len(cls._builtin_types)
-        if static_registered == len(collected_static_classes):
-            return
-
-        for name, collected_cls in collected_static_classes.iteritems():
-            if name not in cls._static_descriptors:
-                cls._static_descriptors[name] = Descriptor(collected_cls)
+    @property
+    def _static_descriptors(self):
+        return {type_id: Descriptor(cls)
+            for type_id, cls in collected_static_classes.iteritems()}
 
     def is_registered(self, cls):
         """ Determine if ``cls`` is a registered type.
@@ -121,12 +105,12 @@ class TypeRegistry(object):
         """
         name = get_type_id(cls) if isinstance(cls, type) else cls
 
-        return (name in self._descriptors['static'] or
-                name in self._descriptors['dynamic'])
+        return (name in self._static_descriptors or
+                name in self._dynamic_descriptors)
 
     def is_dynamic_type(self, cls):
         class_id = get_type_id(cls)
-        return (class_id in self._descriptors['dynamic'])
+        return (class_id in self._dynamic_descriptors)
 
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
@@ -143,9 +127,9 @@ class TypeRegistry(object):
         """ Register a type
         """
         if dynamic:
-            descriptors = self._descriptors['dynamic']
+            descriptors = self._dynamic_descriptors
         else:
-            descriptors = self._descriptors['static']
+            descriptors = self._static_descriptors
 
         name = get_type_id(cls)
         if name in descriptors:
@@ -156,7 +140,6 @@ class TypeRegistry(object):
     def get_registered_types(self):
         """ Yields all code-defined classes.
         """
-        self._sync_static_descriptors()
         for descr in self._static_descriptors.values():
             cls = descr.cls
             if issubclass(cls, Entity):
@@ -177,9 +160,8 @@ class TypeRegistry(object):
         Returns:
             The class that was registered with ``cls_id``
         """
-        self._sync_static_descriptors()
         try:
-            return self._descriptors['static'][cls_id].cls
+            return self._static_descriptors[cls_id].cls
         except KeyError:
             return self.get_descriptor_by_id(cls_id).cls
 
@@ -203,14 +185,13 @@ class TypeRegistry(object):
         Raises:
             UnknownType if no type has been registered with the given id.
         """
-        self._sync_static_descriptors()
         if not self.is_registered(cls_id):
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
         try:
-            return self._descriptors['dynamic'][cls_id]
+            return self._dynamic_descriptors[cls_id]
         except KeyError:
-            return self._descriptors['static'][cls_id]
+            return self._static_descriptors[cls_id]
 
     def get_index_entries(self, obj):
         if isinstance(obj, PersistableType):
@@ -352,7 +333,7 @@ class TypeRegistry(object):
         """Return a copy of this TypeRegistry that maintains an independent
         dynamic type registry"""
         clone = TypeRegistry()
-        clone._descriptors['dynamic'] = self._descriptors['dynamic'].copy()
+        clone._dynamic_descriptors = self._dynamic_descriptors.copy()
         return clone
 
 
