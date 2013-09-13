@@ -116,10 +116,6 @@ class TestReplace(object):
         RandomThing = type(
             name, (Entity,), {'code': String(unique=True)})
 
-        # Register the type manaually
-        # Could we create this as a dynamic type and this test still be valid?
-        manager.type_registry.register(RandomThing)
-
         obj = RandomThing(code='a')
         manager.save(obj)
 
