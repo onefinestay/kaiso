@@ -6,18 +6,30 @@ from kaiso.relationships import Relationship
 from kaiso.types import Entity
 
 
-class Contains(Relationship):
-    id = Uuid(unique=True)
+@pytest.fixture
+def static_types(manager, temporary_static_types):
+    class Contains(Relationship):
+        id = Uuid(unique=True)
+
+    class Box(Entity):
+        id = Uuid(unique=True)
+
+        contains = Outgoing(Contains)
+        contained_within = Incoming(Contains)
+
+    manager.save(Box)
+    manager.save(Contains)
+
+    return {
+        'Box': Box,
+        'Contains': Contains,
+    }
 
 
-class Box(Entity):
-    id = Uuid(unique=True)
+def test_rel_attributes(manager, static_types):
+    Box = static_types['Box']
+    Contains = static_types['Contains']
 
-    contains = Outgoing(Contains)
-    contained_within = Incoming(Contains)
-
-
-def test_rel_attributes(manager):
     box1 = Box()
     box2 = Box()
     contains = Contains(box1, box2)
@@ -30,7 +42,9 @@ def test_rel_attributes(manager):
     assert box2.contained_within.one().id == box1.id
 
 
-def test_rel_one_missing(manager):
+def test_rel_one_missing(manager, static_types):
+    Box = static_types['Box']
+
     box = Box()
 
     manager.save(box)
@@ -39,7 +53,10 @@ def test_rel_one_missing(manager):
         box.contains.one()
 
 
-def test_rel_one_multiple(manager):
+def test_rel_one_multiple(manager, static_types):
+    Box = static_types['Box']
+    Contains = static_types['Contains']
+
     parent = Box()
     child1 = Box()
     child2 = Box()
@@ -57,7 +74,9 @@ def test_rel_one_multiple(manager):
         parent.contains.one()
 
 
-def test_empty_rel_attributes(manager):
+def test_empty_rel_attributes(manager, static_types):
+    Box = static_types['Box']
+
     box = Box()
 
     manager.save(box)
@@ -66,7 +85,9 @@ def test_empty_rel_attributes(manager):
     assert box.contained_within.first() is None
 
 
-def test_many_children(manager):
+def test_many_children(manager, static_types):
+    Box = static_types['Box']
+    Contains = static_types['Contains']
 
     parent = Box()
     child1 = Box()
@@ -85,7 +106,10 @@ def test_many_children(manager):
     assert parent.contains.first().id in [child1.id, child2.id]
 
 
-def test_reference_relationship_itself(manager):
+def test_reference_relationship_itself(manager, static_types):
+    Box = static_types['Box']
+    Contains = static_types['Contains']
+
     parent = Box()
     child = Box()
 

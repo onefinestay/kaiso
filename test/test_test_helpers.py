@@ -5,12 +5,9 @@ from kaiso.test_helpers import TemporaryStaticTypes
 
 
 @pytest.fixture
-def bar(request):
-    patcher = TemporaryStaticTypes()
-    patcher.start()
+def bar(temporary_static_types):
     class Bar(Entity):
         pass
-    request.addfinalizer(patcher.stop)
 
 
 def test_context_manager_a():
@@ -25,9 +22,19 @@ def test_context_manager_b():
             pass
 
 
-def test_fixture_a(bar):
+def test_fixture_a(temporary_static_types):
+    class Bar(Entity):
+        pass
+
+
+def test_fixture_b(temporary_static_types):
+    class Bar(Entity):
+        pass
+
+
+def test_fixture_with_types_a(bar):
     pass
 
 
-def test_fixture_b(bar):
+def test_fixture_with_types_b(bar):
     pass

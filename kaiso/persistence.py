@@ -6,7 +6,8 @@ from py2neo import cypher, neo4j
 from kaiso.attributes import Outgoing, Incoming, String
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
-    UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError)
+    UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError,
+    TypeNotInDbError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -190,6 +191,8 @@ class Manager(object):
                 bases = tuple(registry.get_class_by_id(base) for base in bases)
                 registry.create_type(str(type_id), bases, attrs)
 
+            registry._types_in_db.add(type_id)
+
         Manager._type_registry_cache = (
             self.type_registry.clone(),
             current_version
@@ -293,6 +296,8 @@ class Manager(object):
         nodes_or_rels = next(self._execute(query, **query_args))
 
         for obj in objects:
+            type_id = get_type_id(obj)
+            self.type_registry._types_in_db.add(type_id)
             if is_indexable(obj):
                 index_name = get_index_name(obj)
                 self._conn.get_or_create_index(neo4j.Node, index_name)
@@ -431,10 +436,12 @@ class Manager(object):
             query = get_create_relationship_query(obj, self.type_registry)
 
         else:
-            # object is an instance; create its type, its hierarchy and then
-            # create the instance
+            # object is an instance
             obj_type = type(obj)
-            self._update_types(obj_type)
+            type_id = get_type_id(obj_type)
+            if type_id not in self.type_registry._types_in_db:
+                raise TypeNotInDbError("Type `{}` not in db".format(
+                    type_id))
 
             idx_name = get_index_name(PersistableType)
             query = (

@@ -30,6 +30,12 @@ class UnknownType(Exception):
     """
 
 
+class TypeNotInDbError(Exception):  # TODO: name?
+    """Raised when trying to save an instance of a type not in
+    the db
+    """
+
+
 class DeserialisationError(Exception):
     """ Raised when trying to deserialise a dict with no __type__ key """
 
