@@ -16,7 +16,7 @@ from kaiso.types import PersistableType, Entity, collector, get_type_id
 
 
 @pytest.fixture
-def beetroot_diamond(request, manager, temporary_static_types):
+def beetroot_diamond(request, manager):
     class Thing(Entity):
         id = Uuid(unique=True)
         bool_attr = Bool()
@@ -44,14 +44,6 @@ def beetroot_diamond(request, manager, temporary_static_types):
         pass
 
     manager.save(Thing)
-    manager.save(Flavouring)
-    manager.save(Colouring)
-    manager.save(Beetroot)
-    manager.save(Carmine)
-    manager.save(Flavouring)
-    manager.save(Colouring)
-    manager.save(Beetroot)
-    manager.save(Carmine)
 
     return {
         'Thing': Thing,
@@ -63,22 +55,14 @@ def beetroot_diamond(request, manager, temporary_static_types):
 
 
 @pytest.fixture
-def static_types(request, manager, temporary_static_types, beetroot_diamond):
-    class OtherThing(Entity):
-        id = Uuid(unique=True)
-
+def static_types(manager, beetroot_diamond):
     class Related(Relationship):
         str_attr = String()
 
     class IndexedRelated(Relationship):
         id = Uuid(unique=True)
 
-    manager.save(OtherThing)
-    manager.save(Related)
-    manager.save(IndexedRelated)
-
     result = {
-        'OtherThing': OtherThing,
         'Related': Related,
         'IndexedRelated': IndexedRelated,
     }
@@ -171,11 +155,15 @@ def test_simple_add_and_get_instance(manager, static_types):
 
 def test_simple_add_and_get_instance_same_id_different_type(
         manager, static_types):
-    Thing = static_types['Thing']
-    OtherThing = static_types['OtherThing']
-
     """ Instances of two different types that have the same id
     should be distinguishable """
+
+    Thing = static_types['Thing']
+
+    class OtherThing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(OtherThing)
 
     thing1 = Thing()
     thing2 = OtherThing(id=thing1.id)
@@ -260,12 +248,13 @@ def test_delete_relationship(manager, static_types):
 
 
 def test_delete_indexed_relationship(manager, static_types):
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
     """ Verify that indexed relationships can be deleted from the database
     without needing references to the start and end nodes.
     """
+
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
     rel = IndexedRelated(thing1, thing2)
@@ -352,7 +341,7 @@ def test_update_relationship_missing_endpoints(manager, static_types):
     assert queried_rel.end.id == thing3.id
 
 
-def test_delete_instance_types_remain(manager, temporary_static_types):
+def test_delete_instance_types_remain(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
 
@@ -372,7 +361,7 @@ def test_delete_instance_types_remain(manager, temporary_static_types):
     assert result == {Thing}
 
 
-def test_delete_class(manager, temporary_static_types):
+def test_delete_class(manager):
     """
     Verify that types can be removed from the database.
 
@@ -506,7 +495,7 @@ def test_indexed_relationship(manager, static_types):
     }
 
 
-def test_get_type_hierarchy(manager, temporary_static_types):
+def test_get_type_hierarchy(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
 
@@ -577,11 +566,10 @@ def test_get_type_hierarchy_bases_order(manager, beetroot_diamond):
         ('Colouring', ('Thing',)),
         ('Flavouring', ('Thing',)),
         ('Beetroot', ('Flavouring', 'Colouring')),
-        ('Carmine', ('Colouring',)),
     ))
 
 
-def test_type_hierarchy_object(manager, temporary_static_types):
+def test_type_hierarchy_object(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
 
@@ -611,11 +599,14 @@ def test_type_hierarchy_diamond(manager, beetroot_diamond):
     Beetroot = beetroot_diamond['Beetroot']
     Carmine = beetroot_diamond['Carmine']
 
-    beetroot = Beetroot()
-    manager.save(beetroot)
+    manager.save(Beetroot)
+    manager.save(Carmine)
 
+    beetroot = Beetroot()
     carmine = Carmine()
+
     manager.save(carmine)
+    manager.save(beetroot)
 
     query_str = """
         START base = node(*)
@@ -668,7 +659,7 @@ def test_save(manager, static_types):
     assert count(manager, Thing) == 1
 
 
-def test_save_unknown_class(manager, temporary_static_types):
+def test_save_unknown_class(manager):
     class Thing(Entity):
         pass
 
@@ -713,7 +704,7 @@ def test_save_update(manager, static_types):
     assert retrieved.str_attr == 'two'
 
 
-def test_persist_attributes(manager, temporary_static_types):
+def test_persist_attributes(manager):
     """
     Verify persisted attributes maintain their type when added to the
     database.
@@ -784,6 +775,12 @@ def test_attribute_inheritance(manager, beetroot_diamond):
     Verify that attributes are created correctly according to type
     inheritence.
     """
+
+    Beetroot = beetroot_diamond['Beetroot']
+    Carmine = beetroot_diamond['Carmine']
+
+    manager.save(Beetroot)
+    manager.save(Carmine)
 
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
     # there are two paths from it to ``Entity``.

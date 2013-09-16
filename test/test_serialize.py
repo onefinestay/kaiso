@@ -9,7 +9,7 @@ from kaiso.types import (
     Persistable, PersistableType, Entity, AttributedBase, Attribute)
 
 
-def test_classes_to_dict(type_registry, temporary_static_types):
+def test_classes_to_dict(type_registry):
     class Foo(Entity):
         pass
 
@@ -26,7 +26,7 @@ def test_classes_to_dict(type_registry, temporary_static_types):
     assert obj is Foo
 
 
-def test_objects(type_registry, temporary_static_types):
+def test_objects(type_registry):
     class Foo(Entity):
         pass
 
@@ -43,7 +43,7 @@ def test_objects(type_registry, temporary_static_types):
     assert isinstance(obj, Foo)
 
 
-def test_attribute(type_registry, temporary_static_types):
+def test_attribute(type_registry):
     """ Verify (de)serialization of Attributes.
     """
     class Bar(Attribute):
@@ -89,7 +89,7 @@ def test_relationship(type_registry):
     assert isinstance(obj, Relationship)
 
 
-def test_obj_with_attrs(type_registry, temporary_static_types):
+def test_obj_with_attrs(type_registry):
     class Spam(Entity):
         id = String()
         ham = String(default='eggs')

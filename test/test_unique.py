@@ -10,7 +10,7 @@ from kaiso.types import Entity, Relationship
 
 
 @pytest.fixture
-def static_types(manager, temporary_static_types):
+def static_types(manager):
     class UniqueThing(Entity):
         id = Integer(unique=True)
         code = String(unique=True)
@@ -130,7 +130,7 @@ class TestReplace(object):
         assert name.lower() in indexes
 
     def test_rel_uniqueness(
-            self, manager, static_types, temporary_static_types):
+            self, manager, static_types):
         UniqueThing = static_types['UniqueThing']
 
         obj1 = UniqueThing(id=1, code='A', extra='lunch')

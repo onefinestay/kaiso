@@ -7,7 +7,7 @@ from kaiso.types import Entity, collector
 
 
 @pytest.fixture
-def static_types(manager, temporary_static_types):
+def static_types(manager):
     class Animal(Entity):
         name = String()
 
@@ -273,7 +273,7 @@ def test_reparent_missing_type(manager, static_types):
     assert e.value.message == "Type or bases not found in the database."
 
 
-def test_reparent_to_missing_type(manager, temporary_static_types):
+def test_reparent_to_missing_type(manager):
     class Animal(Entity):
         name = String()
 

@@ -7,7 +7,7 @@ from kaiso.types import Entity
 
 
 @pytest.fixture
-def static_types(manager, temporary_static_types):
+def static_types(manager):
     class Contains(Relationship):
         id = Uuid(unique=True)
 

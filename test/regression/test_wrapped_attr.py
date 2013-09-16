@@ -7,7 +7,7 @@ from kaiso.types import Entity, Attribute
 fixture = pytest.mark.usefixtures('storage')
 
 
-def test_save(manager, temporary_static_types):
+def test_save(manager):
     class Wrapper(object):
         def __init__(self, value=None):
             self._value = value

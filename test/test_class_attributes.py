@@ -6,7 +6,7 @@ from kaiso.types import Entity, collector
 
 
 @pytest.fixture
-def static_types(manager, temporary_static_types):
+def static_types(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
         cls_attr = "spam"
