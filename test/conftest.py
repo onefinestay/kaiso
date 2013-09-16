@@ -67,7 +67,7 @@ def type_registry(request):
 
 
 @pytest.fixture(autouse=True)
-def temporary_static_types(request, manager):
+def temporary_static_types(request):
     from kaiso.test_helpers import TemporaryStaticTypes
     patcher = TemporaryStaticTypes()
     patcher.start()
