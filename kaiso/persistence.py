@@ -7,7 +7,7 @@ from kaiso.attributes import Outgoing, Incoming, String
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
     UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError,
-    TypeNotInDbError)
+    TypeNotPersistedError)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -440,8 +440,7 @@ class Manager(object):
             obj_type = type(obj)
             type_id = get_type_id(obj_type)
             if type_id not in self.type_registry._types_in_db:
-                raise TypeNotInDbError("Type `{}` not in db".format(
-                    type_id))
+                raise TypeNotPersistedError(type_id)
 
             idx_name = get_index_name(PersistableType)
             query = (

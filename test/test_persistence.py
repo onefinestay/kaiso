@@ -8,7 +8,7 @@ from py2neo import cypher
 
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
-from kaiso.exceptions import TypeNotInDbError
+from kaiso.exceptions import TypeNotPersistedError
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship, IsA
@@ -664,7 +664,7 @@ def test_save_unknown_class(manager):
         pass
 
     thing = Thing()
-    with pytest.raises(TypeNotInDbError):
+    with pytest.raises(TypeNotPersistedError):
         manager.save(thing)
 
 
