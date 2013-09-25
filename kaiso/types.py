@@ -333,6 +333,7 @@ class TypeRegistry(object):
         dynamic type registry"""
         clone = TypeRegistry()
         clone._dynamic_descriptors = self._dynamic_descriptors.copy()
+        clone._types_in_db = self._types_in_db.copy()
         return clone
 
 

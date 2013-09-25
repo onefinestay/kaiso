@@ -1044,3 +1044,22 @@ def test_invalidate_type_system(manager, static_types):
     manager.save(TypeB)  # delete class attribute
     v10 = manager._type_system_version()
     assert is_distinct_version(v10)
+
+
+def test_cached_type_system_keeps_types_in_db(manager_factory):
+    # regression test
+    manager = manager_factory(skip_type_loading=True)
+    manager.destroy()
+
+    manager1 = manager_factory()
+
+    class Foo(Entity):
+        pass
+
+    manager1.save(Foo)
+    manager1.reload_types()
+
+    manager2 = manager_factory()
+
+    foo = Foo()
+    manager2.save(foo)
