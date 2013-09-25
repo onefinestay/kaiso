@@ -1,0 +1,8 @@
+Version 0.10.0
+---------
+
+Explicit type creation: Types are no longer lazily created when instance.save
+is called. If the type isn't already persisted, `TypeNotPersistedError` will be
+raised.
+
+This enables more aggressive caching of the type registry.

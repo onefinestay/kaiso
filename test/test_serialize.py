@@ -9,20 +9,9 @@ from kaiso.types import (
     Persistable, PersistableType, Entity, AttributedBase, Attribute)
 
 
-class Foo(Entity):
-    pass
-
-
-class Bar(Attribute):
-    pass
-
-
-class Spam(Entity):
-    id = String()
-    ham = String(default='eggs')
-
-
 def test_classes_to_dict(type_registry):
+    class Foo(Entity):
+        pass
 
     dct = type_registry.object_to_dict(Entity)
     assert dct == {'__type__': 'PersistableType', 'id': 'Entity'}
@@ -38,6 +27,8 @@ def test_classes_to_dict(type_registry):
 
 
 def test_objects(type_registry):
+    class Foo(Entity):
+        pass
 
     dct = type_registry.object_to_dict(Entity())
     assert dct == {'__type__': 'Entity'}
@@ -55,6 +46,9 @@ def test_objects(type_registry):
 def test_attribute(type_registry):
     """ Verify (de)serialization of Attributes.
     """
+    class Bar(Attribute):
+        pass
+
     # Attribute dicts always contain both ``unique`` and ``required`` keys.
     attr = Bar(unique=True)
     dct = type_registry.object_to_dict(attr)
@@ -96,6 +90,9 @@ def test_relationship(type_registry):
 
 
 def test_obj_with_attrs(type_registry):
+    class Spam(Entity):
+        id = String()
+        ham = String(default='eggs')
 
     spam = Spam(id=None)
 
@@ -198,13 +195,16 @@ def test_missing_info(type_registry):
         type_registry.dict_to_object({})
 
 
-def test_IsA_and_InstanceOf_type_relationships():
+def test_IsA_and_InstanceOf_type_relationships(temporary_static_types):
     """ Testing type hierarchy creation.
 
     We don't want to test all the types in their relationships,
     but only the set of types which are persisted with IsA and InstanceOf
     relationships.
     """
+    class Foo(Entity):
+        pass
+
     result = list(get_type_relationships(Entity))
 
     assert result == [

@@ -19,6 +19,7 @@ def test_save_dynamic_typed_obj(manager):
 
     attrs = {'id': String(unique=True)}
     Foobar = manager.create_type('Foobar', (Entity,), attrs)
+    manager.save(Foobar)
 
     foo = Foobar(id='spam')
     manager.save(foo)
@@ -129,6 +130,7 @@ def test_load_dynamic_types(manager):
 def test_add_attr_to_type_via_2nd_manager(manager):
     attrs = {'id': String(unique=True)}
     Shrub = manager.create_type('Shrub', (Entity,), attrs)
+    manager.save(Shrub)
 
     shrub = Shrub(id='spam')
     manager.save(shrub)
