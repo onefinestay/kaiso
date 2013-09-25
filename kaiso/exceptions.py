@@ -30,6 +30,18 @@ class UnknownType(Exception):
     """
 
 
+class TypeNotPersistedError(Exception):
+    """Raised when trying to save an instance of a type that is not
+    yet persisted """
+
+    def __init__(self, type_id):
+        self.type_id = type_id
+        super(TypeNotPersistedError, self).__init__(type_id)
+
+    def __str__(self):
+        return "Type `{}` not in db".format(self.type_id)
+
+
 class DeserialisationError(Exception):
     """ Raised when trying to deserialise a dict with no __type__ key """
 

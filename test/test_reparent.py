@@ -2,27 +2,39 @@ import pytest
 
 from kaiso.attributes import String, Bool
 from kaiso.exceptions import CannotUpdateType, UnsupportedTypeError
-from kaiso.types import Entity, collector
 from kaiso.persistence import get_type_id
+from kaiso.types import Entity, collector
 
 
-class Animal(Entity):
-    name = String()
+@pytest.fixture
+def static_types(manager):
+    class Animal(Entity):
+        name = String()
+
+    class Mammal(Animal):
+        pass
+
+    class WaterBound(Animal):
+        freshwater = Bool()
+
+    class Cetacean(Mammal):
+        pass
+
+    manager.save(Animal)
+    manager.save(Mammal)
+    manager.save(WaterBound)
+    manager.save(Cetacean)
+
+    return {
+        'Animal': Animal,
+        'Mammal': Mammal,
+        'WaterBound': WaterBound,
+        'Cetacean': Cetacean,
+    }
 
 
-class Mammal(Animal):
-    pass
-
-
-class WaterBound(Animal):
-    freshwater = Bool()
-
-
-class Cetacean(Mammal):
-    pass
-
-
-def test_cannot_reparent_non_type(manager):
+def test_cannot_reparent_non_type(manager, static_types):
+    Animal = static_types['Animal']
 
     animal = Animal()
 
@@ -31,7 +43,9 @@ def test_cannot_reparent_non_type(manager):
     assert e.value.message == "Object is not a PersistableType"
 
 
-def test_cannot_reparent_code_defined_types(manager):
+def test_cannot_reparent_code_defined_types(manager, static_types):
+    Animal = static_types['Animal']
+    Cetacean = static_types['Cetacean']
 
     manager.save(Cetacean)
 
@@ -40,7 +54,9 @@ def test_cannot_reparent_code_defined_types(manager):
     assert "defined in code" in e.value.message
 
 
-def test_cannot_reparent_with_incompatible_attributes(manager):
+def test_cannot_reparent_with_incompatible_attributes(manager, static_types):
+    Cetacean = static_types['Cetacean']
+    WaterBound = static_types['WaterBound']
 
     Whale = manager.create_type('Whale', (WaterBound,), {})
     manager.save(Whale)
@@ -65,12 +81,15 @@ def test_cannot_reparent_with_incompatible_attributes(manager):
     assert e.value.message == "Inherited attributes are not identical"
 
 
-def test_reparent(manager):
+def test_reparent(manager, static_types):
     """
         (Mammal) <-[:ISA]- (Whale)
     becomes:
         (Mammal) <-[:ISA]- (Cetacean) <-[:ISA]- (Whale)
     """
+    Cetacean = static_types['Cetacean']
+    Mammal = static_types['Mammal']
+
     Whale = manager.create_type('Whale', (Mammal,), {})
     manager.save(Whale)
 
@@ -82,12 +101,15 @@ def test_reparent(manager):
     assert issubclass(UpdatedWhale, Cetacean)
 
 
-def test_reparent_with_subtypes(manager):
+def test_reparent_with_subtypes(manager, static_types):
     """
         (Mammal) <-[:ISA]- (Whale) <-[:ISA]- (Orca)
     becomes:
         (Mammal) <-[:ISA]- (Cetacean) <-[:ISA]- (Whale) <-[:ISA]- (Orca)
     """
+    Cetacean = static_types['Cetacean']
+    Mammal = static_types['Mammal']
+
     Whale = manager.create_type('Whale', (Mammal,), {})
     Orca = manager.create_type('Orca', (Whale,), {})
     manager.save(Orca)
@@ -101,7 +123,7 @@ def test_reparent_with_subtypes(manager):
     assert issubclass(UpdatedOrca, Cetacean)
 
 
-def test_reparent_with_declared_attributes(manager):
+def test_reparent_with_declared_attributes(manager, static_types):
     """
         (Mammal) <-[:ISA]- (Whale) <-[:ISA]- (Orca) <-[:DECLAREDON]- (name)
     becomes:
@@ -109,6 +131,9 @@ def test_reparent_with_declared_attributes(manager):
                                                                      ^
                                               (name) -[:DECLAREDON] -'
     """
+    Cetacean = static_types['Cetacean']
+    Mammal = static_types['Mammal']
+
     Whale = manager.create_type('Whale', (Mammal,), {})
     Orca = manager.create_type('Orca', (Whale,), {'name': String()})
     manager.save(Orca)
@@ -147,15 +172,20 @@ def test_reparent_with_matching_attributes(manager):
     assert issubclass(UpdatedE, UpdatedD)
 
 
-def test_reparent_with_instances(manager):
+def test_reparent_with_instances(manager, static_types):
     """
         (Mammal) <-[:ISA]- (Whale) <-[:ISA]- (Orca) <-[:INSTANCEOF]- (willy)
     becomes:
         (Mammal) <-[:ISA]- (Cetacean) <-[:ISA]- (Orca) <-[:INSTANCEOF]- (willy)
     """
+    Cetacean = static_types['Cetacean']
+    Mammal = static_types['Mammal']
+
     Whale = manager.create_type('Whale', (Mammal,), {})
     Orca = manager.create_type('Orca', (Whale,), {})
     willy = Orca(name="willy")
+
+    manager.save(Orca)
     manager.save(willy)
 
     manager.save(Cetacean)
@@ -231,7 +261,10 @@ def test_reparent_diamond(manager):
     assert not issubclass(UpdatedGoldenBeet, (XFlavouring, XFlavouring))
 
 
-def test_reparent_missing_type(manager):
+def test_reparent_missing_type(manager, static_types):
+    Cetacean = static_types['Cetacean']
+    Mammal = static_types['Mammal']
+
     Whale = manager.create_type('Whale', (Mammal,), {})
 
     manager.save(Cetacean)
@@ -241,6 +274,15 @@ def test_reparent_missing_type(manager):
 
 
 def test_reparent_to_missing_type(manager):
+    class Animal(Entity):
+        name = String()
+
+    class Mammal(Animal):
+        pass
+
+    class Cetacean(Mammal):
+        pass
+
     Whale = manager.create_type('Whale', (Mammal,), {})
     manager.save(Whale)
 

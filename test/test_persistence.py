@@ -8,67 +8,66 @@ from py2neo import cypher
 
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
+from kaiso.exceptions import TypeNotPersistedError
 from kaiso.persistence import TypeSystem
 from kaiso.queries import get_start_clause, join_lines
 from kaiso.relationships import Relationship, IsA
 from kaiso.types import PersistableType, Entity, collector, get_type_id
 
 
-class Thing(Entity):
-    id = Uuid(unique=True)
-    bool_attr = Bool()
-    int_attr = Integer()
-    float_attr = Float()
-    str_attr = String()
-    dec_attr = Decimal()
-    dt_attr = DateTime()
-    ch_attr = Choice('a', 'b')
+@pytest.fixture
+def beetroot_diamond(request, manager):
+    class Thing(Entity):
+        id = Uuid(unique=True)
+        bool_attr = Bool()
+        int_attr = Integer()
+        float_attr = Float()
+        str_attr = String()
+        dec_attr = Decimal()
+        dt_attr = DateTime()
+        ch_attr = Choice('a', 'b')
+
+    class Flavouring(Thing):
+        natural = Bool()
+        veggie_friendly = Bool()
+        tastes_like = String()
+
+    class Colouring(Thing):
+        natural = Bool()
+        veggie_friendly = Bool()
+        color = String()
+
+    class Beetroot(Flavouring, Colouring):
+        natural = Bool(default=True)
+
+    class Carmine(Colouring):
+        pass
+
+    manager.save(Thing)
+
+    return {
+        'Thing': Thing,
+        'Flavouring': Flavouring,
+        'Colouring': Colouring,
+        'Beetroot': Beetroot,
+        'Carmine': Carmine,
+    }
 
 
-class OtherThing(Entity):
-    id = Uuid(unique=True)
+@pytest.fixture
+def static_types(manager, beetroot_diamond):
+    class Related(Relationship):
+        str_attr = String()
 
+    class IndexedRelated(Relationship):
+        id = Uuid(unique=True)
 
-class ClassAttrThing(Entity):
-    id = Uuid(unique=True)
-    cls_attr = "spam"
-
-
-class NonUnique(Entity):
-    val = String()
-
-
-class MultipleUniques(Entity):
-    u1 = String(unique=True)
-    u2 = String(unique=True)
-
-
-class Related(Relationship):
-    str_attr = String()
-
-
-class IndexedRelated(Relationship):
-    id = Uuid(unique=True)
-
-
-class Flavouring(Thing):
-    natural = Bool()
-    veggie_friendly = Bool()
-    tastes_like = String()
-
-
-class Colouring(Thing):
-    natural = Bool()
-    veggie_friendly = Bool()
-    color = String()
-
-
-class Beetroot(Flavouring, Colouring):
-    natural = Bool(default=True)
-
-
-class Carmine(Colouring):
-    pass
+    result = {
+        'Related': Related,
+        'IndexedRelated': IndexedRelated,
+    }
+    result.update(beetroot_diamond)
+    return result
 
 
 def test_add_fails_on_non_persistable(manager):
@@ -99,7 +98,6 @@ def test_add_persistable_only_adds_single_node(manager):
 
 
 def test_only_adds_entity_once(manager):
-
     manager.save(Entity)
     manager.save(Entity)
 
@@ -109,7 +107,9 @@ def test_only_adds_entity_once(manager):
     assert result == [(Entity,)]
 
 
-def test_only_adds_types_once(manager):
+def test_only_adds_types_once(manager, static_types):
+    Thing = static_types['Thing']
+
     thing1 = Thing()
     thing2 = Thing()
 
@@ -123,7 +123,9 @@ def test_only_adds_types_once(manager):
     assert count == 1
 
 
-def test_simple_add_and_get_type(manager):
+def test_simple_add_and_get_type(manager, static_types):
+    Thing = static_types['Thing']
+
     manager.save(Thing)
 
     result = manager.get(PersistableType, id='Thing')
@@ -131,13 +133,17 @@ def test_simple_add_and_get_type(manager):
     assert result is Thing
 
 
-def test_get_type_non_existing_obj(manager):
+def test_get_type_non_existing_obj(manager, static_types):
+    Thing = static_types['Thing']
+
     manager.save(Thing)
 
     assert manager.get(PersistableType, name="Ting") is None
 
 
-def test_simple_add_and_get_instance(manager):
+def test_simple_add_and_get_instance(manager, static_types):
+    Thing = static_types['Thing']
+
     thing = Thing()
     manager.save(thing)
 
@@ -147,9 +153,17 @@ def test_simple_add_and_get_instance(manager):
     assert queried_thing.id == thing.id
 
 
-def test_simple_add_and_get_instance_same_id_different_type(manager):
+def test_simple_add_and_get_instance_same_id_different_type(
+        manager, static_types):
     """ Instances of two different types that have the same id
     should be distinguishable """
+
+    Thing = static_types['Thing']
+
+    class OtherThing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(OtherThing)
 
     thing1 = Thing()
     thing2 = OtherThing(id=thing1.id)
@@ -165,7 +179,9 @@ def test_simple_add_and_get_instance_same_id_different_type(manager):
     assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
-def test_simple_add_and_get_instance_by_optional_attr(manager):
+def test_simple_add_and_get_instance_by_optional_attr(manager, static_types):
+    Thing = static_types['Thing']
+
     thing1 = Thing()
     thing2 = Thing(str_attr="this is thing2")
     manager.save(thing1)
@@ -178,7 +194,10 @@ def test_simple_add_and_get_instance_by_optional_attr(manager):
     assert queried_thing.str_attr == thing2.str_attr
 
 
-def test_simple_add_and_get_relationship(manager):
+def test_simple_add_and_get_relationship(manager, static_types):
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
     rel = IndexedRelated(start=thing1, end=thing2)
@@ -194,7 +213,10 @@ def test_simple_add_and_get_relationship(manager):
     assert queried_rel.end.id == thing2.id
 
 
-def test_delete_relationship(manager):
+def test_delete_relationship(manager, static_types):
+    Thing = static_types['Thing']
+    Related = static_types['Related']
+
     """
     Verify that relationships can be removed from the database.
 
@@ -225,10 +247,14 @@ def test_delete_relationship(manager):
     assert 'Related' not in rels
 
 
-def test_delete_indexed_relationship(manager):
+def test_delete_indexed_relationship(manager, static_types):
     """ Verify that indexed relationships can be deleted from the database
     without needing references to the start and end nodes.
     """
+
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
     rel = IndexedRelated(thing1, thing2)
@@ -258,7 +284,10 @@ def test_delete_indexed_relationship(manager):
     assert 'Related' not in rels
 
 
-def test_update_relationship_end_points(manager):
+def test_update_relationship_end_points(manager, static_types):
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
     thing3 = Thing()
@@ -283,10 +312,12 @@ def test_update_relationship_end_points(manager):
     assert queried_rel.end.id == thing3.id
 
 
-def test_update_relationship_missing_endpoints(manager):
+def test_update_relationship_missing_endpoints(manager, static_types):
     # same as test_update_relationship_end_points, with the difference
     # that the relationship is passed through deserialize(serialize())
     # which strips the start/end references
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
 
     thing1 = Thing()
     thing2 = Thing()
@@ -311,6 +342,11 @@ def test_update_relationship_missing_endpoints(manager):
 
 
 def test_delete_instance_types_remain(manager):
+    class Thing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(Thing)
+
     thing = Thing()
     manager.save(thing)
 
@@ -332,6 +368,10 @@ def test_delete_class(manager):
     The attributes of the type should be removed.
     Instances of the type should not.
     """
+    class Thing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(Thing)
     thing = Thing()
     manager.save(thing)
 
@@ -343,7 +383,10 @@ def test_delete_class(manager):
     assert result == {'TypeSystem', 'Entity', str(thing.id)}
 
 
-def test_destroy(manager):
+def test_destroy(manager, static_types):
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
 
@@ -370,7 +413,8 @@ def test_destroy(manager):
         assert excinfo.value.exception == 'MissingIndexException'
 
 
-def test_attributes(manager):
+def test_attributes(manager, static_types):
+    Thing = static_types['Thing']
 
     thing = Thing(bool_attr=True, init_attr=7)
     thing.float_attr = 3.14
@@ -393,7 +437,10 @@ def test_attributes(manager):
     assert queried_thing.ch_attr == thing.ch_attr
 
 
-def test_relationship(manager):
+def test_relationship(manager, static_types):
+    Thing = static_types['Thing']
+    Related = static_types['Related']
+
     thing1 = Thing()
     thing2 = Thing()
 
@@ -422,7 +469,10 @@ def test_relationship(manager):
     assert queried_rel.end.id == thing2.id
 
 
-def test_indexed_relationship(manager):
+def test_indexed_relationship(manager, static_types):
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
     thing1 = Thing()
     thing2 = Thing()
 
@@ -446,9 +496,20 @@ def test_indexed_relationship(manager):
 
 
 def test_get_type_hierarchy(manager):
-    obj1 = Thing()  # subclasses Entity
-    obj2 = Colouring()  # subclass of Thing
-    obj3 = Carmine()  # subclass of Colouring
+    class Thing(Entity):
+        id = Uuid(unique=True)
+
+    class Colouring(Thing):
+        pass
+
+    class Carmine(Colouring):
+        pass
+
+    manager.save(Carmine)  # also saves all parents
+
+    obj1 = Thing()
+    obj2 = Colouring()
+    obj3 = Carmine()
 
     manager.save(obj1)
     manager.save(obj2)
@@ -473,7 +534,9 @@ def test_get_type_hierarchy(manager):
     assert entities[1] == Carmine.__name__
 
 
-def test_get_type_hierarchy_bases_order(manager):
+def test_get_type_hierarchy_bases_order(manager, beetroot_diamond):
+    Beetroot = beetroot_diamond['Beetroot']
+
     # before we introduced 'base_index' on IsA, this test would fail because
     # we removed and re-added one of the IsA relationships, which
     # caused the types to be loaded in the incorrect order
@@ -507,6 +570,10 @@ def test_get_type_hierarchy_bases_order(manager):
 
 
 def test_type_hierarchy_object(manager):
+    class Thing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(Thing)
     obj = Thing()
     manager.save(obj)
 
@@ -525,12 +592,21 @@ def test_type_hierarchy_object(manager):
     }
 
 
-def test_type_hierarchy_diamond(manager):
-    beetroot = Beetroot()
-    manager.save(beetroot)
+def test_type_hierarchy_diamond(manager, beetroot_diamond):
+    Thing = beetroot_diamond['Thing']
+    Colouring = beetroot_diamond['Colouring']
+    Flavouring = beetroot_diamond['Flavouring']
+    Beetroot = beetroot_diamond['Beetroot']
+    Carmine = beetroot_diamond['Carmine']
 
+    manager.save(Beetroot)
+    manager.save(Carmine)
+
+    beetroot = Beetroot()
     carmine = Carmine()
+
     manager.save(carmine)
+    manager.save(beetroot)
 
     query_str = """
         START base = node(*)
@@ -552,7 +628,9 @@ def test_type_hierarchy_diamond(manager):
     }
 
 
-def test_add_type_creates_index(manager):
+def test_add_type_creates_index(manager, static_types):
+    Thing = static_types['Thing']
+
     manager.save(Thing)
 
     # this should not raise a MissingIndex error
@@ -573,13 +651,26 @@ def count(manager, type_):
     return count
 
 
-def test_save(manager):
+def test_save(manager, static_types):
+    Thing = static_types['Thing']
+
     obj = Thing()
     manager.save(obj)
     assert count(manager, Thing) == 1
 
 
-def test_save_new(manager):
+def test_save_unknown_class(manager):
+    class Thing(Entity):
+        pass
+
+    thing = Thing()
+    with pytest.raises(TypeNotPersistedError):
+        manager.save(thing)
+
+
+def test_save_new(manager, static_types):
+    Thing = static_types['Thing']
+
     obj1 = Thing()
     obj2 = Thing()
     manager.save(obj1)
@@ -587,7 +678,9 @@ def test_save_new(manager):
     assert count(manager, Thing) == 2
 
 
-def test_save_replace(manager):
+def test_save_replace(manager, static_types):
+    Thing = static_types['Thing']
+
     obj1 = Thing()
     obj2 = Thing()
 
@@ -597,7 +690,9 @@ def test_save_replace(manager):
     assert count(manager, Thing) == 1
 
 
-def test_save_update(manager):
+def test_save_update(manager, static_types):
+    Thing = static_types['Thing']
+
     obj = Thing(str_attr='one')
 
     manager.save(obj)
@@ -614,6 +709,16 @@ def test_persist_attributes(manager):
     Verify persisted attributes maintain their type when added to the
     database.
     """
+    class Thing(Entity):
+        id = Uuid(unique=True)
+        bool_attr = Bool()
+        int_attr = Integer()
+        float_attr = Float()
+        str_attr = String()
+        dec_attr = Decimal()
+        dt_attr = DateTime()
+        ch_attr = Choice('a', 'b')
+
     manager.save(Thing)
 
     query_str = """
@@ -637,10 +742,11 @@ def test_persist_attributes(manager):
     }
 
 
-def test_attribute_creation(manager):
+def test_attribute_creation(manager, static_types):
     """
     Verify that attributes are added to the database when a type is added.
     """
+    Thing = static_types['Thing']
     manager.save(Thing)
 
     query_str = """
@@ -664,13 +770,17 @@ def test_attribute_creation(manager):
     }
 
 
-def test_attribute_inheritance(manager):
+def test_attribute_inheritance(manager, beetroot_diamond):
     """
     Verify that attributes are created correctly according to type
     inheritence.
     """
 
+    Beetroot = beetroot_diamond['Beetroot']
+    Carmine = beetroot_diamond['Carmine']
+
     manager.save(Beetroot)
+    manager.save(Carmine)
 
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
     # there are two paths from it to ``Entity``.
@@ -722,312 +832,6 @@ def test_serialize_deserialize(manager):
     assert obj is Entity
 
 
-# class attributes
-
-def test_serialize_class(manager):
-    cls_dict = manager.serialize(ClassAttrThing)
-    assert cls_dict == {
-        '__type__': 'PersistableType',
-        'id': 'ClassAttrThing',
-        'cls_attr': 'spam',
-    }
-
-
-def test_serialize_obj(manager):
-    instance = ClassAttrThing()
-
-    instance_dict = manager.serialize(instance)
-    assert 'cls_attr' not in instance_dict
-
-
-def test_attr():
-    assert ClassAttrThing.cls_attr == 'spam'
-    assert ClassAttrThing().cls_attr == 'spam'
-
-
-def test_load_class_attr(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid(unique=True)
-            cls_attr = "spam"
-
-    manager.save_collected_classes(classes)
-    manager.reload_types()
-
-    data = {
-        '__type__': 'PersistableType',
-        'id': 'DynamicClassAttrThing',
-        'cls_attr': 'ham'
-    }
-    cls = manager.deserialize(data)
-    assert cls.cls_attr == 'ham'
-
-
-def test_class_att_overriding(manager):
-    with collector() as classes:
-        class A(Entity):
-            id = Uuid()
-            cls_attr = "spam"
-
-        class B(A):
-            cls_attr = "ham"
-
-        class C(B):
-            pass
-
-    manager.save_collected_classes(classes)
-    manager.reload_types()
-
-    a = A()
-    b = B()
-    c = C()
-
-    assert a.cls_attr == "spam"
-    assert b.cls_attr == "ham"
-    assert c.cls_attr == "ham"
-
-    manager.save(a)
-    manager.save(b)
-    manager.save(c)
-
-    query_str = join_lines(
-        "START",
-        get_start_clause(A, 'A', manager.type_registry),
-        """
-            MATCH node -[:INSTANCEOF]-> () -[:ISA*0..]-> A
-            return node
-        """
-    )
-
-    results = list(manager.query(query_str))
-
-    for col, in results:
-        assert col.cls_attr == col.__class__.cls_attr
-
-
-def test_class_attr_inheritence(manager):
-    with collector() as classes:
-        class A(Entity):
-            attr = True
-
-        class B(A):
-            pass
-
-        class C(B):
-            attr = False
-
-        class D(C):
-            pass
-
-    manager.save_collected_classes(classes)
-
-    assert A().attr is True
-    assert B().attr is True
-    assert C().attr is False
-    assert D().attr is False
-
-
-def test_reserved_attribute_name():
-    with pytest.raises(TypeError):
-        class Nope(Entity):
-            __type__ = String()
-
-
-def test_class_attr_class_serialization(manager):
-    with collector() as classes:
-        class A(Entity):
-            id = Uuid()
-            cls_attr = "spam"
-
-        class B(A):
-            cls_attr = "ham"
-
-        class C(B):
-            pass
-
-    manager.save_collected_classes(classes)
-
-    # we want inherited attributes when we serialize
-    assert manager.serialize(C) == {
-        '__type__': 'PersistableType',
-        'id': 'C',
-        'cls_attr': 'ham',
-    }
-
-    # we don't want inherited attributes in the db
-    query_str = join_lines(
-        "START",
-        get_start_clause(C, 'C', manager.type_registry),
-        """
-            RETURN C
-        """
-    )
-
-    (db_attrs,) = next(manager._execute(query_str))
-    properties = db_attrs.get_properties()
-    assert 'cls_attr' not in properties
-
-
-def test_false_class_attr(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-            cls_attr = False
-
-    manager.save_collected_classes(classes)
-
-    # we want inherited attributes when we serialize
-    assert manager.serialize(DynamicClassAttrThing) == {
-        '__type__': 'PersistableType',
-        'id': 'DynamicClassAttrThing',
-        'cls_attr': False,
-    }
-
-    manager.reload_types()
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    thing = DynamicClassAttrThing()
-
-    assert DynamicClassAttrThing.cls_attr is False
-    assert thing.cls_attr is False
-
-
-def test_true_class_attr(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-            cls_attr = True
-
-    manager.save_collected_classes(classes)
-
-    # we want inherited attributes when we serialize
-    assert manager.serialize(DynamicClassAttrThing) == {
-        '__type__': 'PersistableType',
-        'id': 'DynamicClassAttrThing',
-        'cls_attr': True,
-    }
-
-    manager.reload_types()
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    thing = DynamicClassAttrThing()
-
-    assert DynamicClassAttrThing.cls_attr is True
-    assert thing.cls_attr is True
-
-
-def test_edit_class_attrs(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-            cls_attr = "spam"
-
-    manager.save_collected_classes(classes)
-
-    del DynamicClassAttrThing
-
-    # this is the same as creating a new manager using the same URL
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    assert DynamicClassAttrThing.cls_attr == "spam"
-
-    DynamicClassAttrThing.cls_attr = "ham"
-    manager.save(DynamicClassAttrThing)
-
-    del DynamicClassAttrThing
-
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    assert DynamicClassAttrThing.cls_attr == "ham"
-
-
-def test_add_class_attrs(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-
-    manager.save_collected_classes(classes)
-
-    del DynamicClassAttrThing
-
-    # this is the same as creating a new manager using the same URL
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-
-    DynamicClassAttrThing.cls_attr = "ham"
-    manager.save(DynamicClassAttrThing)
-
-    del DynamicClassAttrThing
-
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    assert DynamicClassAttrThing.cls_attr == "ham"
-
-
-def test_delete_class_attrs(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-            cls_attr = "spam"
-
-    manager.save_collected_classes(classes)
-
-    del DynamicClassAttrThing
-
-    # this is the same as creating a new manager using the same URL
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    assert DynamicClassAttrThing.cls_attr == "spam"
-
-    delattr(DynamicClassAttrThing, 'cls_attr')
-    manager.save(DynamicClassAttrThing)
-
-    del DynamicClassAttrThing
-
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-    assert not(hasattr(DynamicClassAttrThing, 'cls_attr'))
-
-
-def test_add_class_attrs_does_not_create_duplicate_types(manager):
-    with collector() as classes:
-        class DynamicClassAttrThing(Entity):
-            id = Uuid()
-    manager.save_collected_classes(classes)
-    del DynamicClassAttrThing
-    manager.reload_types()
-
-    DynamicClassAttrThing = manager.type_registry.get_class_by_id(
-        'DynamicClassAttrThing')
-
-    DynamicClassAttrThing.cls_attr = "ham"
-    manager.save(DynamicClassAttrThing)
-
-    rows = manager.query(
-        ''' START base = node(*)
-            MATCH tpe -[r:ISA]-> base
-            RETURN tpe.id , r.__type__, base.id
-            ORDER BY tpe.id, base.id
-        ''')
-    result = list(rows)
-
-    assert result == [
-        ('DynamicClassAttrThing', 'IsA', 'Entity'),
-    ]
-
-
 def test_changing_bases_does_not_create_duplicate_types(manager):
     with collector() as classes:
         class ShrubBaseA(Entity):
@@ -1051,7 +855,7 @@ def test_changing_bases_does_not_create_duplicate_types(manager):
         class SubShrub(Shrub):
             pass
 
-    manager.type_registry.register(SubShrub, dynamic=True)
+    manager.type_registry.register(SubShrub)
     manager.save(SubShrub)
 
     rows = manager.query(
@@ -1071,29 +875,6 @@ def test_changing_bases_does_not_create_duplicate_types(manager):
     ]
 
 
-def test_class_name_escaping(manager):
-    with collector() as classes:
-        class Match(Entity):
-            id = Uuid()
-            where = Uuid()
-
-        class Set(Match):
-            pass
-
-        class Return(Set):
-            pass
-
-    manager.save_collected_classes(classes)
-
-
-def test_class_and_attr_name_clash(manager):
-    with collector() as classes:
-        class Foo(Entity):
-            Foo = Uuid()
-
-    manager.save_collected_classes(classes)
-
-
 def test_type_system_version(manager):
     forced_uuid = uuid.uuid4().hex
 
@@ -1107,7 +888,9 @@ def test_type_system_version(manager):
     assert manager._type_system_version() != forced_uuid
 
 
-def test_type_system_reload(manager_factory):
+def test_type_system_reload(manager_factory, static_types):
+    Thing = static_types['Thing']
+
     manager_factory(skip_type_loading=True).destroy()
     manager1 = manager_factory()
     manager2 = manager_factory()
@@ -1126,7 +909,8 @@ def test_type_system_reload(manager_factory):
     assert "cls_attr" in descriptor.class_attributes
 
 
-def test_reload_external_changes(manager, connection):
+def test_reload_external_changes(manager, connection, static_types):
+    Thing = static_types['Thing']
 
     manager.save(Thing)
     manager.reload_types()  # cache type registry
@@ -1156,7 +940,8 @@ def test_reload_external_changes(manager, connection):
     assert "cls_attr" in descriptor.class_attributes
 
 
-def test_invalidate_type_system(manager):
+def test_invalidate_type_system(manager, static_types):
+    Related = static_types['Related']
 
     with collector():
         class TypeA(Entity):
@@ -1168,9 +953,9 @@ def test_invalidate_type_system(manager):
         class BaseType(Entity):
             pass
 
-    manager.type_registry.register(TypeA, dynamic=True)
-    manager.type_registry.register(TypeB, dynamic=True)
-    manager.type_registry.register(BaseType, dynamic=True)
+    manager.type_registry.register(TypeA)
+    manager.type_registry.register(TypeB)
+    manager.type_registry.register(BaseType)
 
     versions = []
 
@@ -1192,10 +977,10 @@ def test_invalidate_type_system(manager):
 
     type_a = TypeA()
     manager.save(type_a)  # create instance
-    v2 = manager._type_system_version()
-    assert is_distinct_version(v2)
+    assert manager._type_system_version() == v1
 
     type_b = TypeB(attr="value")
+    manager.save(TypeB)
     manager.save(type_b)  # create instance & type
     v3 = manager._type_system_version()
     assert is_distinct_version(v3)
@@ -1259,3 +1044,22 @@ def test_invalidate_type_system(manager):
     manager.save(TypeB)  # delete class attribute
     v10 = manager._type_system_version()
     assert is_distinct_version(v10)
+
+
+def test_cached_type_system_keeps_types_in_db(manager_factory):
+    # regression test
+    manager = manager_factory(skip_type_loading=True)
+    manager.destroy()
+
+    manager1 = manager_factory()
+
+    class Foo(Entity):
+        pass
+
+    manager1.save(Foo)
+    manager1.reload_types()
+
+    manager2 = manager_factory()
+
+    foo = Foo()
+    manager2.save(foo)
