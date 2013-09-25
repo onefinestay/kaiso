@@ -1,4 +1,4 @@
-Version X
+Version 0.10.0
 ---------
 
 Explicit type creation: Types are no longer lazily created when instance.save
