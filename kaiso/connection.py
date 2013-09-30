@@ -119,6 +119,7 @@ def temp_neo4j_instance(uri):
         'neo4j.instance': neo4j_info['NEO4J_INSTANCE'],
         'org.neo4j.server.properties': props_filepath,
         'file.encoding': 'UTF-8',
+        'java.awt.headless': 'true',
     }
     for key, value in startup_options.iteritems():
         args.append("-D{}={}".format(key, value))

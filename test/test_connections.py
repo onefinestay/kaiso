@@ -30,6 +30,9 @@ class TestTempConnectionProcesses():
         self.write_config = self._p_write_config.start()
         self.write_config.side_effect = write_config
 
+        self._original_temporary_databases = (
+            kaiso.connection._temporary_databases.copy())
+
     def teardown_method(self, method):
         # kill processes
         for key, temp_neo4j in kaiso.connection._temporary_databases.items():
@@ -41,6 +44,9 @@ class TestTempConnectionProcesses():
             shutil.rmtree(self.temp_dir)
         # stop patch
         self._p_write_config.stop()
+
+        kaiso.connection._temporary_databases = (
+            self._original_temporary_databases)
 
     def test_temp_connection_defaults(self):
         """ Verify temporary connection with default options.
