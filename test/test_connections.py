@@ -32,6 +32,7 @@ class TestTempConnectionProcesses():
 
         self._original_temporary_databases = (
             kaiso.connection._temporary_databases.copy())
+        kaiso.connection._temporary_databases = {}
 
     def teardown_method(self, method):
         # kill processes
