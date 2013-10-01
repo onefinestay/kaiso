@@ -89,8 +89,7 @@ class Manager(object):
         log.debug('running query:\n%s', query.format(**params))
 
         rows, _ = cypher.execute(self._conn, query, params)
-        for row in rows:
-            yield row
+        return (row for row in rows)
 
     def _convert_value(self, value):
         """ Converts a py2neo primitive(Node, Relationship, basic object)
@@ -809,8 +808,7 @@ class Manager(object):
         params = dict_to_db_values_dict(params)
         result = self._execute(query, **params)
 
-        for row in result:
-            yield tuple(self._convert_row(row))
+        return (tuple(self._convert_row(row)) for row in result)
 
     def destroy(self):
         """ Removes all nodes, relationships and indexes in the store. This

@@ -405,10 +405,8 @@ def test_destroy(manager, static_types):
     )
 
     for query in queries:
-        rows = manager.query(query)
-
         with pytest.raises(cypher.CypherError) as excinfo:
-            next(rows)
+            rows = manager.query(query)
 
         assert excinfo.value.exception == 'MissingIndexException'
 
