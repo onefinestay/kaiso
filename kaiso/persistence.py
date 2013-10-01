@@ -715,7 +715,8 @@ class Manager(object):
         properties.update(updated_values)
 
         # get rid of any attributes not supported by the new type
-        properties = self.serialize(self.deserialize(properties))
+        new_obj = self.deserialize(properties)
+        properties = self.serialize(new_obj)
 
         tpe = self.type_registry.get_class_by_id(type_id)
 
@@ -730,6 +731,8 @@ class Manager(object):
             'SET obj={properties}'
         )
         self.query(query, properties=properties)
+
+        return new_obj
 
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
