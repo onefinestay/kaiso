@@ -25,6 +25,7 @@ temp_neo4j = namedtuple('temp_neo4j', ['http_url', 'process'])
 _temporary_databases = {}
 
 TIMEOUT = 30  # seconds
+DEFAULT_TEMP_PORT = 7475
 
 
 def get_neo4j_info():
@@ -84,7 +85,7 @@ def temp_neo4j_instance(uri):
     """
     # split the uri
     split_uri = urlparse.urlparse(uri)
-    port = split_uri.port or 7475
+    port = split_uri.port or DEFAULT_TEMP_PORT
     bind_iface = split_uri.hostname or "localhost"
 
     # return http uri if this temporary database already exists

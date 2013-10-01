@@ -53,11 +53,13 @@ class TestTempConnectionProcesses():
         """ Verify temporary connection with default options.
         """
         with patch('py2neo.neo4j.GraphDatabaseService', lambda uri: uri):
-            conn = get_connection('temp://')
+            # make sure we don't clash with the default temp port
+            with patch('kaiso.connection.DEFAULT_TEMP_PORT', 7776):
+                conn = get_connection('temp://')
 
-        assert conn == "http://localhost:7475/db/data/"
+        assert conn == "http://localhost:7776/db/data/"
         self.write_config.assert_called_once_with(
-            ANY, 7475, ANY, 'localhost'
+            ANY, 7776, ANY, 'localhost'
         )
 
     def test_temp_connection_custom_port(self):
