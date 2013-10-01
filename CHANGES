@@ -1,5 +1,15 @@
+Version 0.11.0
+--------------
+
+`Manager.query` (and `Manager._execute`) now return generators of results
+instead of being generators themselves. This way, calling `query` triggers
+the execution, rather than requiring e.g. `next(manager.query(...), None)`.
+
+Minor: Also fixed the connection tests so they no longer need to be first.
+
+
 Version 0.10.0
----------
+--------------
 
 Explicit type creation: Types are no longer lazily created when instance.save
 is called. If the type isn't already persisted, `TypeNotPersistedError` will be
