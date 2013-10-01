@@ -706,6 +706,32 @@ class Manager(object):
         obj = self._convert_value(first)
         return obj
 
+    def change_instance_type(self, obj, type_id, updated_values=None):
+        if updated_values is None:
+            updated_values = {}
+
+        properties = self.serialize(obj)
+        properties['__type__'] = type_id
+        properties.update(updated_values)
+
+        # get rid of any attributes not supported by the new type
+        properties = self.serialize(self.deserialize(properties))
+
+        tpe = self.type_registry.get_class_by_id(type_id)
+
+        query = join_lines(
+            'START',
+            get_start_clause(obj, 'obj', self.type_registry),
+            ',',
+            get_start_clause(tpe, 'tpe', self.type_registry),
+            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
+            'DELETE old_rel',
+            'CREATE (obj)-[:INSTANCEOF]->(tpe)',
+            'SET obj={properties}'
+        )
+        self.query(query, properties=properties)
+
+
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:

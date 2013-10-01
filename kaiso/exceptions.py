@@ -60,3 +60,7 @@ class CannotUpdateType(Exception):
 
 class UnsupportedTypeError(Exception):
     """ Raised when trying to interact with a non-Persistable type """
+
+class NoUniqueAttributeError(Exception):
+    """ Raised when trying to uniquely identify an object which has no
+    unique attributes """
