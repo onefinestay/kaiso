@@ -752,7 +752,6 @@ class Manager(object):
 
         return new_obj
 
-
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
