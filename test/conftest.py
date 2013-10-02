@@ -69,6 +69,11 @@ def type_registry(request):
 @pytest.fixture(autouse=True)
 def temporary_static_types(request):
     from kaiso.test_helpers import TemporaryStaticTypes
+
+    # need to import these before "freezing" the list of static types
+    from kaiso.persistence import TypeSystem
+    TypeSystem  # pyflakes
+
     patcher = TemporaryStaticTypes()
     patcher.start()
     request.addfinalizer(patcher.stop)
