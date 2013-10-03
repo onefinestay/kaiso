@@ -1,7 +1,6 @@
 import pytest
 
-from kaiso.attributes import (
-    Uuid, Decimal, String)
+from kaiso.attributes import Uuid, String
 from kaiso.exceptions import (
     NoResultFound, NoUniqueAttributeError, TypeNotPersistedError)
 from kaiso.types import Entity
@@ -18,7 +17,7 @@ def static_types(manager):
 
     class ThingB(Thing):
         bb = String()
-        same_but_different = Decimal()
+        same_but_different = Uuid()
 
     manager.save(ThingA)
     manager.save(ThingB)
@@ -118,9 +117,7 @@ def test_mismatching_attributes(manager, static_types):
     thing_a = ThingA(same_but_different='foo')
     manager.save(thing_a)
 
-    # TODO: should to_python catch e.g. decimal.InvalidOperation and raise
-    # ValueError?
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         manager.change_instance_type(thing_a, 'ThingB')
 
 
