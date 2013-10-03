@@ -706,7 +706,6 @@ class Manager(object):
         obj = self._convert_value(first)
         return obj
 
-    # TODO: take type or type_id?
     def change_instance_type(self, obj, type_id, updated_values=None):
         if updated_values is None:
             updated_values = {}
@@ -725,14 +724,16 @@ class Manager(object):
 
         tpe = type_registry.get_class_by_id(type_id)
 
-        # TODO: can/should we use get_create_relationship_query ?
         rel_props = type_registry.object_to_dict(InstanceOf, for_db=True)
+
+        start_clauses = (
+            get_start_clause(obj, 'obj', type_registry),
+            get_start_clause(tpe, 'tpe', type_registry)
+        )
 
         query = join_lines(
             'START',
-            get_start_clause(obj, 'obj', type_registry),
-            ',',
-            get_start_clause(tpe, 'tpe', type_registry),
+            (start_clauses, ','),
             'MATCH (obj)-[old_rel:INSTANCEOF]->()',
             'DELETE old_rel',
             'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(tpe)',
