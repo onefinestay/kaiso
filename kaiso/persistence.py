@@ -7,7 +7,7 @@ from kaiso.attributes import Outgoing, Incoming, String
 from kaiso.connection import get_connection
 from kaiso.exceptions import (
     UniqueConstraintError, UnknownType, CannotUpdateType, UnsupportedTypeError,
-    TypeNotPersistedError)
+    TypeNotPersistedError, NoResultFound)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
     join_lines)
@@ -705,6 +705,53 @@ class Manager(object):
 
         obj = self._convert_value(first)
         return obj
+
+    def change_instance_type(self, obj, type_id, updated_values=None):
+        if updated_values is None:
+            updated_values = {}
+
+        type_registry = self.type_registry
+
+        if type_id not in type_registry._types_in_db:
+            raise TypeNotPersistedError(type_id)
+
+        properties = self.serialize(obj)
+        properties['__type__'] = type_id
+        properties.update(updated_values)
+
+        # get rid of any attributes not supported by the new type
+        properties = self.serialize(self.deserialize(properties))
+
+        tpe = type_registry.get_class_by_id(type_id)
+
+        rel_props = type_registry.object_to_dict(InstanceOf, for_db=True)
+
+        start_clauses = (
+            get_start_clause(obj, 'obj', type_registry),
+            get_start_clause(tpe, 'tpe', type_registry)
+        )
+
+        query = join_lines(
+            'START',
+            (start_clauses, ','),
+            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
+            'DELETE old_rel',
+            'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(tpe)',
+            'SET obj={properties}',
+            'RETURN obj',
+        )
+
+        results = self.query(query, properties=properties, rel_props=rel_props)
+        row = next(results, None)
+
+        if row is None:
+            raise NoResultFound(
+                "{} not found in db".format(repr(obj))
+            )
+
+        (new_obj,) = row
+
+        return new_obj
 
     def get_related_objects(self, rel_cls, ref_cls, obj):
 

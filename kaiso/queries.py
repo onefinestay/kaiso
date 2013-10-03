@@ -1,3 +1,4 @@
+from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
     AttributedBase, get_index_name, Relationship)
@@ -30,6 +31,9 @@ def get_start_clause(obj, name, type_registry):
     """
 
     index = next(type_registry.get_index_entries(obj), None)
+    if index is None:
+        raise NoUniqueAttributeError()
+
     if isinstance(obj, Relationship):
         index_type = "rel"
     else:

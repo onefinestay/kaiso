@@ -1,3 +1,11 @@
+Unreleased
+----------
+
+Add `Manager.change_instance_type` to change the type of existing instances.
+
+Minor: Start reorganising the test suite to have more smaller test modules.
+
+
 Version 0.11.0
 --------------
 
