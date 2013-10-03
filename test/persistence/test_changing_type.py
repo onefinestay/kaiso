@@ -176,6 +176,9 @@ def test_change_from_unsaved_type(manager, static_types):
 
     thing_c = ThingC()
 
+    # We validate the target type, but not the source.
+    # If the source type isn't persisted, there is no way that the instance can
+    # be, in which case we are happy to treat this as that (unsaved instance).
     with pytest.raises(NoResultFound):
         manager.change_instance_type(thing_c, 'ThingA')
 
