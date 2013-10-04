@@ -19,8 +19,7 @@ class MultipleObjectsFound(Exception):
 
 
 class NoResultFound(Exception):
-    """ Raised when a caller of a RelationshipManager
-    expected at least one object, but none was found.
+    """ Raised when a call expected at least one object, but none was found.
     """
 
 
@@ -60,3 +59,8 @@ class CannotUpdateType(Exception):
 
 class UnsupportedTypeError(Exception):
     """ Raised when trying to interact with a non-Persistable type """
+
+
+class NoUniqueAttributeError(Exception):
+    """ Raised when trying to uniquely identify an object which has no
+    unique attributes """
