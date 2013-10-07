@@ -52,7 +52,28 @@ def manager(request, manager_factory):
 
 
 @pytest.fixture
+def connection(request):
+    from kaiso.connection import get_connection
+
+    neo4j_uri = request.config.getoption('neo4j_uri')
+    return get_connection(neo4j_uri)
+
+
+@pytest.fixture
 def type_registry(request):
     from kaiso.types import TypeRegistry
     registry = TypeRegistry()
     return registry
+
+
+@pytest.fixture(autouse=True)
+def temporary_static_types(request):
+    from kaiso.test_helpers import TemporaryStaticTypes
+
+    # need to import these before "freezing" the list of static types
+    from kaiso.persistence import TypeSystem
+    TypeSystem  # pyflakes
+
+    patcher = TemporaryStaticTypes()
+    patcher.start()
+    request.addfinalizer(patcher.stop)
