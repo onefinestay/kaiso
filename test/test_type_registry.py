@@ -1,14 +1,43 @@
 from mock import ANY
+import pytest
+
 from kaiso.types import Entity
 from kaiso.attributes import Uuid, String, Bool
 
 
-class FooType(Entity):
-    id = Uuid(unique=True)
-    cls_attr = "placeholder"
+@pytest.fixture
+def static_types(manager):
+
+    class FooType(Entity):
+        id = Uuid(unique=True)
+        cls_attr = "placeholder"
+
+    class BarType(Entity):
+        extra = String()
+        cls_attr = "placeholder"
+
+    class BazType(Entity):
+        name = String()
+        special = Bool()
+        cls_attr = "placeholder"
+
+    class AType(Entity):
+        foo = String()
+
+    class BType(AType):
+        pass
+
+    return {
+        'FooType': FooType,
+        'BarType': BarType,
+        'BazType': BazType,
+        'AType': AType,
+        'BType': BType,
+    }
 
 
-def test_get_clsss_by_id_returns_static_type(type_registry):
+def test_get_clsss_by_id_returns_static_type(type_registry, static_types):
+    FooType = static_types['FooType']
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
@@ -18,7 +47,7 @@ def test_get_clsss_by_id_returns_static_type(type_registry):
     assert type_registry.get_class_by_id("FooType") == FooType
 
 
-def test_get_descriptor_returns_dynamic_type(type_registry):
+def test_get_descriptor_returns_dynamic_type(type_registry, static_types):
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
@@ -33,7 +62,8 @@ def test_get_descriptor_returns_dynamic_type(type_registry):
     assert "extra" in type_registry.get_descriptor_by_id("FooType").attributes
 
 
-def test_get_index_entries(type_registry):
+def test_get_index_entries(type_registry, static_types):
+    FooType = static_types['FooType']
 
     # create a dynamic FooType
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
@@ -63,23 +93,32 @@ def test_get_index_entries(type_registry):
     assert index_entries[1][2] == "hello"
 
 
-def test_is_registered(type_registry):
+def test_is_registered(type_registry, static_types):
+    FooType = static_types['FooType']
 
     assert type_registry.is_registered(FooType) is True
     assert type_registry.is_registered("FooType") is True
 
 
-def test_is_dynamic_type(type_registry):
+def test_is_static_type(type_registry, static_types):
 
-    # create a dynamic FooType
+    # test purely static type
+    FooType = static_types['FooType']
+    assert type_registry.is_static_type(FooType) is True
+
+    # test purely dynamic type
+    NewType = type_registry.create_type("NewType", (Entity,), {})
+    assert type_registry.is_static_type(NewType) is False
+
+    # augment a static type
     attrs = {'id': Uuid(unique=True), 'extra': String(unique=True)}
-    DynamicFooType = type_registry.create_type("FooType", (), attrs)
+    AugmentedFooType = type_registry.create_type("FooType", (), attrs)
 
-    assert type_registry.is_dynamic_type(DynamicFooType) is True
-    assert type_registry.is_dynamic_type(FooType) is True
+    assert type_registry.is_static_type(AugmentedFooType) is False
+    assert type_registry.is_static_type(FooType) is True
 
 
-def test_has_code_defined_attribute(type_registry):
+def test_has_code_defined_attribute(type_registry, static_types):
     attrs = {
         'id': Uuid(unique=True),
         'extra': String(unique=True),
@@ -93,16 +132,15 @@ def test_has_code_defined_attribute(type_registry):
     assert not type_registry.has_code_defined_attribute(NewType, "nonexistant")
 
     # test purely code-defined type
-    class BarType(Entity):
-        extra = String()
-        cls_attr = "placeholder"
-
+    BarType = static_types['BarType']
     type_registry.register(BarType)
+
     assert type_registry.has_code_defined_attribute(BarType, "extra")
     assert type_registry.has_code_defined_attribute(BarType, "cls_attr")
     assert not type_registry.has_code_defined_attribute(BarType, "nonexistant")
 
     # augment FooType with an "extra" attr; redefine "id" and "cls_attr" attrs
+    FooType = static_types['FooType']
     type_registry.create_type("FooType", (Entity,), attrs)
 
     # test augmented type
@@ -112,10 +150,7 @@ def test_has_code_defined_attribute(type_registry):
     assert not type_registry.has_code_defined_attribute(FooType, "nonexistant")
 
     # create static type with a dynamic subclass
-    class BazType(Entity):
-        name = String()
-        special = Bool()
-        cls_attr = "placeholder"
+    BazType = static_types['BazType']
     type_registry.register(BazType)
 
     attrs = {'special': Bool(), 'extra': Bool(), 'cls_attr': "placeholder"}
@@ -133,24 +168,24 @@ def test_has_code_defined_attribute(type_registry):
     assert not type_registry.has_code_defined_attribute(SubBazType, "extra")
 
     # test augmented type after reload
-    class A(Entity):
-        foo = String()
-
-    class B(A):
-        pass
-    type_registry.register(A)
-    type_registry.register(B)
+    AType = static_types['AType']
+    BType = static_types['BType']
 
     # augment the types
     # A1 and B1 are the new types A and B would deserialize to
     # after reloading the type hierarchy
-    A1 = type_registry.create_type("A", (Entity,), {})
-    B1 = type_registry.create_type("B", (Entity,), {})
+    A1Type = type_registry.create_type("AType", (Entity,), {'bar': True})
+    B1Type = type_registry.create_type("BType", (Entity,), {'bar': True})
 
-    assert type_registry.has_code_defined_attribute(A, "foo")
-    assert type_registry.has_code_defined_attribute(B, "foo")
-    assert type_registry.has_code_defined_attribute(A1, "foo")
-    assert type_registry.has_code_defined_attribute(B1, "foo")
+    assert type_registry.has_code_defined_attribute(AType, "foo")
+    assert type_registry.has_code_defined_attribute(BType, "foo")
+    assert type_registry.has_code_defined_attribute(A1Type, "foo")
+    assert type_registry.has_code_defined_attribute(B1Type, "foo")
+
+    assert not type_registry.has_code_defined_attribute(AType, "bar")
+    assert not type_registry.has_code_defined_attribute(BType, "bar")
+    assert not type_registry.has_code_defined_attribute(A1Type, "bar")
+    assert not type_registry.has_code_defined_attribute(B1Type, "bar")
 
 
 def test_get_registered_types(type_registry):

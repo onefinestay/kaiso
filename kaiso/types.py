@@ -110,9 +110,10 @@ class TypeRegistry(object):
         return (name in self._static_descriptors or
                 name in self._dynamic_descriptors)
 
-    def is_dynamic_type(self, cls):
+    def is_static_type(self, cls):
         class_id = get_type_id(cls)
-        return (class_id in self._dynamic_descriptors)
+        descriptor = self._static_descriptors.get(class_id, False)
+        return descriptor and descriptor.cls == cls
 
     def has_code_defined_attribute(self, cls, attr_name):
         """ Determine whether an attribute called ``attr_name`` was defined
@@ -135,7 +136,8 @@ class TypeRegistry(object):
 
         if maybe_dynamic is maybe_static:
             # type is purely dynamic or purely static
-            return not self.is_dynamic_type(maybe_dynamic)
+            if not self.is_static_type(maybe_static):
+                return False
 
         is_static_attr = hasattr(maybe_static, attr_name)
         return is_static_attr
