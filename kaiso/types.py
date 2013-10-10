@@ -93,23 +93,6 @@ class TypeRegistry(object):
             for type_id, cls in collected_static_classes.iteritems()
         }
 
-    def is_registered(self, cls):
-        """ Determine if ``cls`` is a registered type.
-
-        ``cls`` may be the name of the class, or the class object itself.
-
-        Arguments:
-            - cls: The class object or a class name as a string
-
-        Returns:
-            True if ``cls`` is registered as a static or dynamic type, False
-            otherwise.
-        """
-        name = get_type_id(cls) if isinstance(cls, type) else cls
-
-        return (name in self._static_descriptors or
-                name in self._dynamic_descriptors)
-
     def is_static_type(self, cls):
         class_id = get_type_id(cls)
         descriptor = self._static_descriptors.get(class_id, False)
@@ -210,13 +193,12 @@ class TypeRegistry(object):
         Raises:
             UnknownType if no type has been registered with the given id.
         """
-        if not self.is_registered(cls_id):
-            raise UnknownType('Unknown type "{}"'.format(cls_id))
-
-        try:
+        if cls_id in self._dynamic_descriptors:
             return self._dynamic_descriptors[cls_id]
-        except KeyError:
+        elif cls_id in self._static_descriptors:
             return self._static_descriptors[cls_id]
+        else:
+            raise UnknownType('Unknown type "{}"'.format(cls_id))
 
     def get_index_entries(self, obj):
         if isinstance(obj, PersistableType):
