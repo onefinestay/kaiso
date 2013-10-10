@@ -160,7 +160,7 @@ class TypeRegistry(object):
         return cls
 
     def register(self, cls):
-        """ Register a type
+        """ Register a dynamic type
         """
         descriptors = self._dynamic_descriptors
 
@@ -169,14 +169,6 @@ class TypeRegistry(object):
             raise TypeAlreadyRegistered(cls)
 
         descriptors[name] = Descriptor(cls)
-
-    def get_registered_types(self):
-        """ Yields all code-defined classes.
-        """
-        for descr in self._static_descriptors.values():
-            cls = descr.cls
-            if issubclass(cls, Entity):
-                yield cls
 
     def get_class_by_id(self, cls_id):
         """ Return the class for a given ``cls_id``, preferring statically

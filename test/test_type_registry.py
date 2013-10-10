@@ -93,13 +93,6 @@ def test_get_index_entries(type_registry, static_types):
     assert index_entries[1][2] == "hello"
 
 
-def test_is_registered(type_registry, static_types):
-    FooType = static_types['FooType']
-
-    assert type_registry.is_registered(FooType) is True
-    assert type_registry.is_registered("FooType") is True
-
-
 def test_is_static_type(type_registry, static_types):
 
     # test purely static type
@@ -184,15 +177,3 @@ def test_has_code_defined_attribute(type_registry, static_types):
     assert not type_registry.has_code_defined_attribute(BType, "bar")
     assert not type_registry.has_code_defined_attribute(A1Type, "bar")
     assert not type_registry.has_code_defined_attribute(B1Type, "bar")
-
-
-def test_get_registered_types(type_registry):
-    initial_classes = set(type_registry.get_registered_types())
-    assert Entity in initial_classes
-
-    # nothing should change about the set of registered types
-    # when creating one through the create_type API
-    type_registry.create_type("FooType", (), {})
-    classes = set(type_registry.get_registered_types())
-
-    assert initial_classes == classes
