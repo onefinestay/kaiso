@@ -1,4 +1,7 @@
+import pytest
+
 from kaiso.attributes import String
+from kaiso.exceptions import UnknownType
 from kaiso.types import Entity
 
 
@@ -153,7 +156,8 @@ def test_add_attr_to_type_via_2nd_manager(manager):
 
 def test_type_registry_independence(manager):
     Shrub = manager.create_type('Shrub', (Entity,), {})
-    assert manager.type_registry.is_registered(Shrub)
+    manager.type_registry.get_descriptor(Shrub)
 
     manager.reload_types()
-    assert not manager.type_registry.is_registered(Shrub)
+    with pytest.raises(UnknownType):
+        manager.type_registry.get_descriptor(Shrub)

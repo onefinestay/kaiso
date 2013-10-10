@@ -93,26 +93,43 @@ class TypeRegistry(object):
             for type_id, cls in collected_static_classes.iteritems()
         }
 
-    def is_registered(self, cls):
-        """ Determine if ``cls`` is a registered type.
-
-        ``cls`` may be the name of the class, or the class object itself.
-
-        Arguments:
-            - cls: The class object or a class name as a string
-
-        Returns:
-            True if ``cls`` is registered as a static or dynamic type, False
-            otherwise.
-        """
-        name = get_type_id(cls) if isinstance(cls, type) else cls
-
-        return (name in self._static_descriptors or
-                name in self._dynamic_descriptors)
-
-    def is_dynamic_type(self, cls):
+    def is_static_type(self, cls):
         class_id = get_type_id(cls)
-        return (class_id in self._dynamic_descriptors)
+        descriptor = self._static_descriptors.get(class_id, False)
+        return descriptor and descriptor.cls == cls
+
+    def has_code_defined_attribute(self, cls, attr_name):
+        """ Determine whether an attribute called ``attr_name`` was defined
+        in code on ``cls`` or one of its parent types.
+        """
+        # find the declaring class in the code-defined hierarchy
+        class_id = get_type_id(cls)
+        maybe_static = self.get_class_by_id(class_id)
+        declaring_cls = get_declaring_class(maybe_static, attr_name,
+                                            prefer_subclass=False)
+        if not declaring_cls:
+            return False  # attribute not found
+
+        # given a declaring class, determine whether that class is dynamic or
+        # code-defined
+        cls = declaring_cls
+        class_id = get_type_id(cls)
+        # get_descriptor_by_id will return a dynamically defined class with
+        # the given class_id, if there is one. otherwise it falls back to
+        # a code-defined class
+        maybe_dynamic = self.get_descriptor_by_id(class_id).cls
+        # get_class_by_id will return a code-defined class with the given
+        # class_id, if there is one. otherwise it falls back to one that
+        # has been rehydrated from graph data
+        maybe_static = self.get_class_by_id(class_id)
+
+        if maybe_dynamic is maybe_static:
+            # type is purely dynamic or purely static
+            if not self.is_static_type(maybe_static):
+                return False
+
+        is_static_attr = hasattr(maybe_static, attr_name)
+        return is_static_attr
 
     def create_type(self, cls_id, bases, attrs):
         """ Create and register a dynamic type
@@ -126,7 +143,7 @@ class TypeRegistry(object):
         return cls
 
     def register(self, cls):
-        """ Register a type
+        """ Register a dynamic type
         """
         descriptors = self._dynamic_descriptors
 
@@ -135,14 +152,6 @@ class TypeRegistry(object):
             raise TypeAlreadyRegistered(cls)
 
         descriptors[name] = Descriptor(cls)
-
-    def get_registered_types(self):
-        """ Yields all code-defined classes.
-        """
-        for descr in self._static_descriptors.values():
-            cls = descr.cls
-            if issubclass(cls, Entity):
-                yield cls
 
     def get_class_by_id(self, cls_id):
         """ Return the class for a given ``cls_id``, preferring statically
@@ -184,13 +193,12 @@ class TypeRegistry(object):
         Raises:
             UnknownType if no type has been registered with the given id.
         """
-        if not self.is_registered(cls_id):
-            raise UnknownType('Unknown type "{}"'.format(cls_id))
-
-        try:
+        if cls_id in self._dynamic_descriptors:
             return self._dynamic_descriptors[cls_id]
-        except KeyError:
+        elif cls_id in self._static_descriptors:
             return self._static_descriptors[cls_id]
+        else:
+            raise UnknownType('Unknown type "{}"'.format(cls_id))
 
     def get_index_entries(self, obj):
         if isinstance(obj, PersistableType):
@@ -337,22 +345,27 @@ class TypeRegistry(object):
         return clone
 
 
-def get_declaring_class(cls, attr_name):
+def get_declaring_class(cls, attr_name, prefer_subclass=True):
     """ Returns the class in the type heirarchy of ``cls`` that defined
         an attribute with name ``attr_name``.
+
+        If ``prefer_subclass`` is false, return the last class in the MRO
+        that defined an attribute with the given name.
     """
-    declaring_class = None
     declared_attr = None
+    declaring_class = None
 
     # Start at the top of the hierarchy and determine which of the MRO have
     # the attribute. Return the lowest class that defines (or overloads) the
-    # attribute.
+    # attribute, unless prefer_subclass is False.
     for base in reversed(getmro(cls)):
         sentinel = object()
         attr = getattr(base, attr_name, sentinel)
         if attr is not sentinel and declared_attr is not attr:
             declaring_class = base
             declared_attr = attr
+            if not prefer_subclass:
+                break
 
     return declaring_class
 
