@@ -1,11 +1,12 @@
-Unreleased
-----------
+Version 0.13.0
+--------------
 
 Add `Manager.has_code_defined_attribute` to determine whether an attribute was
 defined on a type in code.
 
 Minor: Removed unnecessary `Manager.is_registered_type` and
 `Manager.get_registered_types` methods.
+
 
 Version 0.12.0
 --------------
