@@ -131,7 +131,13 @@ class TypeRegistry(object):
         # code-defined
         cls = declaring_cls
         class_id = get_type_id(cls)
+        # get_descriptor_by_id will return a dynamically defined class with
+        # the given class_id, if there is one. otherwise it falls back to
+        # a code-defined class
         maybe_dynamic = self.get_descriptor_by_id(class_id).cls
+        # get_class_by_id will return a code-defined class with the given
+        # class_id, if there is one. otherwise it falls back to one that
+        # has been rehydrated from graph data
         maybe_static = self.get_class_by_id(class_id)
 
         if maybe_dynamic is maybe_static:
@@ -369,7 +375,8 @@ def get_declaring_class(cls, attr_name, prefer_subclass=True):
     """ Returns the class in the type heirarchy of ``cls`` that defined
         an attribute with name ``attr_name``.
 
-        If ``prefer_subclass`` is false, return the fu
+        If ``prefer_subclass`` is false, return the last class in the MRO
+        that defined an attribute with the given name.
     """
     declared_attr = None
     declaring_class = None

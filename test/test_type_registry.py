@@ -129,15 +129,14 @@ def test_has_code_defined_attribute(type_registry, static_types):
     NewType = type_registry.create_type("NewType", (Entity,), attrs)
     assert not type_registry.has_code_defined_attribute(NewType, "extra")
     assert not type_registry.has_code_defined_attribute(NewType, "cls_attr")
-    assert not type_registry.has_code_defined_attribute(NewType, "nonexistant")
+    assert not type_registry.has_code_defined_attribute(NewType, "nonexistent")
 
     # test purely code-defined type
     BarType = static_types['BarType']
-    type_registry.register(BarType)
 
     assert type_registry.has_code_defined_attribute(BarType, "extra")
     assert type_registry.has_code_defined_attribute(BarType, "cls_attr")
-    assert not type_registry.has_code_defined_attribute(BarType, "nonexistant")
+    assert not type_registry.has_code_defined_attribute(BarType, "nonexistent")
 
     # augment FooType with an "extra" attr; redefine "id" and "cls_attr" attrs
     FooType = static_types['FooType']
@@ -147,11 +146,10 @@ def test_has_code_defined_attribute(type_registry, static_types):
     assert type_registry.has_code_defined_attribute(FooType, "id")
     assert not type_registry.has_code_defined_attribute(FooType, "extra")
     assert type_registry.has_code_defined_attribute(FooType, "cls_attr")
-    assert not type_registry.has_code_defined_attribute(FooType, "nonexistant")
+    assert not type_registry.has_code_defined_attribute(FooType, "nonexistent")
 
     # create static type with a dynamic subclass
     BazType = static_types['BazType']
-    type_registry.register(BazType)
 
     attrs = {'special': Bool(), 'extra': Bool(), 'cls_attr': "placeholder"}
     SubBazType = type_registry.create_type("SubBazType", (BazType,), attrs)
