@@ -527,7 +527,7 @@ class Manager(object):
 
             yield (type_id, bases, attrs)
 
-    def serialize(self, obj):
+    def serialize(self, obj, for_db=False):
         """ Serialize ``obj`` to a dictionary.
 
         Args:
@@ -536,7 +536,7 @@ class Manager(object):
         Returns:
             A dictionary describing the object
         """
-        return self.type_registry.object_to_dict(obj)
+        return self.type_registry.object_to_dict(obj, for_db=for_db)
 
     def deserialize(self, object_dict):
         """ Deserialize ``object_dict`` to an object.
@@ -715,12 +715,12 @@ class Manager(object):
         if type_id not in type_registry._types_in_db:
             raise TypeNotPersistedError(type_id)
 
-        properties = self.serialize(obj)
+        properties = self.serialize(obj, for_db=True)
         properties['__type__'] = type_id
         properties.update(updated_values)
 
         # get rid of any attributes not supported by the new type
-        properties = self.serialize(self.deserialize(properties))
+        properties = self.serialize(self.deserialize(properties), for_db=True)
 
         tpe = type_registry.get_class_by_id(type_id)
 
