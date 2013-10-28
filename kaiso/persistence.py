@@ -715,14 +715,18 @@ class Manager(object):
         if type_id not in type_registry._types_in_db:
             raise TypeNotPersistedError(type_id)
 
-        properties = self.serialize(obj)
+        properties = type_registry.object_to_dict(obj, for_db=True)
         properties['__type__'] = type_id
         properties.update(updated_values)
 
-        # get rid of any attributes not supported by the new type
-        properties = self.serialize(self.deserialize(properties))
-
         tpe = type_registry.get_class_by_id(type_id)
+        descriptor = type_registry.get_descriptor(tpe)
+
+        # get rid of any attributes not supported by the new type
+        attribute_names = descriptor.attributes.keys()
+        for key in properties.keys():
+            if key not in (attribute_names + INTERNAL_CLASS_ATTRS):
+                properties.pop(key)
 
         rel_props = type_registry.object_to_dict(InstanceOf, for_db=True)
 
