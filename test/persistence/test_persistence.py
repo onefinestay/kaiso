@@ -380,6 +380,33 @@ def test_delete_class(manager):
     assert result == {'TypeSystem', 'Entity', str(thing.id)}
 
 
+def test_delete_class_without_attributes(manager):
+    """
+    Verify that types without attributes can be removed from the database.
+    """
+    class ParentThing(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(ParentThing)
+
+    class Thing(ParentThing):
+        pass
+
+    manager.save(Thing)
+    thing = Thing()
+    manager.save(thing)
+
+    manager.delete(Thing)
+    manager.delete(TypeSystem)
+
+    rows = manager.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    result = set(item for (item,) in rows)
+    assert len(result) == 5
+    assert 'Thing' not in result
+    assert 'ParentThing' in result
+    assert str(thing.id) in result
+
+
 def test_destroy(manager, static_types):
     Thing = static_types['Thing']
     IndexedRelated = static_types['IndexedRelated']

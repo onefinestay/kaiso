@@ -811,7 +811,7 @@ class Manager(object):
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
-                'MATCH attr -[:DECLAREDON]-> obj',
+                'MATCH attr -[?:DECLAREDON]-> obj',
                 'DELETE attr',
                 'MATCH obj -[rel]- ()',
                 'DELETE obj, rel',
