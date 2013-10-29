@@ -532,6 +532,14 @@ class Manager(object):
 
         Args:
             obj: An object to serialize
+            for_db: (Optional) bool to indicate whether we are serializing
+                data for neo4j or for general transport. This flag propagates
+                down all the way into ``Attribute.to_primitive`` and may be
+                used by custom attributes to determine behaviour for different
+                serialisation targets. E.g. if using a transport that supports
+                a Decimal type, `to_primitive` can return Decimal objects if
+                for_db is False, and strings otherwise (for persistance in
+                the neo4j db).
 
         Returns:
             A dictionary describing the object
