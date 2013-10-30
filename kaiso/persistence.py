@@ -181,7 +181,7 @@ class Manager(object):
             try:
                 cls = registry.get_class_by_id(type_id)
 
-                if not registry.is_dynamic_type(cls):
+                if registry.is_static_type(cls):
                     cls = None
             except UnknownType:
                 cls = None
@@ -568,7 +568,7 @@ class Manager(object):
         if not isinstance(tpe, PersistableType):
             raise UnsupportedTypeError("Object is not a PersistableType")
 
-        if not self.type_registry.is_dynamic_type(tpe):
+        if self.type_registry.is_static_type(tpe):
             raise CannotUpdateType("Type '{}' is defined in code and cannot"
                                    "be updated.".format(get_type_id(tpe)))
 
