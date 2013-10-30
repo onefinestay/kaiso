@@ -7,7 +7,6 @@ from py2neo import cypher
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
 from kaiso.exceptions import TypeNotPersistedError
-from kaiso.persistence import TypeSystem
 from kaiso.relationships import Relationship, IsA
 from kaiso.types import PersistableType, Entity, collector
 
@@ -373,7 +372,6 @@ def test_delete_class(manager):
     manager.save(thing)
 
     manager.delete(Thing)
-    manager.delete(TypeSystem)
 
     rows = manager.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
@@ -397,7 +395,6 @@ def test_delete_class_without_attributes(manager):
     manager.save(thing)
 
     manager.delete(Thing)
-    manager.delete(TypeSystem)
 
     rows = manager.query('START n=node(*) RETURN COALESCE(n.id?, n)')
     result = set(item for (item,) in rows)
