@@ -44,7 +44,7 @@ def get_neo4j_info():
     for cmd in neo4j_cmds:
         try:
             output = subprocess.check_output([cmd, 'info'])
-        except OSError:
+        except (OSError, subprocess.CalledProcessError):
             pass
 
     if not output:
