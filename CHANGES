@@ -1,3 +1,11 @@
+Version 0.13.1
+--------------
+
+Minor: Expose `for_db` (default: False) via `Manager.serialize` (was previously
+only available in the lower-level `TypeRegistry.object_to_dict`). See docs for
+`Manager.serialize` for details.
+
+
 Version 0.13.0
 --------------
 
