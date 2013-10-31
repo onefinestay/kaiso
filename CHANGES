@@ -1,3 +1,9 @@
+Version 0.13.2
+--------------
+
+Bugfix: Allow deletion of types with no attributes.
+
+
 Version 0.13.1
 --------------
 
