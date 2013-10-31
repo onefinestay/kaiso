@@ -36,14 +36,15 @@ def get_neo4j_info():
     """
     default_cmd = os.pathsep.join([
         'neo4j',
-        '/etc/init.d/neo4j-service'
+        '/var/lib/neo4j/bin/neo4j',  # >= 1.9.4
+        '/etc/init.d/neo4j-service',
     ])
     neo4j_cmds = os.environ.get('NEO4J_CMD', default_cmd).split(os.pathsep)
     output = None
     for cmd in neo4j_cmds:
         try:
             output = subprocess.check_output([cmd, 'info'])
-        except OSError:
+        except (OSError, subprocess.CalledProcessError):
             pass
 
     if not output:

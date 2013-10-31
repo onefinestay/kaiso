@@ -3,6 +3,7 @@ import pytest
 from kaiso.attributes import Uuid, String
 from kaiso.exceptions import (
     NoResultFound, NoUniqueAttributeError, TypeNotPersistedError)
+from kaiso.queries import get_start_clause, join_lines
 from kaiso.types import Entity
 
 
@@ -27,6 +28,19 @@ def static_types(manager):
         'ThingA': ThingA,
         'ThingB': ThingB,
     }
+
+
+def has_property(manager, obj, prop):
+    query_str = join_lines(
+        "START",
+        get_start_clause(obj, 'node', manager.type_registry),
+        """
+            return node.{}?
+        """.format(prop)
+    )
+
+    properties = list(manager.query(query_str))
+    return not (properties == [(None,)])
 
 
 def test_basic(manager, static_types):
@@ -55,6 +69,7 @@ def test_removes_obsoleted_attributes(manager, static_types):
 
     assert not hasattr(new_obj, 'aa')
     assert not hasattr(retrieved, 'aa')
+    assert not has_property(manager, new_obj, 'aa')
 
 
 def test_gets_added_attributes(manager, static_types):
@@ -95,6 +110,7 @@ def test_gets_updated_values(manager, static_types):
 
     assert new_obj.bb == 'bb'
     assert retrieved.bb == 'bb'
+    assert has_property(manager, new_obj, 'bb')
 
 
 def test_skips_mismached_updated_values(manager, static_types):
@@ -109,6 +125,7 @@ def test_skips_mismached_updated_values(manager, static_types):
 
     assert not hasattr(new_obj, 'cc')
     assert not hasattr(retrieved, 'cc')
+    assert not has_property(manager, new_obj, 'cc')
 
 
 def test_mismatching_attributes(manager, static_types):
