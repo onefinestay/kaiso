@@ -236,7 +236,7 @@ class Manager(object):
                 # have not found the cls
                 return None, {}
 
-            existing_cls_attrs = cls_node.get_properties()
+            existing_cls_attrs = cls_node._properties
             new_cls_attrs = registry.object_to_dict(persistable)
 
             # If any existing keys in "new" are missing in "old", add `None`s.
@@ -523,7 +523,7 @@ class Manager(object):
 
             # the bases are sorted using their index on the IsA relationship
             bases = tuple(base for (_, base) in sorted(bases))
-            class_attrs = class_attrs.get_properties()
+            class_attrs = class_attrs._properties
             for internal_attr in INTERNAL_CLASS_ATTRS:
                 class_attrs.pop(internal_attr)
             instance_attrs = [self._convert_value(v) for v in instance_attrs]
