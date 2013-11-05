@@ -102,13 +102,21 @@ class Manager(object):
         Returns:
             The converted value.
         """
+
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
-            properties = value.get_properties()
+            properties = value._properties
+
             obj = self.type_registry.dict_to_object(properties)
 
             if isinstance(value, neo4j.Relationship):
+                # prefetching start and end-nodes as they don't have
+                # their properties loaded yet
+                value.start_node.get_properties()
+                value.end_node.get_properties()
+
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
+                pass
             else:
                 set_store_for_object(obj, self)
             return obj
