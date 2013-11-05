@@ -116,7 +116,6 @@ class Manager(object):
 
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
-                pass
             else:
                 set_store_for_object(obj, self)
             return obj
