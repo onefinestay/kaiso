@@ -337,6 +337,35 @@ def test_update_relationship_missing_endpoints(manager, static_types):
     assert queried_rel.end.id == thing3.id
 
 
+def test_update_relationship_missing_startpoints(manager, static_types):
+    # same as test_update_relationship_end_points, with the difference
+    # that the relationship is passed through deserialize(serialize())
+    # which strips the start/end references
+    Thing = static_types['Thing']
+    IndexedRelated = static_types['IndexedRelated']
+
+    thing1 = Thing()
+    thing2 = Thing()
+    thing3 = Thing()
+
+    manager.save(thing1)
+    manager.save(thing2)
+    manager.save(thing3)
+
+    rel = IndexedRelated(start=thing1, end=thing2)
+    manager.save(rel)
+
+    rel.start = thing3
+    manager.save(rel)
+    reserialized_rel = manager.deserialize(manager.serialize(rel))
+    reserialized_rel.end = thing1
+    manager.save(reserialized_rel)
+
+    queried_rel = manager.get(IndexedRelated, id=rel.id)
+    assert queried_rel.start.id == thing3.id
+    assert queried_rel.end.id == thing1.id
+
+
 def test_delete_instance_types_remain(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
@@ -427,7 +456,7 @@ def test_destroy(manager, static_types):
 
     for query in queries:
         with pytest.raises(cypher.CypherError) as excinfo:
-            rows = manager.query(query)
+            rows = list(manager.query(query))
 
         assert excinfo.value.exception == 'MissingIndexException'
 
