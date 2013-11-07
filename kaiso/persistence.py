@@ -385,7 +385,7 @@ class Manager(object):
                     match_end_node = 'end_node'
 
                 start_clause = ', '.join(start_clauses)
-                rel_props = registry.object_to_dict(persistable)
+                rel_props = registry.object_to_dict(persistable, for_db=True)
 
                 query = join_lines(
                     'START %s' % start_clause,
@@ -873,8 +873,6 @@ class Manager(object):
         result = self._execute(query, **params)
 
         return (tuple(self._convert_row(row)) for row in result)
-
-        #return (tuple(self._convert_row(row)) for row in result)
 
     def destroy(self):
         """ Removes all nodes, relationships and indexes in the store. This
