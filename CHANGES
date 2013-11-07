@@ -1,3 +1,13 @@
+Version 0.13.3
+--------------
+
+Addressing performance issue in `_conver_value()` which issued unnecessary
+http requests for getting node propertiest.
+
+Removed the need for relationship objects to have start and end attributes
+when saving.
+
+
 Version 0.13.2
 --------------
 
