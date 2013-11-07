@@ -89,6 +89,7 @@ class Manager(object):
         log.debug('running query:\n%s', query.format(**params))
 
         rows, _ = cypher.execute(self._conn, query, params)
+
         return (row for row in rows)
 
     def _convert_value(self, value):
@@ -102,11 +103,18 @@ class Manager(object):
         Returns:
             The converted value.
         """
+
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
-            properties = value.get_properties()
+            properties = value._properties
+
             obj = self.type_registry.dict_to_object(properties)
 
             if isinstance(value, neo4j.Relationship):
+                # prefetching start and end-nodes as they don't have
+                # their properties loaded yet
+                value.start_node.get_properties()
+                value.end_node.get_properties()
+
                 obj.start = self._convert_value(value.start_node)
                 obj.end = self._convert_value(value.end_node)
             else:
@@ -229,7 +237,7 @@ class Manager(object):
                 # have not found the cls
                 return None, {}
 
-            existing_cls_attrs = cls_node.get_properties()
+            existing_cls_attrs = cls_node._properties
             new_cls_attrs = registry.object_to_dict(persistable)
 
             # If any existing keys in "new" are missing in "old", add `None`s.
@@ -267,19 +275,6 @@ class Manager(object):
             if existing is not None:
                 existing_props = registry.object_to_dict(existing)
                 props = registry.object_to_dict(persistable)
-
-                if isinstance(persistable, Relationship):
-                    # if the relationship has endoints, also consider
-                    # whether those have changed
-                    for rel_attr in ['start', 'end']:
-                        new = getattr(persistable, rel_attr, None)
-                        if new is None:
-                            continue
-                        ex_rel_attr = getattr(existing, rel_attr)
-                        ex_rel_identifier = get_attr_filter(ex_rel_attr,
-                                                            registry)
-                        if new != ex_rel_identifier:
-                            props[rel_attr] = new
 
                 if existing_props == props:
                     return existing, {}
@@ -364,32 +359,44 @@ class Manager(object):
             query = None
 
             if isinstance(persistable, Relationship):
-                old_start = existing.start
-                old_end = existing.end
+                start_clauses = [start_clause]
 
-                new_start = changes.pop('start', old_start)
-                new_end = changes.pop('end', old_end)
+                # if start or end have been set, we will do an index lookup
+                # to reference them when "updating" the relationship to
+                # point to them, if they are not set we look up the original
+                # ones using a MATCH clause and "update" the relationship.
+                new_start = getattr(persistable, 'start', None)
+                new_end = getattr(persistable, 'end', None)
 
-                if old_start != new_start or old_end != new_end:
-                    start_clause = '%s, %s, %s, %s, %s' % (
-                        start_clause,
-                        get_start_clause(old_start, 'old_start', registry),
-                        get_start_clause(old_end, 'old_end', registry),
-                        get_start_clause(new_start, 'new_start', registry),
-                        get_start_clause(new_end, 'new_end', registry)
+                if new_start is not None:
+                    start_clauses.append(
+                        get_start_clause(new_start, 'start_node', registry)
                     )
+                    match_start_node = '()'
+                else:
+                    match_start_node = 'start_node'
 
-                    rel_props = registry.object_to_dict(persistable)
-
-                    query = join_lines(
-                        'START %s' % start_clause,
-                        'DELETE n',
-                        'CREATE new_start -[r:%s {rel_props}]-> new_end' % (
-                            rel_props['__type__'].upper()
-                        ),
-                        'RETURN r'
+                if new_end is not None:
+                    start_clauses.append(
+                        get_start_clause(new_end, 'end_node', registry)
                     )
-                    query_args = {'rel_props': rel_props}
+                    match_end_node = '()'
+                else:
+                    match_end_node = 'end_node'
+
+                start_clause = ', '.join(start_clauses)
+                rel_props = registry.object_to_dict(persistable, for_db=True)
+
+                query = join_lines(
+                    'START %s' % start_clause,
+                    'MATCH %s -[n]-> %s' % (match_start_node, match_end_node),
+                    'DELETE n',
+                    'CREATE start_node -[r:%s {rel_props}]-> end_node' % (
+                        rel_props['__type__'].upper()
+                    ),
+                    'RETURN r'
+                )
+                query_args = {'rel_props': rel_props}
 
             if query is None:
                 query = join_lines(
@@ -516,7 +523,7 @@ class Manager(object):
 
             # the bases are sorted using their index on the IsA relationship
             bases = tuple(base for (_, base) in sorted(bases))
-            class_attrs = class_attrs.get_properties()
+            class_attrs = class_attrs._properties
             for internal_attr in INTERNAL_CLASS_ATTRS:
                 class_attrs.pop(internal_attr)
             instance_attrs = [self._convert_value(v) for v in instance_attrs]
@@ -628,7 +635,9 @@ class Manager(object):
         if existing is None:
             self._add(persistable)
             return persistable
-        elif not changes:
+        # we always want relationships to go through, even if there
+        # are no changes in the properties, e.g. start or end have changed
+        elif not changes and not isinstance(persistable, Relationship):
             return persistable
         else:
             return self._update(persistable, existing, changes)
