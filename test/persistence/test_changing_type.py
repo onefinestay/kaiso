@@ -4,6 +4,7 @@ from kaiso.attributes import Uuid, String
 from kaiso.exceptions import (
     NoResultFound, NoUniqueAttributeError, TypeNotPersistedError)
 from kaiso.queries import get_start_clause, join_lines
+from kaiso.relationships import InstanceOf
 from kaiso.types import Entity
 
 
@@ -43,6 +44,19 @@ def has_property(manager, obj, prop):
     return not (properties == [(None,)])
 
 
+def get_instance_of_relationship(manager, obj):
+    query_str = join_lines(
+        "START",
+        get_start_clause(obj, 'node', manager.type_registry),
+        """
+            match node -[instance_of:INSTANCEOF]-> ()
+            return instance_of
+        """
+    )
+    instance_of, = next(manager.query(query_str))
+    return instance_of
+
+
 def test_basic(manager, static_types):
     ThingA = static_types['ThingA']
     ThingB = static_types['ThingB']
@@ -55,6 +69,10 @@ def test_basic(manager, static_types):
 
     assert type(new_obj) is ThingB
     assert type(retrieved) is ThingB
+
+    # check new relationship has been created correctly
+    instance_of_obj = get_instance_of_relationship(manager, new_obj)
+    assert type(instance_of_obj) is InstanceOf
 
 
 def test_removes_obsoleted_attributes(manager, static_types):

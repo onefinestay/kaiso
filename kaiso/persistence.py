@@ -741,7 +741,7 @@ class Manager(object):
 
         tpe = type_registry.get_class_by_id(type_id)
 
-        rel_props = type_registry.object_to_dict(InstanceOf, for_db=True)
+        rel_props = type_registry.object_to_dict(InstanceOf(), for_db=True)
 
         start_clauses = (
             get_start_clause(obj, 'obj', type_registry),
