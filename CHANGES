@@ -1,3 +1,10 @@
+Version 0.13.4
+--------------
+
+Bugfix: `change_instance_type` now creates the correct properties with the
+new InstanceOf relationship.
+
+
 Version 0.13.3
 --------------
 
