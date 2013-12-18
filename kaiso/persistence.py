@@ -751,7 +751,6 @@ class Manager(object):
         return (self._convert_value(
             first_or_none(row)) for row in result)
 
-
     def change_instance_type(self, obj, type_id, updated_values=None):
         if updated_values is None:
             updated_values = {}

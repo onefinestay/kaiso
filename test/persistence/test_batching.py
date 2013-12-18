@@ -53,6 +53,7 @@ def test_unknown_value(manager, static_types):
     assert type(loaded1) is Thing
     assert loaded2 is None
 
+
 def test_bad_attr_name(manager, static_types):
     Thing = static_types['Thing']
 
