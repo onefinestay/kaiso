@@ -16,8 +16,8 @@ from kaiso.relationships import InstanceOf, IsA, DeclaredOn
 from kaiso.serialize import dict_to_db_values_dict, get_changes
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
-    Relationship, TypeRegistry, AttributedBase, get_index_name, get_type_id,
-    is_indexable)
+    Relationship, TypeRegistry, AttributedBase, get_declaring_class,
+    get_index_name, get_type_id, is_indexable)
 from kaiso.utils import dict_difference
 
 
@@ -722,6 +722,43 @@ class Manager(object):
 
         obj = self._convert_value(first)
         return obj
+
+    def get_by_unique_attr(self, cls, attr_name, values):
+        """Bulk load entities from a list of values for a unique attribute
+
+        Returns:
+            A generator (obj1, obj2, ...) corresponding to the `values` list
+
+        If any values are missing in the index, the corresponding obj is None
+        """
+
+        if not hasattr(cls, attr_name):
+            raise ValueError("{} has no attribute {}".format(cls, attr_name))
+
+        attr = getattr(cls, attr_name)
+        if not attr.unique:
+            raise ValueError("{}.{} is not unique".format(cls, attr_name))
+
+        batch = neo4j.ReadBatch(self._conn)
+
+        declaring_class = get_declaring_class(cls, attr_name)
+        index_name = get_index_name(declaring_class)
+
+        for value in values:
+            batch.get_indexed_nodes(index_name, attr_name, value)
+
+        # When upgrading to py2neo 1.6, consider changing this to batch.stream
+        batch_result = batch.submit()
+
+        def first_or_none(list_):
+            return next(iter(list_), None)
+
+        # `batch_result` is a list of either one element lists (for matches)
+        # or empty lists. Unpack to flatten (and hydrate to Kaiso objects)
+        result = (self._convert_value(
+            first_or_none(row)) for row in batch_result)
+
+        return result
 
     def change_instance_type(self, obj, type_id, updated_values=None):
         if updated_values is None:
