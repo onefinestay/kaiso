@@ -724,7 +724,14 @@ class Manager(object):
         return obj
 
     def get_by_unique_attr(self, cls, attr_name, values):
-        """Bulk load entities from a list of values for a unique attribute"""
+        """Bulk load entities from a list of values for a unique attribute
+
+        Returns:
+            A generator (obj1, obj2, ...) corresponding to the `values` list
+
+        If any values are missing in the index, the corresponding obj is None
+        """
+
         if not hasattr(cls, attr_name):
             raise ValueError("{} has no attribute {}".format(cls, attr_name))
 
@@ -741,15 +748,17 @@ class Manager(object):
             batch.get_indexed_nodes(index_name, attr_name, value)
 
         # When upgrading to py2neo 1.6, consider changing this to batch.stream
-        result = batch.submit()
+        batch_result = batch.submit()
 
         def first_or_none(list_):
             return next(iter(list_), None)
 
-        # result is a list of either one element lists (for matches)
-        # or empty lists
-        return (self._convert_value(
-            first_or_none(row)) for row in result)
+        # `batch_result` is a list of either one element lists (for matches)
+        # or empty lists. Unpack to flatten (and hydrate to Kaiso objects)
+        result = (self._convert_value(
+            first_or_none(row)) for row in batch_result)
+
+        return result
 
     def change_instance_type(self, obj, type_id, updated_values=None):
         if updated_values is None:
