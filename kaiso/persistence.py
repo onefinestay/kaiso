@@ -13,7 +13,8 @@ from kaiso.queries import (
     join_lines)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
-from kaiso.serialize import dict_to_db_values_dict, get_changes
+from kaiso.serialize import (
+    dict_to_db_values_dict, get_changes, object_to_db_value)
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
     Relationship, TypeRegistry, AttributedBase, get_declaring_class,
@@ -745,7 +746,8 @@ class Manager(object):
         index_name = get_index_name(declaring_class)
 
         for value in values:
-            batch.get_indexed_nodes(index_name, attr_name, value)
+            db_value = object_to_db_value(value)
+            batch.get_indexed_nodes(index_name, attr_name, db_value)
 
         # When upgrading to py2neo 1.6, consider changing this to batch.stream
         batch_result = batch.submit()
