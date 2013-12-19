@@ -818,8 +818,6 @@ class Manager(object):
 
         for index_name, key, value in indexes_to_remove:
             index = self._conn.get_index(neo4j.Node, index_name)
-            if index is None:
-                continue
             index.remove(key, value)
 
         for index_name, key, value in indexes_to_add:
