@@ -25,7 +25,7 @@ def test_basic(manager, static_types):
     manager.save(thing1)
     manager.save(thing2)
 
-    ids = [str(obj.id) for obj in (thing1, thing2)]
+    ids = [obj.id for obj in (thing1, thing2)]
     result = manager.get_by_unique_attr(Thing, 'id', ids)
     result = list(result)
     assert len(result) == 2
@@ -44,7 +44,7 @@ def test_unknown_value(manager, static_types):
     thing1 = Thing()
     manager.save(thing1)
 
-    ids = [str(thing1.id), '---']
+    ids = [thing1.id, '---']
     result = manager.get_by_unique_attr(Thing, 'id', ids)
     result = list(result)
     assert len(result) == 2
