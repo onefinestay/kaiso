@@ -797,7 +797,9 @@ class Manager(object):
             'RETURN obj',
         )
 
-        results = self.query(query, properties=properties, rel_props=rel_props)
+        # use _execute; we need the raw object to add to the index
+        results = self._execute(
+            query, properties=properties, rel_props=rel_props)
         row = next(results, None)
 
         if row is None:
@@ -805,7 +807,26 @@ class Manager(object):
                 "{} not found in db".format(repr(obj))
             )
 
-        (new_obj,) = row
+        (node,) = row
+        new_obj = self._convert_value(node)
+
+        # update any indexes
+        old_indexes = set(type_registry.get_index_entries(obj))
+        new_indexes = set(type_registry.get_index_entries(new_obj))
+        indexes_to_remove = old_indexes - new_indexes
+        indexes_to_add = new_indexes - old_indexes
+
+        for index_name, key, value in indexes_to_remove:
+            index = self._conn.get_index(neo4j.Node, index_name)
+            if index is None:
+                continue
+            index.remove(key, value)
+
+        for index_name, key, value in indexes_to_add:
+            index = self._conn.get_or_create_index(neo4j.Node, index_name)
+            index.add(key, value, node)
+
+        set_store_for_object(new_obj, self)
 
         return new_obj
 

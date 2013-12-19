@@ -226,3 +226,22 @@ def test_change_instance_with_no_unique_attr(manager, static_types):
 
     with pytest.raises(NoUniqueAttributeError):
         manager.change_instance_type(thing_c, 'ThingA')
+
+
+def test_change_unique_declaration(manager):
+    class ThingA(Entity):
+        id = Uuid(unique=True)
+
+    class ThingB(Entity):
+        id = Uuid(unique=True)
+
+    manager.save(ThingA)
+    manager.save(ThingB)
+
+    thing = ThingA()
+    manager.save(thing)
+
+    manager.change_instance_type(thing, 'ThingB')
+
+    assert next(manager.get_by_unique_attr(ThingA, 'id', [thing.id])) is None
+    assert next(manager.get_by_unique_attr(ThingB, 'id', [thing.id]))
