@@ -21,6 +21,12 @@ from kaiso.types import (
 from kaiso.utils import dict_difference
 
 
+# Note: some Cypher queries contain dummy names for unused nodes, e.g. (dummy1)
+# instead of (). This is an attempted workaround for an intermittent Cypher
+# bug (https://github.com/neo4j/neo4j/issues/1040) and may be removed when
+# used against later versions of Neo4j.
+
+
 log = getLogger(__name__)
 
 
@@ -372,7 +378,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_start, 'start_node', registry)
                     )
-                    match_start_node = '(dummy1)'
+                    match_start_node = '(dummy1)'  # See note at top of page
                 else:
                     match_start_node = 'start_node'
 
@@ -380,7 +386,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_end, 'end_node', registry)
                     )
-                    match_end_node = '(dummy2)'
+                    match_end_node = '(dummy2)'  # See note at top of page
                 else:
                     match_end_node = 'end_node'
 
@@ -483,11 +489,13 @@ class Manager(object):
         """
 
         if start_type_id:
+            # See note at top of page
             match = ('p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*]- opt '
                      '<-[:ISA*0..]- tpe)')
             where = 'WHERE opt.id = {start_id}'
             query_args = {'start_id': start_type_id}
         else:
+            # See note at top of page
             match = 'p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*0..]- tpe)'
             where = ''
             query_args = {}
@@ -609,7 +617,7 @@ class Manager(object):
         query = join_lines(
             "START",
             (start_clauses, ','),
-            "MATCH type -[r:ISA]-> (dummy1)",
+            "MATCH type -[r:ISA]-> (dummy1)",  # See note at top of page
             "DELETE r",
             "CREATE",
             (create_clauses, ','),
@@ -696,7 +704,7 @@ class Manager(object):
             query = join_lines(
                 'START root=node:%s(id={idx_value})' % idx_name,
                 'MATCH ',
-                '    n -[:INSTANCEOF]-> (dummy1)',
+                '    n -[:INSTANCEOF]-> (dummy1)',   # See note at top of page
                 '    -[:ISA*0..]-> tpe -[:ISA*0..]-> (dummy2) <-[:DEFINES]- root',
                 'WHERE %s' % idx_where,
                 '   AND tpe.id = {tpe_id}',
@@ -749,6 +757,7 @@ class Manager(object):
             get_start_clause(tpe, 'tpe', type_registry)
         )
 
+        # See note at top of page
         query = join_lines(
             'START',
             (start_clauses, ','),
@@ -831,7 +840,7 @@ class Manager(object):
                 'START {}',
                 'MATCH attr -[?:DECLAREDON]-> obj',
                 'DELETE attr',
-                'MATCH obj -[rel]- (dummy1)',
+                'MATCH obj -[rel]- (dummy1)',  # See note at top of page
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
@@ -841,7 +850,7 @@ class Manager(object):
         else:
             query = join_lines(
                 'START {}',
-                'MATCH obj -[rel]- (dummy1)',
+                'MATCH obj -[rel]- (dummy1)',  # See note at top of page
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
