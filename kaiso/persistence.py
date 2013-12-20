@@ -483,7 +483,8 @@ class Manager(object):
         """
 
         if start_type_id:
-            match = 'p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
+            match = ('p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*]- opt '
+                     '<-[:ISA*0..]- tpe)')
             where = 'WHERE opt.id = {start_id}'
             query_args = {'start_id': start_type_id}
         else:
