@@ -372,7 +372,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_start, 'start_node', registry)
                     )
-                    match_start_node = '()'
+                    match_start_node = '(foo)'
                 else:
                     match_start_node = 'start_node'
 
@@ -380,7 +380,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_end, 'end_node', registry)
                     )
-                    match_end_node = '()'
+                    match_end_node = '(bar)'
                 else:
                     match_end_node = 'end_node'
 
@@ -483,11 +483,11 @@ class Manager(object):
         """
 
         if start_type_id:
-            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
+            match = 'p=(ts -[:DEFINES]-> (foo) <-[:ISA*]- opt <-[:ISA*0..]- tpe)'
             where = 'WHERE opt.id = {start_id}'
             query_args = {'start_id': start_type_id}
         else:
-            match = 'p=(ts -[:DEFINES]-> () <-[:ISA*0..]- tpe)'
+            match = 'p=(ts -[:DEFINES]-> (foo) <-[:ISA*0..]- tpe)'
             where = ''
             query_args = {}
 
@@ -608,7 +608,7 @@ class Manager(object):
         query = join_lines(
             "START",
             (start_clauses, ','),
-            "MATCH type -[r:ISA]-> ()",
+            "MATCH type -[r:ISA]-> (foo)",
             "DELETE r",
             "CREATE",
             (create_clauses, ','),
@@ -695,8 +695,8 @@ class Manager(object):
             query = join_lines(
                 'START root=node:%s(id={idx_value})' % idx_name,
                 'MATCH ',
-                '    n -[:INSTANCEOF]-> ()',
-                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> () <-[:DEFINES]- root',
+                '    n -[:INSTANCEOF]-> (foo)',
+                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> (bar) <-[:DEFINES]- root',
                 'WHERE %s' % idx_where,
                 '   AND tpe.id = {tpe_id}',
                 'RETURN n',
@@ -751,7 +751,7 @@ class Manager(object):
         query = join_lines(
             'START',
             (start_clauses, ','),
-            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
+            'MATCH (obj)-[old_rel:INSTANCEOF]->(foo)',
             'DELETE old_rel',
             'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(tpe)',
             'SET obj={properties}',
@@ -830,7 +830,7 @@ class Manager(object):
                 'START {}',
                 'MATCH attr -[?:DECLAREDON]-> obj',
                 'DELETE attr',
-                'MATCH obj -[rel]- ()',
+                'MATCH obj -[rel]- (foo)',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
@@ -840,7 +840,7 @@ class Manager(object):
         else:
             query = join_lines(
                 'START {}',
-                'MATCH obj -[rel]- ()',
+                'MATCH obj -[rel]- (foo)',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
