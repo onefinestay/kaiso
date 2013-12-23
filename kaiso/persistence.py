@@ -705,7 +705,8 @@ class Manager(object):
                 'START root=node:%s(id={idx_value})' % idx_name,
                 'MATCH ',
                 '    n -[:INSTANCEOF]-> (dummy1)',   # See note at top of page
-                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> (dummy2) <-[:DEFINES]- root',
+                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> (dummy2) '
+                '    <-[:DEFINES]- root',
                 'WHERE %s' % idx_where,
                 '   AND tpe.id = {tpe_id}',
                 'RETURN n',
