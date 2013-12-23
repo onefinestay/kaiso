@@ -1,3 +1,14 @@
+Version 0.14.1
+--------------
+
+Fix indexes when type of instance is changed.
+
+Don't pin version of iso8601 library, allow future versions as well.
+
+Applied attempted workaround for intermittent " UNNAMEDx" issue seen in earlier
+releases of Neo4j 1.9 server.
+
+
 Version 0.14.0
 --------------
 
