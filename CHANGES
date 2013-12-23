@@ -1,3 +1,17 @@
+Version 0.14.0
+--------------
+
+Add `Manager.get_by_unique_attr` to bulk load objects given a list of values
+for a unique attribute.
+
+
+Version 0.13.4
+--------------
+
+Bugfix: `change_instance_type` now creates the correct properties with the
+new InstanceOf relationship.
+
+
 Version 0.13.3
 --------------
 
