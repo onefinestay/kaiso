@@ -13,7 +13,8 @@ from kaiso.queries import (
     join_lines)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
-from kaiso.serialize import dict_to_db_values_dict, get_changes
+from kaiso.serialize import (
+    dict_to_db_values_dict, get_changes, object_to_db_value)
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
     Relationship, TypeRegistry, AttributedBase, get_declaring_class,
@@ -755,7 +756,8 @@ class Manager(object):
         index_name = get_index_name(declaring_class)
 
         for value in values:
-            batch.get_indexed_nodes(index_name, attr_name, value)
+            db_value = object_to_db_value(value)
+            batch.get_indexed_nodes(index_name, attr_name, db_value)
 
         # When upgrading to py2neo 1.6, consider changing this to batch.stream
         batch_result = batch.submit()
@@ -806,7 +808,9 @@ class Manager(object):
             'RETURN obj',
         )
 
-        results = self.query(query, properties=properties, rel_props=rel_props)
+        # use _execute; we need the raw object to add to the index
+        results = self._execute(
+            query, properties=properties, rel_props=rel_props)
         row = next(results, None)
 
         if row is None:
@@ -814,7 +818,24 @@ class Manager(object):
                 "{} not found in db".format(repr(obj))
             )
 
-        (new_obj,) = row
+        (node,) = row
+        new_obj = self._convert_value(node)
+
+        # update any indexes
+        old_indexes = set(type_registry.get_index_entries(obj))
+        new_indexes = set(type_registry.get_index_entries(new_obj))
+        indexes_to_remove = old_indexes - new_indexes
+        indexes_to_add = new_indexes - old_indexes
+
+        for index_name, key, value in indexes_to_remove:
+            index = self._conn.get_index(neo4j.Node, index_name)
+            index.remove(key, value)
+
+        for index_name, key, value in indexes_to_add:
+            index = self._conn.get_or_create_index(neo4j.Node, index_name)
+            index.add(key, value, node)
+
+        set_store_for_object(new_obj, self)
 
         return new_obj
 
