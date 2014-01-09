@@ -1,6 +1,7 @@
 from __future__ import absolute_import  # local types.py and builtin types
 
 from contextlib import contextmanager
+from functools import wraps
 from inspect import getmembers, getmro
 
 from kaiso.exceptions import (
@@ -20,7 +21,36 @@ class Persistable(object):
     Any object having Persistable as it's base are considered persistable.
     """
 
-collected_static_classes = {}
+
+class CollectedStaticClasses(object):
+    def __init__(self):
+        self.classes = {}
+        self.descriptors = {}
+
+    def add_class(self, cls):
+        name = get_type_id(cls)
+        if name in self.classes:
+            raise TypeAlreadyCollected(
+                "Type `{}` already defined.".format(name)
+            )
+        self.classes[name] = cls
+        self.descriptors[name] = Descriptor(cls)
+
+    def remove(self, type_id):
+        self.classes.pop(type_id)
+        self.descriptors.pop(type_id)
+
+    def get_type_ids(self):
+        return self.classes.keys()
+
+    def get_classes(self):
+        return self.classes
+
+    def get_descriptors(self):
+        return self.descriptors
+
+
+collected_static_classes = CollectedStaticClasses()
 
 
 @contextmanager
@@ -42,8 +72,9 @@ def collector(type_map=None):
 
     orig = collected_static_classes
     try:
-        collected_static_classes = type_map
-        yield type_map
+
+        collected_static_classes = CollectedStaticClasses()
+        yield collected_static_classes.get_classes()
     finally:
         collected_static_classes = orig
 
@@ -52,12 +83,7 @@ def collect_class(cls):
     """ Collect a class as it is defined at import time. Called by the
     PersistableType metaclass at class creation time.
     """
-    name = get_type_id(cls)
-    if name in collected_static_classes:
-        raise TypeAlreadyCollected(
-            "Type `{}` already defined.".format(name)
-        )
-    collected_static_classes[name] = cls
+    collected_static_classes.add_class(cls)
 
 
 class PersistableType(type, Persistable):
@@ -88,10 +114,7 @@ class TypeRegistry(object):
 
     @property
     def _static_descriptors(self):
-        return {
-            type_id: Descriptor(cls)
-            for type_id, cls in collected_static_classes.iteritems()
-        }
+        return collected_static_classes.get_descriptors()
 
     def is_static_type(self, cls):
         class_id = get_type_id(cls)
@@ -406,6 +429,24 @@ def is_indexable(cls):
     return False
 
 
+def cache_result(func):
+    """Cache the result of a function in self._cache
+    """
+    @wraps(func)
+    def decorated(self, *args, **kwargs):
+        if not hasattr(self, '_cache'):
+            self._cache = {}
+
+        cache_key = '_{}'.format(func.__name__)
+
+        if cache_key not in self._cache:
+            result = func(self, *args, **kwargs)
+            self._cache[cache_key] = result
+        return self._cache[cache_key]
+
+    return decorated
+
+
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
@@ -416,6 +457,7 @@ class Descriptor(object):
         self.cls = cls
 
     @property
+    @cache_result
     def relationships(self):
         from kaiso.attributes.bases import _is_relationship_reference
         relationships = dict(getmembers(
@@ -424,6 +466,7 @@ class Descriptor(object):
         return relationships
 
     @property
+    @cache_result
     def attributes(self):
         attributes = dict(getmembers(self.cls, _is_attribute))
 
@@ -441,6 +484,7 @@ class Descriptor(object):
         return attributes
 
     @property
+    @cache_result
     def declared_attributes(self):
         declared = {}
         for name, attr in getmembers(self.cls, _is_attribute):
@@ -450,6 +494,7 @@ class Descriptor(object):
         return declared
 
     @property
+    @cache_result
     def class_attributes(self):
         attributes = {}
         for name, value in getmembers(self.cls, _is_class_attribute):
@@ -459,6 +504,7 @@ class Descriptor(object):
         return attributes
 
     @property
+    @cache_result
     def declared_class_attributes(self):
         declared = {}
         for name, value in self.class_attributes.items():

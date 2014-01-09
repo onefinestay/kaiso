@@ -11,7 +11,7 @@ def test_class_collection():
     class CollectBar(Entity):
         baz = String()
 
-    assert "CollectFoo" in collected_static_classes
-    assert "CollectBar" in collected_static_classes
-    assert "Entity" in collected_static_classes
-    assert "String" in collected_static_classes
+    assert "CollectFoo" in collected_static_classes.get_classes()
+    assert "CollectBar" in collected_static_classes.get_classes()
+    assert "Entity" in collected_static_classes.get_classes()
+    assert "String" in collected_static_classes.get_classes()
