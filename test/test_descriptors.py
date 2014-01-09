@@ -2,7 +2,8 @@ import pytest
 
 from kaiso.attributes import String
 from kaiso.exceptions import UnknownType
-from kaiso.types import Entity, TypeRegistry, get_declaring_class, collector
+from kaiso.types import Entity, TypeRegistry, collector
+
 
 def test_unknown_type(type_registry):
     with pytest.raises(UnknownType):
@@ -10,7 +11,7 @@ def test_unknown_type(type_registry):
 
 
 def test_static_descriptor_caching(manager):
-    with collector() as type_map:
+    with collector():
 
         class Thing(Entity):
             prop_x = String(required=True)
@@ -35,7 +36,7 @@ def test_static_descriptor_caching(manager):
 
 
 def test_descriptor_property_caching(manager):
-    with collector() as type_map:
+    with collector():
 
         class Thing(Entity):
             prop_x = String(required=True)
