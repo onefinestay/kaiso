@@ -29,13 +29,10 @@ class TemporaryStaticTypes(object):
     """
 
     def start(self):
-        self.original = types.collected_static_classes.get_type_ids()
+        self.state = types.collected_static_classes.dump_state()
 
     def stop(self):
-        current_type_ids = types.collected_static_classes.get_type_ids()
-        added = set(current_type_ids) - set(self.original)
-        for type_id in added:
-            types.collected_static_classes.remove(type_id)
+        types.collected_static_classes.load_state(self.state)
 
     def __enter__(self):
         self.start()

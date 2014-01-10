@@ -24,8 +24,7 @@ class Persistable(object):
 
 class CollectedStaticClasses(object):
     def __init__(self):
-        self.classes = {}
-        self.descriptors = {}
+        self.reset_state()
 
     def add_class(self, cls):
         name = get_type_id(cls)
@@ -36,18 +35,23 @@ class CollectedStaticClasses(object):
         self.classes[name] = cls
         self.descriptors[name] = Descriptor(cls)
 
-    def remove(self, type_id):
-        self.classes.pop(type_id)
-        self.descriptors.pop(type_id)
+    def dump_state(self):
+        return self.classes.copy(), self.descriptors.copy()
 
-    def get_type_ids(self):
-        return self.classes.keys()
+    def load_state(self, state):
+        self.classes, self.descriptors = state
+        # make sure we reset all descriptor caches
+        for descriptor in self.descriptors.values():
+            descriptor._clear_cache()
 
-    def get_classes(self):
-        return self.classes
+    def reset_state(self):
+        self.load_state(({}, {}))
 
     def get_descriptors(self):
         return self.descriptors
+
+    def get_classes(self):
+        return self.classes
 
 
 collected_static_classes = CollectedStaticClasses()
@@ -65,18 +69,16 @@ def collector(type_map=None):
 
     type_map == {'Foobar': Foobar}
     """
-    global collected_static_classes
-
     if type_map is None:
         type_map = {}
 
-    orig = collected_static_classes
+    state = collected_static_classes.dump_state()
     try:
 
-        collected_static_classes = CollectedStaticClasses()
+        collected_static_classes.reset_state()
         yield collected_static_classes.get_classes()
     finally:
-        collected_static_classes = orig
+        collected_static_classes.load_state(state)
 
 
 def collect_class(cls):
@@ -195,6 +197,10 @@ class TypeRegistry(object):
             return self._static_descriptors[cls_id].cls
         except KeyError:
             return self.get_descriptor_by_id(cls_id).cls
+
+    def refresh_type(self, cls):
+        descriptor = self.get_descriptor(cls)
+        descriptor._clear_cache()
 
     def get_descriptor(self, cls):
         name = get_type_id(cls)
@@ -433,14 +439,11 @@ def cache_result(func):
     """Cache the result of a function in self._cache
     """
     @wraps(func)
-    def decorated(self, *args, **kwargs):
-        if not hasattr(self, '_cache'):
-            self._cache = {}
-
+    def decorated(self):
         cache_key = '_{}'.format(func.__name__)
 
         if cache_key not in self._cache:
-            result = func(self, *args, **kwargs)
+            result = func(self)
             self._cache[cache_key] = result
         return self._cache[cache_key]
 
@@ -455,6 +458,10 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
+        self._cache = {}
+
+    def _clear_cache(self):
+        self._cache = {}
 
     @property
     @cache_result

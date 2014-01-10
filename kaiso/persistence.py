@@ -196,6 +196,8 @@ class Manager(object):
             try:
                 cls = registry.get_class_by_id(type_id)
 
+                # static types also get loaded into dynamic registry
+                # to allow them to be augmented
                 if registry.is_static_type(cls):
                     cls = None
             except UnknownType:
@@ -245,6 +247,10 @@ class Manager(object):
                 return None, {}
 
             existing_cls_attrs = cls_node._properties
+
+            # Make sure we get a clean view of current data.
+            registry.refresh_type(persistable)
+
             new_cls_attrs = registry.object_to_dict(persistable)
 
             # If any existing keys in "new" are missing in "old", add `None`s.

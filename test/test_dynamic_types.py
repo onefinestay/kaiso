@@ -5,6 +5,45 @@ from kaiso.exceptions import UnknownType
 from kaiso.types import Entity
 
 
+def test_static_types_can_be_augmented(manager):
+    # make sure static-type Entity is in the graph
+    manager.save(Entity)
+
+    # create an entity instance, attempting to set a non-defined attribute,
+    # and check that the attribute has not been saved to the graph
+    entity1 = Entity(foo="foo")
+    manager.save(entity1)
+    rows = manager.query("""
+        START n=node:persistabletype(id="Entity")
+        MATCH n <-[:INSTANCEOF]- entity
+        RETURN entity
+    """)
+    (loaded1, ) = next(rows)
+    assert not hasattr(loaded1, 'foo')
+
+    # Define and save a new Entity attribute.
+    Entity.foo = String()
+    manager.save(Entity)
+    # Delete attribute and let `reload_types` restore it
+    del Entity.foo
+    manager.reload_types()
+
+    # Create an entity with a value for the new attribute.
+    # Check that it has now been stored in the graph.
+    entity2 = Entity(foo="foo")
+    manager.save(entity2)
+    rows = manager.query("""
+    START n=node:persistabletype(id="Entity")
+        MATCH n <-[:INSTANCEOF]- entity
+        WHERE entity.foo! = "foo"
+        RETURN entity
+    """)
+    rows = list(rows)
+    assert len(rows) == 1
+    (loaded2, ) = rows[0]
+    assert loaded2.foo == 'foo'
+
+
 def test_save_dynamic_type(manager):
 
     attrs = {'id': String(unique=True)}
@@ -54,6 +93,7 @@ def test_remove_attr_from_type(manager):
     manager.save(Foobar)
 
     del Foobar.ham
+
     manager.save(Foobar)
 
     rows = manager.query(
