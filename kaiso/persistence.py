@@ -673,7 +673,7 @@ class Manager(object):
 
         if issubclass(cls, (Relationship, PersistableType)):
             idx_name = get_index_name(cls)
-            idx_key, idx_value = indexes[0]
+            idx_key, idx_value = next(iter(indexes))
 
             if issubclass(cls, Relationship):
                 self._conn.get_or_create_index(neo4j.Relationship, idx_name)
@@ -952,7 +952,9 @@ class Manager(object):
 
         """
         self._conn.clear()
-        for index_name in self._conn.get_indexes(neo4j.Node).keys():
+        # in py3 these are views, and we are mutating the dicts,
+        # so make a copy "list()" to iterate over
+        for index_name in list(self._conn.get_indexes(neo4j.Node)):
             self._conn.delete_index(neo4j.Node, index_name)
-        for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
+        for index_name in list(self._conn.get_indexes(neo4j.Relationship)):
             self._conn.delete_index(neo4j.Relationship, index_name)

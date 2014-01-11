@@ -1,3 +1,5 @@
+import six
+
 from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.types import (
@@ -114,7 +116,7 @@ def get_create_types_query(cls, root, type_registry):
 
         descriptor = type_registry.get_descriptor(cls)
         attributes = descriptor.declared_attributes
-        for attr_name, attr in attributes.iteritems():
+        for attr_name, attr in six.iteritems(attributes):
             key = "%s_%s" % (name, attr_name)
 
             ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> `%s`' % (
@@ -128,7 +130,7 @@ def get_create_types_query(cls, root, type_registry):
             query_args[key] = attr_dict
 
     # processing class attributes
-    for key, cls in classes.iteritems():
+    for key, cls in six.iteritems(classes):
         # all attributes of the class to be set via the query
         cls_props = type_registry.object_to_dict(cls, for_db=True)
         query_args['%s_props' % key] = cls_props

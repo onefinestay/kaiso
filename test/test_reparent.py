@@ -40,7 +40,7 @@ def test_cannot_reparent_non_type(manager, static_types):
 
     with pytest.raises(UnsupportedTypeError) as e:
         manager.update_type(animal, (Animal,))
-    assert e.value.message == "Object is not a PersistableType"
+    assert str(e.value) == "Object is not a PersistableType"
 
 
 def test_cannot_reparent_code_defined_types(manager, static_types):
@@ -51,7 +51,7 @@ def test_cannot_reparent_code_defined_types(manager, static_types):
 
     with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Cetacean, (Animal,))
-    assert "defined in code" in e.value.message
+    assert "defined in code" in str(e.value)
 
 
 def test_cannot_reparent_with_incompatible_attributes(manager, static_types):
@@ -63,7 +63,7 @@ def test_cannot_reparent_with_incompatible_attributes(manager, static_types):
 
     with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
-    assert e.value.message == "Inherited attributes are not identical"
+    assert str(e.value) == "Inherited attributes are not identical"
 
     with collector() as collected:
         class A(Entity):
@@ -78,7 +78,7 @@ def test_cannot_reparent_with_incompatible_attributes(manager, static_types):
 
     with pytest.raises(CannotUpdateType) as e:
         manager.update_type(C, (B,))
-    assert e.value.message == "Inherited attributes are not identical"
+    assert str(e.value) == "Inherited attributes are not identical"
 
 
 def test_reparent(manager, static_types):
@@ -270,7 +270,7 @@ def test_reparent_missing_type(manager, static_types):
     manager.save(Cetacean)
     with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
-    assert e.value.message == "Type or bases not found in the database."
+    assert str(e.value) == "Type or bases not found in the database."
 
 
 def test_reparent_to_missing_type(manager):
@@ -288,4 +288,4 @@ def test_reparent_to_missing_type(manager):
 
     with pytest.raises(CannotUpdateType) as e:
         manager.update_type(Whale, (Cetacean,))
-    assert e.value.message == "Type or bases not found in the database."
+    assert str(e.value) == "Type or bases not found in the database."

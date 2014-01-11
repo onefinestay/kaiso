@@ -1,3 +1,5 @@
+import six
+
 from kaiso.types import collected_static_classes
 from kaiso.types import PersistableType, Entity
 from kaiso.attributes import String
@@ -5,8 +7,9 @@ from kaiso.attributes import String
 
 def test_class_collection():
 
+    @six.add_metaclass(PersistableType)
     class CollectFoo():
-        __metaclass__ = PersistableType
+        pass
 
     class CollectBar(Entity):
         baz = String()

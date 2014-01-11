@@ -10,7 +10,10 @@ import atexit
 import logging
 import requests
 import tempfile
-import urlparse
+try:
+    import urlparse
+except ImportError:
+    from six.moves.urllib import parse as urlparse
 import subprocess
 
 from collections import namedtuple

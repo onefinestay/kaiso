@@ -29,7 +29,7 @@ class TemporaryStaticTypes(object):
     """
 
     def start(self):
-        self.original = types.collected_static_classes.keys()
+        self.original = list(types.collected_static_classes.keys())
 
     def stop(self):
         added = set(types.collected_static_classes) - set(self.original)

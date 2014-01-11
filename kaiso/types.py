@@ -3,6 +3,8 @@ from __future__ import absolute_import  # local types.py and builtin types
 from contextlib import contextmanager
 from inspect import getmembers, getmro
 
+import six
+
 from kaiso.exceptions import (
     UnknownType, TypeAlreadyRegistered, TypeAlreadyCollected,
     DeserialisationError)
@@ -10,7 +12,7 @@ from kaiso.exceptions import (
 
 # at some point, rename id to __name__ and just skip all dunder attrs
 INTERNAL_CLASS_ATTRS = ['__type__', 'id']
-CLASS_ATTRIBUTE_TYPES = (basestring, int, bool, list, float)
+CLASS_ATTRIBUTE_TYPES = (six.string_types, int, bool, list, float)
 
 
 class Persistable(object):
@@ -90,7 +92,7 @@ class TypeRegistry(object):
     def _static_descriptors(self):
         return {
             type_id: Descriptor(cls)
-            for type_id, cls in collected_static_classes.iteritems()
+            for type_id, cls in six.iteritems(collected_static_classes)
         }
 
     def is_static_type(self, cls):
@@ -468,9 +470,8 @@ class Descriptor(object):
         return declared
 
 
+@six.add_metaclass(PersistableType)
 class AttributeBase(object):
-    __metaclass__ = PersistableType
-
     name = None
 
     @staticmethod
@@ -510,22 +511,30 @@ class DefaultableAttribute(Attribute):
         self.default = default
 
     def __eq__(self, other):
-        same_type = type(self) is type(other)
-        equal_default = self.default == other.default
-        return same_type and equal_default
+        if type(self) is not type(other):
+            return False
+
+        if self.default != other.default:
+            return False
+
+        return True
+
+    def __hash__(self):
+        return super(DefaultableAttribute, self).__hash__()
 
 
+@six.add_metaclass(PersistableType)
 class AttributedBase(Persistable):
     """ The base class for objects that can have Attributes.
 
     Sets default values during instance creation and applies kwargs
     passed to __init__.
     """
-    __metaclass__ = PersistableType
 
     def __new__(cls, *args, **kwargs):
 
-        obj = super(AttributedBase, cls).__new__(cls, *args, **kwargs)
+        # TODO: figure out what is going on here
+        obj = super(AttributedBase, cls).__new__(cls)  # , *args, **kwargs)
 
         descriptor = Descriptor(cls)
 
@@ -535,7 +544,8 @@ class AttributedBase(Persistable):
         return obj
 
     def __init__(self, *args, **kwargs):
-        super(AttributedBase, self).__init__(*args, **kwargs)
+        # TODO: figure out what is going on here
+        super(AttributedBase, self).__init__()  # *args, **kwargs)
 
         for key, value in kwargs.items():
             setattr(self, key, value)

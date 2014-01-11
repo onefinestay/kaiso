@@ -38,7 +38,7 @@ def test_get_start_clause_mutiple_uniques():
 
     clause = get_start_clause(obj, "foo", type_registry)
     assert (clause == 'foo=node:indexablething(indexable_attr="bar")' or
-            clause == 'foo=node:indexablething(also_unique="baz")')
+            clause == 'foo=node:twouniquesthing(also_unique="baz")')
 
 
 def test_get_start_clause_for_relationship_type():
