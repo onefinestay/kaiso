@@ -22,7 +22,7 @@ class Persistable(object):
     """
 
 
-class CollectedStaticClasses(object):
+class StaticClassCollector(object):
     def __init__(self):
         self.reset_state()
 
@@ -54,7 +54,7 @@ class CollectedStaticClasses(object):
         return self.classes
 
 
-collected_static_classes = CollectedStaticClasses()
+collected_static_classes = StaticClassCollector()
 
 
 @contextmanager
@@ -81,13 +81,6 @@ def collector(type_map=None):
         collected_static_classes.load_state(state)
 
 
-def collect_class(cls):
-    """ Collect a class as it is defined at import time. Called by the
-    PersistableType metaclass at class creation time.
-    """
-    collected_static_classes.add_class(cls)
-
-
 class PersistableType(type, Persistable):
     """ Metaclass for static persistable types.
 
@@ -101,7 +94,7 @@ class PersistableType(type, Persistable):
             raise TypeError("__type__ is a reserved attribute")
 
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
-        collect_class(cls)
+        collected_static_classes.add_class(cls)
         return cls
 
 
