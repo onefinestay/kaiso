@@ -1,6 +1,7 @@
 from __future__ import absolute_import  # local types.py and builtin types
 
 from contextlib import contextmanager
+from functools import wraps
 from inspect import getmembers, getmro
 
 from kaiso.exceptions import (
@@ -20,7 +21,40 @@ class Persistable(object):
     Any object having Persistable as it's base are considered persistable.
     """
 
-collected_static_classes = {}
+
+class StaticClassCollector(object):
+    def __init__(self):
+        self.reset_state()
+
+    def add_class(self, cls):
+        name = get_type_id(cls)
+        if name in self.classes:
+            raise TypeAlreadyCollected(
+                "Type `{}` already defined.".format(name)
+            )
+        self.classes[name] = cls
+        self.descriptors[name] = Descriptor(cls)
+
+    def dump_state(self):
+        return self.classes.copy(), self.descriptors.copy()
+
+    def load_state(self, state):
+        self.classes, self.descriptors = state
+        # make sure we reset all descriptor caches
+        for descriptor in self.descriptors.values():
+            descriptor._clear_cache()
+
+    def reset_state(self):
+        self.load_state(({}, {}))
+
+    def get_descriptors(self):
+        return self.descriptors
+
+    def get_classes(self):
+        return self.classes
+
+
+collected_static_classes = StaticClassCollector()
 
 
 @contextmanager
@@ -35,29 +69,16 @@ def collector(type_map=None):
 
     type_map == {'Foobar': Foobar}
     """
-    global collected_static_classes
-
     if type_map is None:
         type_map = {}
 
-    orig = collected_static_classes
+    state = collected_static_classes.dump_state()
     try:
-        collected_static_classes = type_map
-        yield type_map
+
+        collected_static_classes.reset_state()
+        yield collected_static_classes.get_classes()
     finally:
-        collected_static_classes = orig
-
-
-def collect_class(cls):
-    """ Collect a class as it is defined at import time. Called by the
-    PersistableType metaclass at class creation time.
-    """
-    name = get_type_id(cls)
-    if name in collected_static_classes:
-        raise TypeAlreadyCollected(
-            "Type `{}` already defined.".format(name)
-        )
-    collected_static_classes[name] = cls
+        collected_static_classes.load_state(state)
 
 
 class PersistableType(type, Persistable):
@@ -73,7 +94,7 @@ class PersistableType(type, Persistable):
             raise TypeError("__type__ is a reserved attribute")
 
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
-        collect_class(cls)
+        collected_static_classes.add_class(cls)
         return cls
 
 
@@ -88,10 +109,7 @@ class TypeRegistry(object):
 
     @property
     def _static_descriptors(self):
-        return {
-            type_id: Descriptor(cls)
-            for type_id, cls in collected_static_classes.iteritems()
-        }
+        return collected_static_classes.get_descriptors()
 
     def is_static_type(self, cls):
         class_id = get_type_id(cls)
@@ -172,6 +190,10 @@ class TypeRegistry(object):
             return self._static_descriptors[cls_id].cls
         except KeyError:
             return self.get_descriptor_by_id(cls_id).cls
+
+    def refresh_type(self, cls):
+        descriptor = self.get_descriptor(cls)
+        descriptor._clear_cache()
 
     def get_descriptor(self, cls):
         name = get_type_id(cls)
@@ -406,6 +428,21 @@ def is_indexable(cls):
     return False
 
 
+def cache_result(func):
+    """Cache the result of a function in self._cache
+    """
+    @wraps(func)
+    def decorated(self):
+        cache_key = '_{}'.format(func.__name__)
+
+        if cache_key not in self._cache:
+            result = func(self)
+            self._cache[cache_key] = result
+        return self._cache[cache_key]
+
+    return decorated
+
+
 class Descriptor(object):
     """ Provides information about the types of persistable objects.
 
@@ -414,8 +451,13 @@ class Descriptor(object):
     """
     def __init__(self, cls):
         self.cls = cls
+        self._cache = {}
+
+    def _clear_cache(self):
+        self._cache = {}
 
     @property
+    @cache_result
     def relationships(self):
         from kaiso.attributes.bases import _is_relationship_reference
         relationships = dict(getmembers(
@@ -424,6 +466,7 @@ class Descriptor(object):
         return relationships
 
     @property
+    @cache_result
     def attributes(self):
         attributes = dict(getmembers(self.cls, _is_attribute))
 
@@ -441,6 +484,7 @@ class Descriptor(object):
         return attributes
 
     @property
+    @cache_result
     def declared_attributes(self):
         declared = {}
         for name, attr in getmembers(self.cls, _is_attribute):
@@ -450,6 +494,7 @@ class Descriptor(object):
         return declared
 
     @property
+    @cache_result
     def class_attributes(self):
         attributes = {}
         for name, value in getmembers(self.cls, _is_class_attribute):
@@ -459,6 +504,7 @@ class Descriptor(object):
         return attributes
 
     @property
+    @cache_result
     def declared_class_attributes(self):
         declared = {}
         for name, value in self.class_attributes.items():

@@ -1,3 +1,9 @@
+Version 0.14.2
+--------------
+
+Cache descriptors for static types.
+Cache all descriptor properties.
+
 Version 0.14.1
 --------------
 
