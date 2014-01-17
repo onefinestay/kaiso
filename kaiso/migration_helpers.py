@@ -8,8 +8,14 @@ from collections import OrderedDict
 from kaiso.types import TypeRegistry
 
 
-def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
+def validate_base_change(manager, type_id, new_bases):
     """
+    Make sure it would be ok to change the bases of `type_id` to `new_bases`
+
+    If this would result in an inconsistent type hieararchy,
+    raise `ValueError`. Otherwise, return None.
+
+
     In `manager.get_type_hierarchy`, `type_id` is guaranteed to appear after
     all its base classes, and before all its subclasses.
 
@@ -72,12 +78,15 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
             raise ValueError("One of the bases causes an inheritance cycle")
 
     temp_type_registry = TypeRegistry()
-    try:
-        for test_type_id, bases in new_type_hierarchy(manager):
-            bases = tuple(
-                temp_type_registry.get_class_by_id(base) for base in bases
+    for test_type_id, bases in new_type_hierarchy(manager):
+        bases = tuple(
+            temp_type_registry.get_class_by_id(base) for base in bases
+        )
+        type_name = str(test_type_id)
+        try:
+            temp_type_registry.create_type(type_name, bases, {})
+        except TypeError as ex:
+            # bad mro
+            raise ValueError(
+                "Invalid mro for {} ({})".format(test_type_id, ex)
             )
-            temp_type_registry.create_type(str(test_type_id), bases, {})
-    except TypeError as ex:
-        # bad mro
-        raise ValueError("Invalid mro for {} ({})".format(test_type_id, ex))

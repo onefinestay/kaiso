@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.exceptions import UnknownType
-from kaiso.migration_helpers import ensure_subclasses_remain_consistent
+from kaiso.migration_helpers import validate_base_change
 from kaiso.types import collector, Entity
 
 
@@ -23,7 +23,7 @@ def test_basic(manager):
             pass
 
     manager.save_collected_classes(collected)
-    ensure_subclasses_remain_consistent(manager, 'AB', ('A2', 'B2'))
+    validate_base_change(manager, 'AB', ('A2', 'B2'))
 
 
 def test_become_your_own_ancestor(manager):
@@ -41,7 +41,7 @@ def test_become_your_own_ancestor(manager):
 
     # become your own parent
     with pytest.raises(ValueError) as ex:
-        ensure_subclasses_remain_consistent(manager, 'A', ('A3',))
+        validate_base_change(manager, 'A', ('A3',))
     assert "inheritance cycle" in str(ex)
 
 
@@ -59,7 +59,7 @@ def test_duplicate_base_class(manager):
     manager.save_collected_classes(collected)
 
     with pytest.raises(ValueError) as ex:
-        ensure_subclasses_remain_consistent(manager, 'C', ('A', 'B', 'A'))
+        validate_base_change(manager, 'C', ('A', 'B', 'A'))
     assert "duplicate base class" in str(ex)
 
 
@@ -86,7 +86,7 @@ def test_move_down_the_hieararchy(manager):
 
     manager.save_collected_classes(collected)
 
-    ensure_subclasses_remain_consistent(manager, 'B', ('A4',))
+    validate_base_change(manager, 'B', ('A4',))
 
 
 def test_bad_mro(manager):
@@ -124,7 +124,7 @@ def test_bad_mro(manager):
     manager.save_collected_classes(collected)
 
     with pytest.raises(ValueError) as ex:
-        ensure_subclasses_remain_consistent(manager, 'B', ('Y', 'X'))
+        validate_base_change(manager, 'B', ('Y', 'X'))
     assert "Cannot create a consistent method resolution" in str(ex)
 
 
@@ -136,7 +136,7 @@ def test_unknown_types(manager):
     manager.save_collected_classes(collected)
 
     with pytest.raises(UnknownType):
-        ensure_subclasses_remain_consistent(manager, 'A', ['Invalid'])
+        validate_base_change(manager, 'A', ['Invalid'])
 
     with pytest.raises(UnknownType):
-        ensure_subclasses_remain_consistent(manager, 'Invalid', ['A'])
+        validate_base_change(manager, 'Invalid', ['A'])
