@@ -9,6 +9,24 @@ from kaiso.types import TypeRegistry
 
 
 def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
+    """
+    In `manager.get_type_hierarchy`, `type_id` is guaranteed to appear after
+    all its base classes, and before all its subclasses.
+
+    To remain consistent, all new_bases must appear before any subclasses
+    of type_id
+
+    We make a new list of (type_id, bases) pairs by
+    1) removing the old entry for (type_id, (...))
+    2) adding a new entry (type_id, new_bases) once we've seen each
+       entry in new_bases
+
+    We also discard attributes since we don't care about them for this.
+
+    Finally, we attempt to create the types in this new hierarchy,
+    which will throw `TypeError` if we can't maintain consistency.
+    """
+
     # ensure type_id exists
     registry = manager.type_registry
 
@@ -16,31 +34,17 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
     registry.get_class_by_id(type_id)
     [registry.get_class_by_id(base) for base in new_bases]
 
-    # type_id is guaranteed to appear after all its base classes, and before
-    # all its subclasses
-
-    # to remain consistent, all new_bases must appear before any subclasses
-    # of type_id
-
-    # we make a new list of (type_id, bases) pairs by
-    # 1) removing the old entry for (type_id, (...))
-    # 2) adding a new entry (type_id, new_bases) once we've seen each
-    #    entry in new_bases
-
-    # we also discard attributes since we don't care about them for this
-
-    # finally, we attempt to create the types in this new hierarchy,
-    # which will throw TypeError if we can't maintain consistency
-
     def new_type_hierarchy(manager):
-        # we want to switch out the bases in the entry for `type_id`,
-        # but all bases may not have been seen yet. if so, we defer
-        # returning `type_id` (and any subclasses, or any other entries
-        # that are also "waiting for" parent classes to appear
+        """
+        We want to switch out the bases in the entry for `type_id`,
+        but all bases may not have been seen yet. If so, we defer
+        returning `type_id` (and any subclasses, or any other entries
+        that are also "waiting for" parent classes to appear.
 
-        # if we had transactions, we could start a transaction, change the
-        # ISA relationships, call get_type_hierarchy() and then roll back
-        # instead of this
+        If we had transactions, we could start a transaction, change the
+        ISA relationships, call get_type_hierarchy() and then roll back
+        instead of this.
+        """
 
         awaited_bases = set(new_bases)
         awaited_bases.add(type_id)
@@ -50,10 +54,7 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
         deferred_types[type_id] = tuple(new_bases)
 
         for test_type_id, test_bases, _ in manager.get_type_hierarchy():
-            if set.intersection(
-                set(test_bases),
-                set(deferred_types),
-            ):
+            if set(test_bases).intersection(deferred_types):
                 deferred_types[test_type_id] = test_bases
                 continue
 
