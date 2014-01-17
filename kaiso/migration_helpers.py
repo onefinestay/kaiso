@@ -42,6 +42,10 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
         # returning `type_id` (and any subclasses, or any other entries
         # that are also "waiting for" parent classes to appear
 
+        # if we had transactions, we could start a transaction, change the
+        # ISA relationships, call get_type_hierarchy() and then roll back
+        # instead of this
+
         awaited_bases = set(new_bases)
         awaited_bases.add(type_id)
 
