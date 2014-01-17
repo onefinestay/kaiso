@@ -5,7 +5,6 @@ Helpers for altering the type hierarchy.
 
 from collections import OrderedDict
 
-from kaiso.exceptions import  UnknownType
 from kaiso.types import TypeRegistry
 
 
@@ -18,6 +17,8 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
     if registry.is_static_type(cls):
         raise ValueError("Cannot reparent static classes")  # TODO or can we?
 
+    # ensure all new bases exist
+    [registry.get_class_by_id(base) for base in new_bases]
 
     # type_id is guaranteed to appear after all its base classes, and before
     # all its subclasses
@@ -36,34 +37,37 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
     # which will throw TypeError if we can't maintain consistency
 
     def new_type_hierarchy(manager):
-        bases = tuple(new_bases)
-        waiting_for = set(new_bases)
-        waiting_for.add(type_id)
+        # we want to switch out the bases in the entry for `type_id`,
+        # but all bases may not have been seen yet. if so, we defer
+        # returning `type_id` (and any subclasses, or any other entries
+        # that are also "waiting for" parent classes to appear
 
-        # until type_id has been re-inserted, try to defer any dependencies
+        awaited_bases = set(new_bases)
+        awaited_bases.add(type_id)
+
         new_type_inserted = False
-        defer = OrderedDict()
-        defer[type_id] = bases
+        deferred_types = OrderedDict()
+        deferred_types[type_id] = tuple(new_bases)
 
         for test_type_id, test_bases, _ in manager.get_type_hierarchy():
             if set.intersection(
                 set(test_bases),
-                set(defer),
+                set(deferred_types),
             ):
-                defer[test_type_id] =  test_bases
+                deferred_types[test_type_id] = test_bases
                 continue
 
             if test_type_id != type_id:
                 yield (test_type_id, test_bases)
 
-            waiting_for.discard(test_type_id)
+            awaited_bases.discard(test_type_id)
 
-            if not new_type_inserted and not waiting_for:
+            if not new_type_inserted and not awaited_bases:
                 new_type_inserted = True
-                while defer:
-                    yield defer.popitem(last=False)
+                while deferred_types:
+                    yield deferred_types.popitem(last=False)
 
-        if waiting_for:
+        if awaited_bases:
             raise ValueError("One of the bases causes an inheritance cycle")
 
     temp_type_registry = TypeRegistry()
@@ -73,10 +77,6 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
                 temp_type_registry.get_class_by_id(base) for base in bases
             )
             temp_type_registry.create_type(str(test_type_id), bases, {})
-    # except IOError: pass
     except TypeError as ex:
         # bad mro
         raise ValueError("Invalid mro for {} ({})".format(test_type_id, ex))
-    except UnknownType as ex:
-        # child appears before parent
-        raise ValueError("Invalid mro for {}: ({})".format(test_type_id, ex))

@@ -1,18 +1,26 @@
 import pytest
 
+from kaiso.exceptions import UnknownType
 from kaiso.migration_helpers import ensure_subclasses_remain_consistent
 from kaiso.types import collector, Entity
 
 
 def test_basic(manager):
     with collector() as collected:
-        class A(Entity): pass
-        class A2(A): pass
+        class A(Entity):
+            pass
 
-        class B(Entity): pass
-        class B2(B): pass
+        class A2(A):
+            pass
 
-        class AB(A, B): pass
+        class B(Entity):
+            pass
+
+        class B2(B):
+            pass
+
+        class AB(A, B):
+            pass
 
     manager.save_collected_classes(collected)
     ensure_subclasses_remain_consistent(manager, 'AB', ('A2', 'B2'))
@@ -20,9 +28,14 @@ def test_basic(manager):
 
 def test_become_your_own_ancestor(manager):
     with collector() as collected:
-        class A(Entity): pass
-        class A2(A): pass
-        class A3(A2): pass
+        class A(Entity):
+            pass
+
+        class A2(A):
+            pass
+
+        class A3(A2):
+            pass
 
     manager.save_collected_classes(collected)
 
@@ -34,9 +47,14 @@ def test_become_your_own_ancestor(manager):
 
 def test_duplicate_base_class(manager):
     with collector() as collected:
-        class A(Entity): pass
-        class B(Entity): pass
-        class C(A, B): pass
+        class A(Entity):
+            pass
+
+        class B(Entity):
+            pass
+
+        class C(A, B):
+            pass
 
     manager.save_collected_classes(collected)
 
@@ -48,13 +66,23 @@ def test_duplicate_base_class(manager):
 def test_move_down_the_hieararchy(manager):
 
     with collector() as collected:
-        class A(Entity): pass
-        class A2(A): pass
-        class A3(A2): pass
-        class A4(A3): pass
+        class A(Entity):
+            pass
 
-        class B(A): pass
-        class C(B): pass
+        class A2(A):
+            pass
+
+        class A3(A2):
+            pass
+
+        class A4(A3):
+            pass
+
+        class B(A):
+            pass
+
+        class C(B):
+            pass
 
     manager.save_collected_classes(collected)
 
@@ -78,16 +106,37 @@ def test_bad_mro(manager):
     """
 
     with collector() as collected:
-        class X(Entity): pass
-        class Y(Entity): pass
+        class X(Entity):
+            pass
 
-        class A(X, Y): pass
-        class B(Y): pass # to become B(Y, X)
+        class Y(Entity):
+            pass
 
-        class AB(A, B): pass
+        class A(X, Y):
+            pass
+
+        class B(Y):  # to become B(Y, X)
+            pass
+
+        class AB(A, B):
+            pass
 
     manager.save_collected_classes(collected)
 
     with pytest.raises(ValueError) as ex:
         ensure_subclasses_remain_consistent(manager, 'B', ('Y', 'X'))
     assert "Cannot create a consistent method resolution" in str(ex)
+
+
+def test_unknown_types(manager):
+    with collector() as collected:
+        class A(Entity):
+            pass
+
+    manager.save_collected_classes(collected)
+
+    with pytest.raises(UnknownType):
+        ensure_subclasses_remain_consistent(manager, 'A', ['Invalid'])
+
+    with pytest.raises(UnknownType):
+        ensure_subclasses_remain_consistent(manager, 'Invalid', ['A'])
