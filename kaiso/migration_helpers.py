@@ -11,13 +11,9 @@ from kaiso.types import TypeRegistry
 def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
     # ensure type_id exists
     registry = manager.type_registry
-    cls = registry.get_class_by_id(type_id)
 
-    # and is not static
-    if registry.is_static_type(cls):
-        raise ValueError("Cannot reparent static classes")  # TODO or can we?
-
-    # ensure all new bases exist
+    # ensure type and all new bases exist (this raises UnknownType otherwise)
+    registry.get_class_by_id(type_id)
     [registry.get_class_by_id(base) for base in new_bases]
 
     # type_id is guaranteed to appear after all its base classes, and before
