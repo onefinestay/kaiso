@@ -37,15 +37,18 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
 
     def new_type_hierarchy(manager):
         bases = tuple(new_bases)
-        waiting_for = set((type_id,) + new_bases)
-        new_type_inserted = False
+        waiting_for = set(new_bases)
+        waiting_for.add(type_id)
+
         # until type_id has been re-inserted, try to defer any dependencies
+        new_type_inserted = False
         defer = OrderedDict()
+        defer[type_id] = bases
 
         for test_type_id, test_bases, _ in manager.get_type_hierarchy():
-            if not new_type_inserted and set.intersection(
+            if set.intersection(
                 set(test_bases),
-                set([type_id]) | set(defer),
+                set(defer),
             ):
                 defer[test_type_id] =  test_bases
                 continue
@@ -55,15 +58,13 @@ def ensure_subclasses_remain_consistent(manager, type_id, new_bases):
 
             waiting_for.discard(test_type_id)
 
-            if not waiting_for and not new_type_inserted:
-                yield (type_id, bases)
+            if not new_type_inserted and not waiting_for:
                 new_type_inserted = True
-                for entry in defer.items():
-                    yield entry
-                defer = OrderedDict()
+                while defer:
+                    yield defer.popitem(last=False)
 
         if waiting_for:
-            raise ValueError("Cycles?")
+            raise ValueError("One of the bases causes an inheritance cycle")
 
     temp_type_registry = TypeRegistry()
     try:

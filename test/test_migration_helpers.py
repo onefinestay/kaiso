@@ -29,7 +29,7 @@ def test_become_your_own_ancestor(manager):
     # become your own parent
     with pytest.raises(ValueError) as ex:
         ensure_subclasses_remain_consistent(manager, 'A', ('A3',))
-    # TODO: check ex
+    assert "inheritance cycle" in str(ex)
 
 
 def test_duplicate_base_class(manager):
