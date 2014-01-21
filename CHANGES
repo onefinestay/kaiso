@@ -1,8 +1,17 @@
+Version 0.14.3
+--------------
+
+New module `migration_helpers` with tools to aid in making "schema" changes,
+e.g. altering the type hierarchy. Initially adds `validate_base_change` to
+check consistency is retained when changing the bases of a type.
+
+
 Version 0.14.2
 --------------
 
 Cache descriptors for static types.
 Cache all descriptor properties.
+
 
 Version 0.14.1
 --------------
