@@ -1,12 +1,15 @@
 language: python
 python:
   - "2.7"
+env:
+  - NEO4J_VERSION=1.9.5
+  - NEO4J_VERSION=2.0.0
 
 before_install:
   - wget -O - http://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
   - echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee /etc/apt/sources.list.d/neo4j.list
   - sudo apt-get update -qq
-  - sudo apt-get install neo4j=1.9.5
+  - sudo apt-get install neo4j=$NEO4J_VERSION
 
 # use sudo to work around neo4j bug: https://github.com/neo4j/neo4j/issues/984
 install:
