@@ -93,9 +93,10 @@ class Manager(object):
         Returns:
             A generator with the raw rows returned by the connection.
         """
-        log.debug('running query:\n%s', query.format(**params))
-
+        # 2.0 compatibility as we transition
         query = "CYPHER 1.9 {}".format(query)
+
+        log.debug('running query:\n%s', query.format(**params))
 
         rows, _ = cypher.execute(self._conn, query, params)
 
