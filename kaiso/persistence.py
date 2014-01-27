@@ -427,7 +427,7 @@ class Manager(object):
 
         if isinstance(persistable, Relationship):
             self._index_object(persistable, result)
-        return result
+        return self._convert_value(result)
 
     def _add(self, obj):
         """ Adds an object to the data store.

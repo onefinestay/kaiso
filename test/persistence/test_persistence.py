@@ -721,8 +721,11 @@ def test_save_new(manager, static_types):
 
     obj1 = Thing()
     obj2 = Thing()
-    manager.save(obj1)
-    manager.save(obj2)
+    result_obj1 = manager.save(obj1)
+    result_obj2 = manager.save(obj2)
+
+    assert isinstance(result_obj1, Thing)
+    assert isinstance(result_obj2, Thing)
     assert count(manager, Thing) == 2
 
 
@@ -735,6 +738,7 @@ def test_save_replace(manager, static_types):
     obj2.id = obj1.id
     manager.save(obj1)
     manager.save(obj2)
+
     assert count(manager, Thing) == 1
 
 
@@ -746,7 +750,10 @@ def test_save_update(manager, static_types):
     manager.save(obj)
 
     obj.str_attr = 'two'
-    manager.save(obj)
+    result_obj = manager.save(obj)
+
+    assert isinstance(result_obj, Thing)
+    assert result_obj.str_attr == 'two'
 
     retrieved = manager.get(Thing, id=obj.id)
     assert retrieved.str_attr == 'two'
