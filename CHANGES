@@ -1,3 +1,10 @@
+Version 0.15.0
+--------------
+
+Add compatibility shim for forward compatibility with neo4j 2.0. This begins
+our transition to 2.0, which going forward will mean dropping support for 1.9.
+
+
 Version 0.14.3
 --------------
 
