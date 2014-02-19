@@ -209,6 +209,29 @@ def test_simple_add_and_get_relationship(manager, static_types):
     assert queried_rel.end.id == thing2.id
 
 
+def test_get_with_multi_value_attr_filter(manager, static_types):
+    class Thing1(Entity):
+        attr_a = Integer()
+        attr_b = Integer()
+
+    class Thing2(Entity):
+        attr_a = Integer()
+        attr_b = Integer()
+
+    manager.save(Thing1)
+    manager.save(Thing2)
+
+    thing1 = Thing1(attr_a=123, attr_b=999)
+    thing2 = Thing2(attr_a=123, attr_b=999)
+    manager.save(thing1)
+    manager.save(thing2)
+
+    queried_thing = manager.get(Thing1, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing1)
+    queried_thing = manager.get(Thing2, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing2)
+
+
 def test_delete_relationship(manager, static_types):
     Thing = static_types['Thing']
     Related = static_types['Related']
