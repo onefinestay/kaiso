@@ -49,7 +49,7 @@ def get_neo4j_info():
 
     if not output:
         raise ConnectionError('Cannot determine neo4j info. Is the NEO4J_CMD '
-                              'environment varaible set correctly?')
+                              'environment variable set correctly?')
 
     keys = ['NEO4J_HOME', 'NEO4J_INSTANCE', 'JAVA_OPTS', 'CLASSPATH']
 
