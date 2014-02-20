@@ -154,7 +154,7 @@ def test_load_dynamic_types(manager):
             tpe <-[:DECLAREDON*0..]- attr,
             tpe -[:ISA*0..1]-> base
         RETURN tpe.id,  length(p) AS level,
-            filter(b_id in collect(distinct base.id): b_id <> tpe.id),
+            filter(b_id in collect(distinct base.id) WHERE b_id <> tpe.id),
             collect(distinct attr.name)
         ORDER BY level, tpe.id
         ''')

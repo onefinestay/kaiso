@@ -20,7 +20,7 @@ def test_skip_type_loading(manager, manager_factory):
     manager.save(Unknown)
     result = manager._execute("""
         START n=node(*)
-        WHERE n.name! = "unknown_attr"
+        WHERE n.name = "unknown_attr"
         SET n.__type__ = "UnknownAttribute";
     """)
 
