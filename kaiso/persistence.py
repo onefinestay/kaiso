@@ -519,7 +519,8 @@ class Manager(object):
             where,
             ''' WITH tpe, max(length(p)) AS level
             OPTIONAL MATCH
-                tpe <-[:DECLAREDON*]- attr,
+                tpe <-[:DECLAREDON*]- attr
+            OPTIONAL MATCH
                 tpe -[isa:ISA]-> base
 
             WITH tpe.id AS type_id, level, tpe AS class_attrs,
