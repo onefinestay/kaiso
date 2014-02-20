@@ -35,7 +35,7 @@ def test_static_types_can_be_augmented(manager):
     rows = manager.query("""
     START n=node:persistabletype(id="Entity")
         MATCH n <-[:INSTANCEOF]- entity
-        WHERE entity.foo! = "foo"
+        WHERE entity.foo = "foo"
         RETURN entity
     """)
     rows = list(rows)
@@ -155,7 +155,7 @@ def test_load_dynamic_types(manager):
             tpe -[:ISA*0..1]-> base
         RETURN tpe.id,  length(p) AS level,
             filter(b_id in collect(distinct base.id): b_id <> tpe.id),
-            collect(distinct attr.name?)
+            collect(distinct attr.name)
         ORDER BY level, tpe.id
         ''')
     result = list(rows)
