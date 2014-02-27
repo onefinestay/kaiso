@@ -1,3 +1,9 @@
+Version 0.15.2
+--------------
+
+Bump py2neo to 1.6.3 to fix performance regression.
+
+
 Version 0.15.1
 --------------
 
