@@ -222,23 +222,41 @@ class TypeRegistry(object):
         else:
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
+    def get_indexes_for_type(self, cls):
+        """
+        Find indexes that are used to store instances of the given `cls`.
+
+        Returns:
+            A generator of (index_name, key, attr) tuples, where
+                `index_name` is the name of the index
+                `key` is the index key
+                'attr' is the unique attribute object that is the source of
+                    values for the index.
+        """
+        descr = self.get_descriptor(cls)
+        for name, attr in descr.attributes.items():
+            if attr.unique:
+                declaring_class = get_declaring_class(descr.cls, name)
+                index_name = get_index_name(declaring_class)
+                key = name
+                yield (index_name, key, attr)
+
     def get_index_entries(self, obj):
+        """
+        Find all the index locations that contain `obj`.
+
+        Returns:
+            A generator of (index_name, key, value) tuples. Each tuple
+            represents the exact location `obj` is found in an index.
+        """
         if isinstance(obj, PersistableType):
             yield (get_index_name(PersistableType), 'id', obj.__name__)
         else:
             obj_type = type(obj)
-            descr = self.get_descriptor(obj_type)
-
-            for name, attr in descr.attributes.items():
-                if attr.unique:
-                    declaring_class = get_declaring_class(descr.cls, name)
-
-                    index_name = get_index_name(declaring_class)
-                    key = name
-                    value = attr.to_primitive(getattr(obj, name), for_db=True)
-
-                    if value is not None:
-                        yield (index_name, key, value)
+            for index_name, key, attr in self.get_indexes_for_type(obj_type):
+                value = attr.to_primitive(getattr(obj, key), for_db=True)
+                if value is not None:
+                    yield (index_name, key, value)
 
     def object_to_dict(self, obj, for_db=False):
         """ Converts a persistable object to a dict.
