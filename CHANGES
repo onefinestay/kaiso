@@ -1,3 +1,10 @@
+Version 0.15.2
+--------------
+
+Bugfix to make sure indexes are only created for types with unique attrs.
+Downgrade py2neo to v1.5 until 1.6 has some performance enhancements. 
+
+
 Version 0.15.1
 --------------
 

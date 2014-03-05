@@ -1,4 +1,5 @@
 import decimal
+from uuid import uuid4
 
 import iso8601
 import pytest
@@ -39,6 +40,12 @@ def beetroot_diamond(request, manager):
     class Carmine(Colouring):
         pass
 
+    class Preservative(Thing):
+        e_number = String(unique=True)
+
+    class AnotherThing(Entity):
+        name = String()
+
     manager.save(Thing)
 
     return {
@@ -47,6 +54,8 @@ def beetroot_diamond(request, manager):
         'Colouring': Colouring,
         'Beetroot': Beetroot,
         'Carmine': Carmine,
+        'Preservative': Preservative,
+        'AnotherThing': AnotherThing,
     }
 
 
@@ -702,12 +711,74 @@ def test_type_hierarchy_diamond(manager, beetroot_diamond):
 def test_add_type_creates_index(manager, static_types):
     Thing = static_types['Thing']
 
+    # Thing has a unique attr so should create an index
     manager.save(Thing)
-
     # this should not raise a MissingIndex error
     result = list(manager.query('START n=node:thing("id:*") RETURN n'))
 
     assert result == []
+
+
+def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
+    Flavouring = static_types['Flavouring']
+
+    manager.save(Flavouring)
+
+    # superclass Thing has a unique attr so should create an index
+    result = list(manager.query('START n=node:thing("id:*") RETURN n'))
+    assert result == []
+
+    # but Flavouring has no unique attr so should not create an index
+    with pytest.raises(cypher.CypherError) as exc:
+        manager.query('START n=node:flavouring("id:*") RETURN n')
+    assert 'Index `flavouring` does not exist' in str(exc)
+
+
+def test_add_type_with_no_unique_attrs(manager, static_types):
+    AnotherThing = static_types['AnotherThing']
+
+    manager.save(AnotherThing)
+    # AnotherThing has no unique attrs at all, so should create no indexes.
+    with pytest.raises(cypher.CypherError) as exc:
+        manager.query('START n=node:anotherthing("id:*") RETURN n')
+    assert 'Index `anotherthing` does not exist' in str(exc)
+
+    # check get_indexes_for_type
+    assert list(manager.type_registry.get_indexes_for_type(AnotherThing)) == []
+
+    # create an instance
+    instance = AnotherThing(name='Foo')
+    # check get_index_entries
+    assert list(manager.type_registry.get_index_entries(instance)) == []
+
+
+def test_add_type_creates_index_per_unique_attr(manager, static_types):
+    Preservative = static_types['Preservative']
+
+    # Thing has a unique attr so should create an index
+    manager.save(Preservative)
+    instance = Preservative(id=uuid4(), e_number="E108")
+    manager.save(instance)
+
+    # instance should be in the thing index under `id`
+    results = list(manager.query('START n=node:thing("id:*") RETURN n'))
+    assert len(results) == 1
+    retrieved, = results[0]
+    assert retrieved.id == instance.id
+
+    # and also in the preservative index under `e_number`
+    results = list(manager.query(
+        'START n=node:preservative("e_number:*") RETURN n'))
+    assert len(results) == 1
+    retrieved, = results[0]
+    assert retrieved.id == instance.id
+
+    # check get_index_entries
+    index_entries = set(manager.type_registry.get_index_entries(instance))
+    assert index_entries == {
+        ('preservative', 'e_number', instance.e_number),
+        ('thing', 'id', str(instance.id)),
+    }
 
 
 def count(manager, type_):

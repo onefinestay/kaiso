@@ -3,7 +3,10 @@ python:
   - "2.7"
 env:
   - NEO4J_VERSION=1.9.5
-  - NEO4J_VERSION=2.0.0
+  - NEO4J_VERSION=2.0.1
+  - NEO4J_VERSION=1.9.5 PY2NEO_VERSION=1.6.3
+  - NEO4J_VERSION=2.0.1 PY2NEO_VERSION=1.6.3
+
 
 before_install:
   - wget -O - http://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
@@ -15,6 +18,7 @@ before_install:
 install:
   - sudo python setup.py -q install
   - sudo pip install -r test_requirements.txt
+  - sudo [ -z "$PY2NEO_VERSION" ] || pip install py2neo==$PY2NEO_VERSION
 
 script:
   - sudo make test
