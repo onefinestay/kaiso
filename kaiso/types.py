@@ -246,8 +246,19 @@ class TypeRegistry(object):
         Find all the index locations that contain `obj`.
 
         Returns:
-            A generator of (index_name, key, value) tuples. Each tuple
-            represents the exact location `obj` is found in an index.
+            A generator of (index_name, key, value) tuples, each tuple giving
+            the indexed location of `obj`.
+                `index_name` is the name of the index
+                `key` and `value` then represent the location within the index
+                    given by `index_name`
+
+                E.g. a response of:
+                    ('thing', 'id', 1234),
+                    ('another', 'code', 'E108')
+                would mean that obj could be found via the following two
+                cypher queries:
+                    `START n=node:thing("id:1234") RETURN n`
+                    `START n=node:another("code:E108") RETURN n`
         """
         if isinstance(obj, PersistableType):
             yield (get_index_name(PersistableType), 'id', obj.__name__)
