@@ -18,7 +18,7 @@ before_install:
 install:
   - sudo python setup.py -q install
   - sudo pip install -r test_requirements.txt
-  - sudo [[ -z "$PY2NEO_VERSION" ]] && pip install py2neo==$PY2NEO_VERSION
+  - sudo [ -z "$PY2NEO_VERSION" ] && pip install py2neo==$PY2NEO_VERSION
 
 script:
   - sudo make test
