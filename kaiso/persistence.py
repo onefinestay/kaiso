@@ -308,10 +308,9 @@ class Manager(object):
         for obj in objects:
             type_id = get_type_id(obj)
             self.type_registry._types_in_db.add(type_id)
-            if is_indexable(obj):
-                indexes = self.type_registry.get_indexes_for_type(obj)
-                for index_name, _, _ in indexes:
-                    self._conn.get_or_create_index(neo4j.Node, index_name)
+            indexes = self.type_registry.get_indexes_for_type(obj)
+            for index_name, _, _ in indexes:
+                self._conn.get_or_create_index(neo4j.Node, index_name)
 
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
