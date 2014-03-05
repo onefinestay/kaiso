@@ -43,6 +43,9 @@ def beetroot_diamond(request, manager):
     class Preservative(Thing):
         e_number = String(unique=True)
 
+    class AnotherThing(Entity):
+        name = String()
+
     manager.save(Thing)
 
     return {
@@ -52,6 +55,7 @@ def beetroot_diamond(request, manager):
         'Beetroot': Beetroot,
         'Carmine': Carmine,
         'Preservative': Preservative,
+        'AnotherThing': AnotherThing,
     }
 
 
@@ -728,6 +732,24 @@ def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
     with pytest.raises(cypher.CypherError) as exc:
         manager.query('START n=node:flavouring("id:*") RETURN n')
     assert 'Index `flavouring` does not exist' in str(exc)
+
+
+def test_add_type_with_no_unique_attrs(manager, static_types):
+    AnotherThing = static_types['AnotherThing']
+
+    manager.save(AnotherThing)
+    # AnotherThing has no unique attrs at all, so should create no indexes.
+    with pytest.raises(cypher.CypherError) as exc:
+        manager.query('START n=node:anotherthing("id:*") RETURN n')
+    assert 'Index `anotherthing` does not exist' in str(exc)
+
+    # check get_indexes_for_type
+    assert list(manager.type_registry.get_indexes_for_type(AnotherThing)) == []
+
+    # create an instance
+    instance = AnotherThing(name='Foo')
+    # check get_index_entries
+    assert list(manager.type_registry.get_index_entries(instance)) == []
 
 
 def test_add_type_creates_index_per_unique_attr(manager, static_types):
