@@ -725,8 +725,9 @@ def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
     assert result == []
 
     # but Flavouring has no unique attr so should not create an index
-    with pytest.raises(cypher.CypherError):
+    with pytest.raises(cypher.CypherError) as exc:
         manager.query('START n=node:flavouring("id:*") RETURN n')
+    assert 'Index `flavouring` does not exist' in str(exc)
 
 
 def test_add_type_creates_index_per_unique_attr(manager, static_types):
