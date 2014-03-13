@@ -143,7 +143,7 @@ def test_get_type_non_existing_obj(manager, static_types):
 
     manager.save(Thing)
 
-    assert manager.get(PersistableType, name="Ting") is None
+    assert manager.get(PersistableType, id="Ting") is None
 
 
 def test_simple_add_and_get_instance(manager, static_types):
@@ -184,19 +184,15 @@ def test_simple_add_and_get_instance_same_id_different_type(
     assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
-def test_simple_add_and_get_instance_by_optional_attr(manager, static_types):
+def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
     Thing = static_types['Thing']
 
-    thing1 = Thing()
-    thing2 = Thing(str_attr="this is thing2")
-    manager.save(thing1)
-    manager.save(thing2)
+    thing = Thing(str_attr="this is thing2")
+    manager.save(thing)
 
-    queried_thing = manager.get(Thing, str_attr=thing2.str_attr)
-
-    assert type(queried_thing) == Thing
-    assert queried_thing.id == thing2.id
-    assert queried_thing.str_attr == thing2.str_attr
+    with pytest.raises(ValueError) as exc:
+        manager.get(Thing, str_attr=thing.str_attr)
+    assert 'No relevant indexes' in str(exc)
 
 
 def test_simple_add_and_get_relationship(manager, static_types):
@@ -216,29 +212,6 @@ def test_simple_add_and_get_relationship(manager, static_types):
     assert queried_rel.id == rel.id
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
-
-
-def test_get_with_multi_value_attr_filter(manager, static_types):
-    class Thing1(Entity):
-        attr_a = Integer()
-        attr_b = Integer()
-
-    class Thing2(Entity):
-        attr_a = Integer()
-        attr_b = Integer()
-
-    manager.save(Thing1)
-    manager.save(Thing2)
-
-    thing1 = Thing1(attr_a=123, attr_b=999)
-    thing2 = Thing2(attr_a=123, attr_b=999)
-    manager.save(thing1)
-    manager.save(thing2)
-
-    queried_thing = manager.get(Thing1, attr_a=123, attr_b=999)
-    assert isinstance(queried_thing, Thing1)
-    queried_thing = manager.get(Thing2, attr_a=123, attr_b=999)
-    assert isinstance(queried_thing, Thing2)
 
 
 def test_delete_relationship(manager, static_types):
@@ -309,7 +282,8 @@ def test_delete_indexed_relationship(manager, static_types):
 
     assert str(thing1.id) in ids
     assert str(thing2.id) in ids
-    assert 'Related' not in rels
+
+    assert 'IndexedRelated' not in rels
 
 
 def test_update_relationship_end_points(manager, static_types):

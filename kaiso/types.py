@@ -233,13 +233,16 @@ class TypeRegistry(object):
                 'attr' is the unique attribute object that is the source of
                     values for the index.
         """
-        descr = self.get_descriptor(cls)
-        for name, attr in descr.attributes.items():
-            if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name)
-                index_name = get_index_name(declaring_class)
-                key = name
-                yield (index_name, key, attr)
+        if cls is PersistableType:
+            yield(get_index_name(PersistableType), 'id', None)
+        else:
+            descr = self.get_descriptor(cls)
+            for name, attr in descr.attributes.items():
+                if attr.unique:
+                    declaring_class = get_declaring_class(descr.cls, name)
+                    index_name = get_index_name(declaring_class)
+                    key = name
+                    yield (index_name, key, attr)
 
     def get_index_entries(self, obj):
         """
