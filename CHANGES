@@ -1,3 +1,8 @@
+Version 0.15.3
+--------------
+
+Manager get method now just queries via indexes.
+
 Version 0.15.2
 --------------
 
