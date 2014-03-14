@@ -9,7 +9,7 @@ from kaiso.types import Entity, collector
 @pytest.fixture
 def static_types(manager):
     class Animal(Entity):
-        name = String()
+        name = String(unique=True)
 
     class Mammal(Animal):
         pass

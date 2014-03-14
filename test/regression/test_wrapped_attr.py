@@ -30,7 +30,7 @@ def test_save(manager):
             return Wrapper(value)
 
     class WrappingSpam(Entity):
-        id = Integer(default=1)
+        id = Integer(default=1, unique=True)
         wrapped = WrappedAttr()
 
     manager.save(WrappingSpam)
