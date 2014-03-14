@@ -158,6 +158,62 @@ def test_simple_add_and_get_instance(manager, static_types):
     assert queried_thing.id == thing.id
 
 
+def test_add_and_get_instance_of_node_with_no_attrs(manager):
+
+    # create Thing with no-attrs
+    class Thing(Entity):
+        pass
+
+    manager.save(Thing)
+
+    thing = Thing()
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+
+    # manager.get will always return None when trying to find
+    # a node with no attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
+
+
+def test_add_and_get_instance_of_node_with_no_unique_attrs(manager):
+
+    # create Thing with one non-unique attr
+    class Thing(Entity):
+        name = String()
+
+    manager.save(Thing)
+    thing = Thing(name='foo')
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+    assert result.name == 'foo'
+
+    # manager.get will always return None when trying to find
+    # a node with no unique attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
+
+
 def test_simple_add_and_get_instance_same_id_different_type(
         manager, static_types):
     """ Instances of two different types that have the same id
@@ -187,7 +243,7 @@ def test_simple_add_and_get_instance_same_id_different_type(
 def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
     Thing = static_types['Thing']
 
-    thing = Thing(str_attr="this is thing2")
+    thing = Thing(str_attr="this is thing")
     manager.save(thing)
 
     with pytest.raises(ValueError) as exc:
@@ -212,6 +268,29 @@ def test_simple_add_and_get_relationship(manager, static_types):
     assert queried_rel.id == rel.id
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
+
+
+def test_get_with_multi_value_attr_filter(manager, static_types):
+    class Thing1(Entity):
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
+
+    class Thing2(Entity):
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
+
+    manager.save(Thing1)
+    manager.save(Thing2)
+
+    thing1 = Thing1(attr_a=123, attr_b=999)
+    thing2 = Thing2(attr_a=123, attr_b=999)
+    manager.save(thing1)
+    manager.save(thing2)
+
+    queried_thing = manager.get(Thing1, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing1)
+    queried_thing = manager.get(Thing2, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing2)
 
 
 def test_delete_relationship(manager, static_types):
