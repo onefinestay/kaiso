@@ -690,8 +690,10 @@ class Manager(object):
         else:
             attr_filter = dict_to_db_values_dict(attr_filter)
 
-            # TODO - sort out what to do with Nodes/Relationships with no
-            # unique attrs
+            # Workaround that allows nodes and relationships with no
+            # attrs to be saved. `save` will cause this method to be called
+            # with an empty attr_filter, and when it receives None, will add
+            # a new object.
             if not attr_filter:
                 return None
 
