@@ -1,3 +1,11 @@
+Version 0.16.0
+--------------
+
+Manager `get` method now only queries via indexes. It is no longer possible
+to find nodes/relationships via `get` by providing non-indexed attribute
+values.
+
+
 Version 0.15.2
 --------------
 

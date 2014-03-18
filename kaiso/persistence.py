@@ -671,63 +671,56 @@ class Manager(object):
             self.save(cls)
 
     def get(self, cls, **attr_filter):
-        attr_filter = dict_to_db_values_dict(attr_filter)
 
-        if not attr_filter:
-            return None
+        found = []
 
-        query_args = {}
+        def append_results(query, **query_args):
+            rows = self._execute(query, **query_args)
+            for (node_or_rel,) in rows:
+                found.append(node_or_rel)
 
-        indexes = attr_filter.items()
-
-        if issubclass(cls, (Relationship, PersistableType)):
-            idx_name = get_index_name(cls)
-            idx_key, idx_value = indexes[0]
-
-            if issubclass(cls, Relationship):
-                self._conn.get_or_create_index(neo4j.Relationship, idx_name)
-                start_func = 'relationship'
-            else:
-                self._conn.get_or_create_index(neo4j.Node, idx_name)
-                start_func = 'node'
-
-            query = 'START nr = %s:%s(%s={idx_value}) RETURN nr' % (
-                start_func, idx_name, idx_key)
-
-            query_args['idx_value'] = idx_value
-
-        elif cls is TypeSystem:
+        if cls is TypeSystem:
             idx_name = get_index_name(TypeSystem)
             query = join_lines(
                 'START ts=node:%s(id={idx_value})' % idx_name,
                 'RETURN ts'
             )
-            query_args['idx_value'] = self.type_system.id
+            append_results(query, idx_value=self.type_system.id)
+
         else:
-            idx_where = []
-            for key, value in indexes:
-                idx_where.append('n.%s! = {%s}' % (key, key))
-                query_args[key] = value
-            idx_where = ' or '.join(idx_where)
+            attr_filter = dict_to_db_values_dict(attr_filter)
 
-            idx_name = get_index_name(TypeSystem)
-            query = join_lines(
-                'START root=node:%s(id={idx_value})' % idx_name,
-                'MATCH ',
-                '    n -[:INSTANCEOF]-> (dummy1)',   # See note at top of page
-                '    -[:ISA*0..]-> tpe -[:ISA*0..]-> (dummy2) '
-                '    <-[:DEFINES]- root',
-                'WHERE (%s)' % idx_where,
-                '   AND tpe.id = {tpe_id}',
-                'RETURN n',
-            )
+            # Workaround that allows nodes and relationships with no
+            # attrs to be saved. `save` will cause this method to be called
+            # with an empty attr_filter, and when it receives None, will add
+            # a new object.
+            if not attr_filter:
+                return None
 
-            query_args['idx_value'] = self.type_system.id
+            index_found = False
+            for index, key, _ in self.type_registry.get_indexes_for_type(cls):
+                # ensure this index key is in the filter (to exclude any
+                # irrelevant default values set during instantiation)
+                if key in attr_filter:
+                    index_found = True
 
-            type_id = get_type_id(cls)
-            query_args['tpe_id'] = type_id
+                    if issubclass(cls, Relationship):
+                        self._conn.get_or_create_index(
+                            neo4j.Relationship, index)
+                        start_func = 'relationship'
+                    else:
+                        self._conn.get_or_create_index(neo4j.Node, index)
+                        start_func = 'node'
 
-        found = [node for (node,) in self._execute(query, **query_args)]
+                    query = 'START nr = %s:%s(%s={idx_val}) RETURN nr' % (
+                        start_func, index, key)
+                    append_results(query, idx_val=attr_filter[key])
+
+            if not index_found:
+                raise ValueError(
+                    'No relevant indexes found when calling get for class: {}'
+                    ' with filter {}'.format(cls, attr_filter)
+                )
 
         if not found:
             return None

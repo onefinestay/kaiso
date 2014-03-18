@@ -143,7 +143,7 @@ def test_get_type_non_existing_obj(manager, static_types):
 
     manager.save(Thing)
 
-    assert manager.get(PersistableType, name="Ting") is None
+    assert manager.get(PersistableType, id="Ting") is None
 
 
 def test_simple_add_and_get_instance(manager, static_types):
@@ -156,6 +156,62 @@ def test_simple_add_and_get_instance(manager, static_types):
 
     assert type(queried_thing) == Thing
     assert queried_thing.id == thing.id
+
+
+def test_add_and_get_instance_of_node_with_no_attrs(manager):
+
+    # create Thing with no-attrs
+    class Thing(Entity):
+        pass
+
+    manager.save(Thing)
+
+    thing = Thing()
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+
+    # manager.get will always return None when trying to find
+    # a node with no attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
+
+
+def test_add_and_get_instance_of_node_with_no_unique_attrs(manager):
+
+    # create Thing with one non-unique attr
+    class Thing(Entity):
+        name = String()
+
+    manager.save(Thing)
+    thing = Thing(name='foo')
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+    assert result.name == 'foo'
+
+    # manager.get will always return None when trying to find
+    # a node with no unique attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
 
 
 def test_simple_add_and_get_instance_same_id_different_type(
@@ -184,19 +240,15 @@ def test_simple_add_and_get_instance_same_id_different_type(
     assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
-def test_simple_add_and_get_instance_by_optional_attr(manager, static_types):
+def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
     Thing = static_types['Thing']
 
-    thing1 = Thing()
-    thing2 = Thing(str_attr="this is thing2")
-    manager.save(thing1)
-    manager.save(thing2)
+    thing = Thing(str_attr="this is thing")
+    manager.save(thing)
 
-    queried_thing = manager.get(Thing, str_attr=thing2.str_attr)
-
-    assert type(queried_thing) == Thing
-    assert queried_thing.id == thing2.id
-    assert queried_thing.str_attr == thing2.str_attr
+    with pytest.raises(ValueError) as exc:
+        manager.get(Thing, str_attr=thing.str_attr)
+    assert 'No relevant indexes' in str(exc)
 
 
 def test_simple_add_and_get_relationship(manager, static_types):
@@ -220,12 +272,12 @@ def test_simple_add_and_get_relationship(manager, static_types):
 
 def test_get_with_multi_value_attr_filter(manager, static_types):
     class Thing1(Entity):
-        attr_a = Integer()
-        attr_b = Integer()
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
 
     class Thing2(Entity):
-        attr_a = Integer()
-        attr_b = Integer()
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
 
     manager.save(Thing1)
     manager.save(Thing2)
@@ -309,7 +361,8 @@ def test_delete_indexed_relationship(manager, static_types):
 
     assert str(thing1.id) in ids
     assert str(thing2.id) in ids
-    assert 'Related' not in rels
+
+    assert 'IndexedRelated' not in rels
 
 
 def test_update_relationship_end_points(manager, static_types):

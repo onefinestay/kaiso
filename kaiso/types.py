@@ -233,6 +233,10 @@ class TypeRegistry(object):
                 'attr' is the unique attribute object that is the source of
                     values for the index.
         """
+        if cls is PersistableType:
+            yield(get_index_name(PersistableType), 'id', None)
+            return
+
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
             if attr.unique:
@@ -262,12 +266,13 @@ class TypeRegistry(object):
         """
         if isinstance(obj, PersistableType):
             yield (get_index_name(PersistableType), 'id', obj.__name__)
-        else:
-            obj_type = type(obj)
-            for index_name, key, attr in self.get_indexes_for_type(obj_type):
-                value = attr.to_primitive(getattr(obj, key), for_db=True)
-                if value is not None:
-                    yield (index_name, key, value)
+            return
+
+        obj_type = type(obj)
+        for index_name, key, attr in self.get_indexes_for_type(obj_type):
+            value = attr.to_primitive(getattr(obj, key), for_db=True)
+            if value is not None:
+                yield (index_name, key, value)
 
     def object_to_dict(self, obj, for_db=False):
         """ Converts a persistable object to a dict.
