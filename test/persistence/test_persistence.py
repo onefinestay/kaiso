@@ -801,7 +801,7 @@ def test_add_type_with_no_unique_attrs(manager, static_types):
 
     # create an instance
     instance = AnotherThing(name='Foo')
-    # check get_index_entries
+    # check get_index_entries
     assert list(manager.type_registry.get_index_entries(instance)) == []
 
 
