@@ -94,7 +94,7 @@ class Manager(object):
             A generator with the raw rows returned by the connection.
         """
         # 2.0 compatibility as we transition
-        query = "CYPHER 1.9 {}".format(query)
+        query = u"CYPHER 1.9 {}".format(query)
 
         log.debug('running query:\n%s', query.format(**params))
 
