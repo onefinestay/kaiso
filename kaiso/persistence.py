@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from logging import getLogger
 import uuid
 
@@ -94,7 +96,7 @@ class Manager(object):
             A generator with the raw rows returned by the connection.
         """
         # 2.0 compatibility as we transition
-        query = u"CYPHER 1.9 {}".format(query)
+        query = "CYPHER 1.9 {}".format(query)
 
         log.debug('running query:\n%s', query.format(**params))
 
