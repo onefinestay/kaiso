@@ -4,6 +4,12 @@ Version XXXXXX
 Dropped support for Neo4j 1.9 Cypher in favour of 2.0.
 
 
+Version 0.16.1
+--------------
+
+Bugfix: Don't break with non-ascii query parameters.
+
+
 Version 0.16.0
 --------------
 
