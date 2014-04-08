@@ -1,4 +1,5 @@
 import decimal
+from uuid import uuid4
 
 import iso8601
 import pytest
@@ -39,6 +40,12 @@ def beetroot_diamond(request, manager):
     class Carmine(Colouring):
         pass
 
+    class Preservative(Thing):
+        e_number = String(unique=True)
+
+    class AnotherThing(Entity):
+        name = String()
+
     manager.save(Thing)
 
     return {
@@ -47,6 +54,8 @@ def beetroot_diamond(request, manager):
         'Colouring': Colouring,
         'Beetroot': Beetroot,
         'Carmine': Carmine,
+        'Preservative': Preservative,
+        'AnotherThing': AnotherThing,
     }
 
 
@@ -134,7 +143,7 @@ def test_get_type_non_existing_obj(manager, static_types):
 
     manager.save(Thing)
 
-    assert manager.get(PersistableType, name="Ting") is None
+    assert manager.get(PersistableType, id="Ting") is None
 
 
 def test_simple_add_and_get_instance(manager, static_types):
@@ -147,6 +156,62 @@ def test_simple_add_and_get_instance(manager, static_types):
 
     assert type(queried_thing) == Thing
     assert queried_thing.id == thing.id
+
+
+def test_add_and_get_instance_of_node_with_no_attrs(manager):
+
+    # create Thing with no-attrs
+    class Thing(Entity):
+        pass
+
+    manager.save(Thing)
+
+    thing = Thing()
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+
+    # manager.get will always return None when trying to find
+    # a node with no attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
+
+
+def test_add_and_get_instance_of_node_with_no_unique_attrs(manager):
+
+    # create Thing with one non-unique attr
+    class Thing(Entity):
+        name = String()
+
+    manager.save(Thing)
+    thing = Thing(name='foo')
+    manager.save(thing)
+
+    # prove the instance was saved
+    rows = manager.query("""
+        START n = node(*)
+        MATCH (n)-[:INSTANCEOF]->(Thing)
+        WHERE Thing.id = "Thing"
+        RETURN n
+    """)
+    result, = next(rows)
+
+    assert isinstance(result, Thing)
+    assert result.name == 'foo'
+
+    # manager.get will always return None when trying to find
+    # a node with no unique attrs
+    queried_thing = manager.get(Thing)
+    assert queried_thing is None
 
 
 def test_simple_add_and_get_instance_same_id_different_type(
@@ -175,19 +240,15 @@ def test_simple_add_and_get_instance_same_id_different_type(
     assert queried_thing1.id == queried_thing2.id == thing2.id
 
 
-def test_simple_add_and_get_instance_by_optional_attr(manager, static_types):
+def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
     Thing = static_types['Thing']
 
-    thing1 = Thing()
-    thing2 = Thing(str_attr="this is thing2")
-    manager.save(thing1)
-    manager.save(thing2)
+    thing = Thing(str_attr="this is thing")
+    manager.save(thing)
 
-    queried_thing = manager.get(Thing, str_attr=thing2.str_attr)
-
-    assert type(queried_thing) == Thing
-    assert queried_thing.id == thing2.id
-    assert queried_thing.str_attr == thing2.str_attr
+    with pytest.raises(ValueError) as exc:
+        manager.get(Thing, str_attr=thing.str_attr)
+    assert 'No relevant indexes' in str(exc)
 
 
 def test_simple_add_and_get_relationship(manager, static_types):
@@ -207,6 +268,29 @@ def test_simple_add_and_get_relationship(manager, static_types):
     assert queried_rel.id == rel.id
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
+
+
+def test_get_with_multi_value_attr_filter(manager, static_types):
+    class Thing1(Entity):
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
+
+    class Thing2(Entity):
+        attr_a = Integer(unique=True)
+        attr_b = Integer(unique=True)
+
+    manager.save(Thing1)
+    manager.save(Thing2)
+
+    thing1 = Thing1(attr_a=123, attr_b=999)
+    thing2 = Thing2(attr_a=123, attr_b=999)
+    manager.save(thing1)
+    manager.save(thing2)
+
+    queried_thing = manager.get(Thing1, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing1)
+    queried_thing = manager.get(Thing2, attr_a=123, attr_b=999)
+    assert isinstance(queried_thing, Thing2)
 
 
 def test_delete_relationship(manager, static_types):
@@ -277,7 +361,8 @@ def test_delete_indexed_relationship(manager, static_types):
 
     assert str(thing1.id) in ids
     assert str(thing2.id) in ids
-    assert 'Related' not in rels
+
+    assert 'IndexedRelated' not in rels
 
 
 def test_update_relationship_end_points(manager, static_types):
@@ -679,12 +764,74 @@ def test_type_hierarchy_diamond(manager, beetroot_diamond):
 def test_add_type_creates_index(manager, static_types):
     Thing = static_types['Thing']
 
+    # Thing has a unique attr so should create an index
     manager.save(Thing)
-
     # this should not raise a MissingIndex error
     result = list(manager.query('START n=node:thing("id:*") RETURN n'))
 
     assert result == []
+
+
+def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
+    Flavouring = static_types['Flavouring']
+
+    manager.save(Flavouring)
+
+    # superclass Thing has a unique attr so should create an index
+    result = list(manager.query('START n=node:thing("id:*") RETURN n'))
+    assert result == []
+
+    # but Flavouring has no unique attr so should not create an index
+    with pytest.raises(cypher.CypherError) as exc:
+        manager.query('START n=node:flavouring("id:*") RETURN n')
+    assert 'Index `flavouring` does not exist' in str(exc)
+
+
+def test_add_type_with_no_unique_attrs(manager, static_types):
+    AnotherThing = static_types['AnotherThing']
+
+    manager.save(AnotherThing)
+    # AnotherThing has no unique attrs at all, so should create no indexes.
+    with pytest.raises(cypher.CypherError) as exc:
+        manager.query('START n=node:anotherthing("id:*") RETURN n')
+    assert 'Index `anotherthing` does not exist' in str(exc)
+
+    # check get_indexes_for_type
+    assert list(manager.type_registry.get_indexes_for_type(AnotherThing)) == []
+
+    # create an instance
+    instance = AnotherThing(name='Foo')
+    # check get_index_entries
+    assert list(manager.type_registry.get_index_entries(instance)) == []
+
+
+def test_add_type_creates_index_per_unique_attr(manager, static_types):
+    Preservative = static_types['Preservative']
+
+    # Thing has a unique attr so should create an index
+    manager.save(Preservative)
+    instance = Preservative(id=uuid4(), e_number="E108")
+    manager.save(instance)
+
+    # instance should be in the thing index under `id`
+    results = list(manager.query('START n=node:thing("id:*") RETURN n'))
+    assert len(results) == 1
+    retrieved, = results[0]
+    assert retrieved.id == instance.id
+
+    # and also in the preservative index under `e_number`
+    results = list(manager.query(
+        'START n=node:preservative("e_number:*") RETURN n'))
+    assert len(results) == 1
+    retrieved, = results[0]
+    assert retrieved.id == instance.id
+
+    # check get_index_entries
+    index_entries = set(manager.type_registry.get_index_entries(instance))
+    assert index_entries == {
+        ('preservative', 'e_number', instance.e_number),
+        ('thing', 'id', str(instance.id)),
+    }
 
 
 def count(manager, type_):

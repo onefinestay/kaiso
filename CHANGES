@@ -2,7 +2,27 @@ Version XXXXXX
 --------------
 
 Dropped support for Neo4j 1.9 Cypher in favour of 2.0.
-Increased py2neo requirement to version 1.6.2.
+
+
+Version 0.16.0
+--------------
+
+Manager `get` method now only queries via indexes. It is no longer possible
+to find nodes/relationships via `get` by providing non-indexed attribute
+values.
+
+
+Version 0.15.2
+--------------
+
+Bugfix to make sure indexes are only created for types with unique attrs.
+Downgrade py2neo to v1.5 until 1.6 has some performance enhancements.
+
+
+Version 0.15.1
+--------------
+
+Bug/performance fix for checking existence of nodes with multiple indexes.
 
 
 Version 0.15.0
