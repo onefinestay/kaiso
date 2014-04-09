@@ -1,3 +1,9 @@
+Version 0.16.2
+--------------
+
+Bugfix: Manager `get` method raises ValueError if given attr=None.
+
+
 Version 0.16.1
 --------------
 
