@@ -714,9 +714,15 @@ class Manager(object):
                         self._conn.get_or_create_index(neo4j.Node, index)
                         start_func = 'node'
 
+                    idx_val = attr_filter[key]
+                    if idx_val is None:
+                        raise ValueError(
+                            'Cannot `get` using {}=None. None is not an '
+                            'indexable value.'.format(key))
+
                     query = 'START nr = %s:%s(%s={idx_val}) RETURN nr' % (
                         start_func, index, key)
-                    append_results(query, idx_val=attr_filter[key])
+                    append_results(query, idx_val=idx_val)
 
             if not index_found:
                 raise ValueError(

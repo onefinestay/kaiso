@@ -251,6 +251,17 @@ def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
     assert 'No relevant indexes' in str(exc)
 
 
+def test_simple_add_and_get_instance_with_None_value(manager, static_types):
+    Thing = static_types['Thing']
+
+    thing = Thing(id='abc')
+    manager.save(thing)
+
+    with pytest.raises(ValueError) as exc:
+        manager.get(Thing, id=None)
+    assert 'Cannot `get` using id=None' in str(exc)
+
+
 def test_simple_add_and_get_relationship(manager, static_types):
     Thing = static_types['Thing']
     IndexedRelated = static_types['IndexedRelated']
