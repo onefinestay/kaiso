@@ -8,13 +8,16 @@ from collections import OrderedDict
 from kaiso.types import TypeRegistry
 
 
-def validate_base_change(manager, type_id, new_bases):
+def get_type_registry_with_base_change(manager, type_id, new_bases):
     """
-    Make sure it would be ok to change the bases of `type_id` to `new_bases`
+    Returns an amended type-registry with the bases for the given `type_id`
+    set to the given `new_bases`.
+    Useful for making sure it would be ok to change the bases of `type_id` to
+    `new_bases`.
 
-    If this would result in an inconsistent type hieararchy,
-    raise `ValueError`. Otherwise, return None.
-
+    If the base change results in an inconsistent type hieararchy,
+    `ValueError` is raised. Otherwise, a type_registry object containing the
+    amended type is returned.
 
     In `manager.get_type_hierarchy`, `type_id` is guaranteed to appear after
     all its base classes, and before all its subclasses.
@@ -40,6 +43,9 @@ def validate_base_change(manager, type_id, new_bases):
     registry.get_class_by_id(type_id)
     [registry.get_class_by_id(base) for base in new_bases]
 
+    # capture current attrs of the type being amended
+    type_attrs = registry.get_descriptor_by_id(type_id).declared_attributes
+
     def new_type_hierarchy(manager):
         """
         We want to switch out the bases in the entry for `type_id`,
@@ -57,36 +63,41 @@ def validate_base_change(manager, type_id, new_bases):
 
         new_type_inserted = False
         deferred_types = OrderedDict()
-        deferred_types[type_id] = tuple(new_bases)
+        deferred_types[type_id] = (tuple(new_bases), type_attrs)
 
-        for test_type_id, test_bases, _ in manager.get_type_hierarchy():
+        current_hierarchy = manager.get_type_hierarchy()
+
+        for test_type_id, test_bases, test_attrs in current_hierarchy:
             if set(test_bases).intersection(deferred_types):
-                deferred_types[test_type_id] = test_bases
+                deferred_types[test_type_id] = (test_bases, test_attrs)
                 continue
 
             if test_type_id != type_id:
-                yield (test_type_id, test_bases)
+                yield (test_type_id, test_bases, test_attrs)
 
             awaited_bases.discard(test_type_id)
 
             if not new_type_inserted and not awaited_bases:
                 new_type_inserted = True
                 while deferred_types:
-                    yield deferred_types.popitem(last=False)
+                    dfr_type, (dfr_bases, dfr_attrs) = deferred_types.popitem(
+                        last=False)
+                    yield (dfr_type, dfr_bases, dfr_attrs)
 
         if awaited_bases:
             raise ValueError("One of the bases causes an inheritance cycle")
 
-    temp_type_registry = TypeRegistry()
-    for test_type_id, bases in new_type_hierarchy(manager):
+    amended_type_registry = TypeRegistry()
+    for test_type_id, bases, attrs in new_type_hierarchy(manager):
         bases = tuple(
-            temp_type_registry.get_class_by_id(base) for base in bases
+            amended_type_registry.get_class_by_id(base) for base in bases
         )
         type_name = str(test_type_id)
         try:
-            temp_type_registry.create_type(type_name, bases, {})
+            amended_type_registry.create_type(type_name, bases, attrs)
         except TypeError as ex:
             # bad mro
             raise ValueError(
                 "Invalid mro for {} ({})".format(test_type_id, ex)
             )
+    return amended_type_registry
