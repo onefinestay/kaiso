@@ -321,7 +321,6 @@ class TypeRegistry(object):
             for name, attr in descr.attributes.items():
                 try:
                     obj_value = getattr(obj, name)
-                    value = attr.to_primitive(obj_value, for_db=for_db)
                 except AttributeError:
                     # if we are dealing with an extended type, we may not
                     # have the attribute set on the instance
@@ -329,6 +328,8 @@ class TypeRegistry(object):
                         value = attr.default
                     else:
                         value = None
+                else:
+                    value = attr.to_primitive(obj_value, for_db=for_db)
 
                 if for_db and value is None:
                     continue
