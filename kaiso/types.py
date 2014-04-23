@@ -341,7 +341,7 @@ class TypeRegistry(object):
                         attr.to_python(value)
                     except ValueError as ex:
                         raise ValueError(
-                            "Can't safely serialise {!r} as {}: {}".format(
+                            "{!r} is not a valid value for {}: {}".format(
                                 obj_value, type(attr), ex
                             )
                         )
