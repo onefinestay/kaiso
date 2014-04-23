@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.exceptions import DeserialisationError
-from kaiso.attributes import String, Uuid, Choice
+from kaiso.attributes import String, Uuid, Choice, Float
 from kaiso.relationships import Relationship, InstanceOf, IsA
 from kaiso.serialize import (
     get_type_relationships, get_changes, dict_to_db_values_dict)
@@ -261,3 +261,29 @@ def test_IsA_and_InstanceOf_type_relationships(temporary_static_types):
         (Foo, (InstanceOf, 0), PersistableType),
         (foo, (InstanceOf, 0), Foo),
     ]
+
+
+def test_coersion_default_to_python(type_registry):
+    class Foo(Entity):
+        bar = Float()
+
+    foo = Foo(bar=1)
+    data = type_registry.object_to_dict(foo, for_db=True)
+    assert data['bar'] == 1
+
+    foo = Foo(bar='1')
+    data = type_registry.object_to_dict(foo, for_db=True)
+    assert data['bar'] == 1
+
+    foo = Foo(bar='bar')
+    with pytest.raises(ValueError):
+        type_registry.object_to_dict(foo, for_db=True)
+
+
+def test_coersion_custom_to_python(type_registry):
+    class Foo(Entity):
+        bar = Uuid()
+
+    foo = Foo(bar='bar')
+    with pytest.raises(ValueError):
+        type_registry.object_to_dict(foo, for_db=True)
