@@ -254,7 +254,7 @@ def test_simple_add_and_get_instance_by_non_index_attr(manager, static_types):
 def test_simple_add_and_get_instance_with_None_value(manager, static_types):
     Thing = static_types['Thing']
 
-    thing = Thing(id='abc')
+    thing = Thing(id=uuid4())
     manager.save(thing)
 
     with pytest.raises(ValueError) as exc:
