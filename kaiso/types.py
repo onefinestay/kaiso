@@ -333,6 +333,18 @@ class TypeRegistry(object):
                 if for_db and value is None:
                     continue
 
+                # check that to_python will work, and raise here instead of
+                # when trying to load data (at which point it's too late)
+                if for_db:
+                    try:
+                        attr.to_python(value)
+                    except ValueError as ex:
+                        raise ValueError(
+                            "Can't safely serialise {!r} as {}: {}".format(
+                                obj_value, type(attr), ex
+                            )
+                        )
+
                 properties[name] = value
 
         return properties
