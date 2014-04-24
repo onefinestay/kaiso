@@ -566,12 +566,12 @@ class AttributeBase(object):
 
     name = None
 
-    @staticmethod
-    def to_python(value):
+    @classmethod
+    def to_python(cls, value):
         return value
 
-    @staticmethod
-    def to_primitive(value, for_db):
+    @classmethod
+    def to_primitive(cls, value, for_db):
         """ Serialize ``value`` to a primitive type suitable for inserting
             into the database or passing to e.g. ``json.dumps``
         """
