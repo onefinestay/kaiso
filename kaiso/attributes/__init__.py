@@ -20,18 +20,12 @@ class PrimitiveTypeMixin(object):
     `cls.primitive_type` unless it is `None`.
     """
 
-    primitive_type = None
-
     @classmethod
     def to_primitive(cls, value, for_db):
         if value is None:
             return None
 
-        primitive_type = cls.primitive_type
-        if primitive_type is None:
-            return value
-
-        return primitive_type(value)
+        return cls.primitive_type(value)
 
 
 @wraps_type(uuid.UUID)
