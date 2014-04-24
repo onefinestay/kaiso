@@ -124,3 +124,8 @@ class TestCustomToPrimitiveCustomToPython(object):
         instance = cls(bar='invalid')
         with pytest.raises(ValueError):
             type_registry.object_to_dict(instance, for_db=True)
+
+    def test_coercable_type_invalid_value_type(self, type_registry, cls):
+        instance = cls(bar=object())
+        with pytest.raises(ValueError):
+            type_registry.object_to_dict(instance, for_db=True)
