@@ -1,3 +1,12 @@
+Version 0.17.0
+--------------
+
+Add type coercion and validation. Attribute values for builtin types (e.g. int)
+are now coerced before inserting into the db, and for types that use more
+permissive primitive types in the db (e.g. uuids stored as strings), values are
+also validated to be correctly coercible back when retrieving from the db.
+
+
 Version 0.16.2
 --------------
 
