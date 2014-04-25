@@ -15,83 +15,104 @@ class Incoming(RelationshipReference):
     pass
 
 
+class PrimitiveTypeMixin(object):
+    """ Add a basic `to_primitive` method, coercing value to
+    `cls.primitive_type` unless it is `None`.
+    """
+
+    @classmethod
+    def to_primitive(cls, value, for_db):
+        if value is None:
+            return None
+
+        return cls.primitive_type(value)
+
+
 @wraps_type(uuid.UUID)
-class Uuid(Attribute):
+class Uuid(PrimitiveTypeMixin, Attribute):
+    primitive_type = str
+
     @property
     def default(self):
         return uuid.uuid4()
 
-    @staticmethod
-    def to_primitive(value, for_db):
-        if value is None:
-            return None
-        return str(value)
-
-    @staticmethod
-    def to_python(value):
+    @classmethod
+    def to_python(cls, value):
         if value is None:
             return None
         return uuid.UUID(hex=value)
 
 
-class Bool(DefaultableAttribute):
-    pass
+class Bool(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = bool
 
 
-class Integer(DefaultableAttribute):
-    pass
+class Integer(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = int
 
 
-class Float(DefaultableAttribute):
-    pass
+class Float(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = float
 
 
-class String(DefaultableAttribute):
-    pass
+class String(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = unicode
 
 
-class Tuple(DefaultableAttribute):
-    @staticmethod
-    def to_primitive(value, for_db):
-        if value is None:
-            return None
-        return list(value)
+@wraps_type(tuple)
+class Tuple(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = list
 
-    @staticmethod
-    def to_python(value):
+    @classmethod
+    def to_python(cls, value):
         if value is None:
             return None
         return tuple(value)
 
 
 @wraps_type(decimal.Decimal)
-class Decimal(DefaultableAttribute):
-    @staticmethod
-    def to_primitive(value, for_db):
-        if value is None:
-            return None
-        return str(value)
+class Decimal(PrimitiveTypeMixin, DefaultableAttribute):
+    primitive_type = str
 
-    @staticmethod
-    def to_python(value):
+    @classmethod
+    def to_python(cls, value):
         if value is None:
             return None
-        return decimal.Decimal(value)
+        try:
+            return decimal.Decimal(value)
+        except decimal.DecimalException as ex:
+            # DecimalException doesn't inherit from ValueError
+            raise ValueError(str(ex))
 
 
 @wraps_type(datetime.datetime)
 class DateTime(DefaultableAttribute):
-    @staticmethod
-    def to_primitive(value, for_db):
+    @classmethod
+    def to_primitive(cls, value, for_db):
         if value is None:
             return None
-        return value.isoformat()
 
-    @staticmethod
-    def to_python(value):
+        if isinstance(value, basestring):
+            # make sure this is a valid date
+            DateTime.to_python(value)
+            return value
+
+        try:
+            return value.isoformat()
+        except AttributeError as ex:
+            raise ValueError(
+                "{!r} is not a valid value for DateTime: {}".format(value, ex)
+            )
+
+    @classmethod
+    def to_python(cls, value):
         if value is None:
             return None
-        return iso8601.parse_date(value)
+        try:
+            return iso8601.parse_date(value)
+        except iso8601.ParseError as ex:
+            # ParseError doesn't inherit from ValueError
+            raise ValueError(str(ex))
 
 
 class Choice(DefaultableAttribute):
