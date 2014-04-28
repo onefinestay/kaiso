@@ -33,6 +33,13 @@ def test_basic(manager):
         'Persistable', 'object'
     ]
 
+    # check original registry is unchanged
+    OriginalAB = manager.type_registry.get_class_by_id('AB')
+    assert [c.__name__ for c in OriginalAB.mro()] == [
+        'AB', 'A', 'B', 'Entity', 'AttributedBase',
+        'Persistable', 'object'
+    ]
+
 
 def test_become_your_own_ancestor(manager):
     with collector() as collected:
