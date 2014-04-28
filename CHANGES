@@ -1,3 +1,10 @@
+Version 0.17.1
+--------------
+
+Migration helpers enhancement to allow the type_registry to be previewed when 
+changing bases for a type.
+
+
 Version 0.17.0
 --------------
 
