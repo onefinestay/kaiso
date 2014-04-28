@@ -321,7 +321,6 @@ class TypeRegistry(object):
             for name, attr in descr.attributes.items():
                 try:
                     obj_value = getattr(obj, name)
-                    value = attr.to_primitive(obj_value, for_db=for_db)
                 except AttributeError:
                     # if we are dealing with an extended type, we may not
                     # have the attribute set on the instance
@@ -329,9 +328,23 @@ class TypeRegistry(object):
                         value = attr.default
                     else:
                         value = None
+                else:
+                    value = attr.to_primitive(obj_value, for_db=for_db)
 
                 if for_db and value is None:
                     continue
+
+                # check that to_python will work, and raise here instead of
+                # when trying to load data (at which point it's too late)
+                if for_db:
+                    try:
+                        attr.to_python(value)
+                    except ValueError as ex:
+                        raise ValueError(
+                            "{!r} is not a valid value for {}: {}".format(
+                                obj_value, type(attr), ex
+                            )
+                        )
 
                 properties[name] = value
 
@@ -553,12 +566,12 @@ class AttributeBase(object):
 
     name = None
 
-    @staticmethod
-    def to_python(value):
+    @classmethod
+    def to_python(cls, value):
         return value
 
-    @staticmethod
-    def to_primitive(value, for_db):
+    @classmethod
+    def to_primitive(cls, value, for_db):
         """ Serialize ``value`` to a primitive type suitable for inserting
             into the database or passing to e.g. ``json.dumps``
         """
