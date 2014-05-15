@@ -326,7 +326,7 @@ def test_delete_relationship(manager, static_types):
     rows = manager.query("""
         START n1 = node(*)
         MATCH n1 -[r]-> n2
-        RETURN n1.id?, r.__type__
+        RETURN n1.id, r.__type__
     """)
 
     result = list(rows)
@@ -363,7 +363,7 @@ def test_delete_indexed_relationship(manager, static_types):
     rows = manager.query("""
         START n1 = node(*)
         MATCH n1 -[r]-> n2
-        RETURN n1.id?, r.__type__
+        RETURN n1.id, r.__type__
     """)
 
     result = list(rows)
@@ -498,7 +498,7 @@ def test_delete_class(manager):
 
     manager.delete(Thing)
 
-    rows = manager.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    rows = manager.query('START n=node(*) RETURN COALESCE(n.id, n)')
     result = set(item for (item,) in rows)
     assert result == {'TypeSystem', 'Entity', str(thing.id)}
 
@@ -521,7 +521,7 @@ def test_delete_class_without_attributes(manager):
 
     manager.delete(Thing)
 
-    rows = manager.query('START n=node(*) RETURN COALESCE(n.id?, n)')
+    rows = manager.query('START n=node(*) RETURN COALESCE(n.id, n)')
     result = set(item for (item,) in rows)
     assert len(result) == 5
     assert 'Thing' not in result
@@ -724,7 +724,7 @@ def test_type_hierarchy_object(manager):
     query_str = """
         START base = node(*)
         MATCH obj -[r:ISA|INSTANCEOF]-> base
-        RETURN COALESCE(obj.id?, obj) , r.__type__, base
+        RETURN COALESCE(obj.id, obj) , r.__type__, base
     """
 
     rows = manager.query(query_str)
@@ -755,7 +755,7 @@ def test_type_hierarchy_diamond(manager, beetroot_diamond):
     query_str = """
         START base = node(*)
         MATCH obj -[r:ISA|INSTANCEOF]-> base
-        RETURN COALESCE(obj.id?, obj) , r.__type__, base
+        RETURN COALESCE(obj.id, obj) , r.__type__, base
     """
     rows = manager.query(query_str)
     result = set(rows)
@@ -993,7 +993,7 @@ def test_attribute_inheritance(manager, beetroot_diamond):
     query_str = """
         START Entity = node:persistabletype(id="Entity")
         MATCH attr -[:DECLAREDON]-> type -[:ISA*]-> Entity
-        RETURN type.id, attr.name, attr.__type__, attr.default?
+        RETURN type.id, attr.name, attr.__type__, attr.default
     """
 
     rows = manager.query(query_str)

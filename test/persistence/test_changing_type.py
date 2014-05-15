@@ -36,7 +36,7 @@ def has_property(manager, obj, prop):
         "START",
         get_start_clause(obj, 'node', manager.type_registry),
         """
-            return node.{}?
+            return node.{}
         """.format(prop)
     )
 

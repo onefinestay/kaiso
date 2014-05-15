@@ -96,7 +96,7 @@ class Manager(object):
             A generator with the raw rows returned by the connection.
         """
         # 2.0 compatibility as we transition
-        query = "CYPHER 1.9 {}".format(query)
+        query = "CYPHER 2.0 {}".format(query)
 
         log.debug('running query:\n%s', query.format(**params))
 
@@ -164,7 +164,7 @@ class Manager(object):
         query = join_lines(
             'START',
             get_start_clause(self.type_system, 'ts', self.type_registry),
-            'RETURN ts.version?'
+            'RETURN ts.version'
         )
 
         rows = self._execute(query)
@@ -239,7 +239,7 @@ class Manager(object):
             query = join_lines(
                 'START cls=node:%s(id={type_id})' % idx_name,
                 'MATCH attr -[:DECLAREDON*0..]-> cls',
-                'RETURN cls, collect(attr.name?)'
+                'RETURN cls, collect(attr.name)'
             )
 
             # don't use self.query since we don't want to convert the py2neo
@@ -366,6 +366,7 @@ class Manager(object):
             query = join_lines(
                 'START n=node:%s(id={type_id})' % index_name,
                 set_clauses,
+                'WITH n',
                 'MATCH attr -[r:DECLAREDON]-> n',
                 where,
                 'DELETE attr, r',
@@ -519,14 +520,15 @@ class Manager(object):
             match,
             where,
             ''' WITH tpe, max(length(p)) AS level
-            MATCH
-                tpe <-[?:DECLAREDON*]- attr,
-                tpe -[isa?:ISA]-> base
+            OPTIONAL MATCH
+                tpe <-[:DECLAREDON*]- attr
+            OPTIONAL MATCH
+                tpe -[isa:ISA]-> base
 
             WITH tpe.id AS type_id, level, tpe AS class_attrs,
                 filter(
-                    idx_base in collect(DISTINCT [isa.base_index, base.id]):
-                        not(LAST(idx_base) is NULL)
+                    idx_base in collect(DISTINCT [isa.base_index, base.id])
+                    WHERE not(LAST(idx_base) is NULL)
                 ) AS bases,
 
                 collect(DISTINCT attr) AS attrs
@@ -907,8 +909,9 @@ class Manager(object):
         elif isinstance(obj, PersistableType):
             query = join_lines(
                 'START {}',
-                'MATCH attr -[?:DECLAREDON]-> obj',
+                'OPTIONAL MATCH attr -[:DECLAREDON]-> obj',
                 'DELETE attr',
+                'WITH obj',
                 'MATCH obj -[rel]- (dummy1)',  # See note at top of page
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
