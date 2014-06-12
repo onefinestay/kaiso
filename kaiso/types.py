@@ -245,6 +245,19 @@ class TypeRegistry(object):
                 key = name
                 yield (index_name, key, attr)
 
+    def get_constraints_for_type(self, cls):
+        if cls is PersistableType:
+            raise NotImplementedError()
+            return
+
+        descr = self.get_descriptor(cls)
+        for name, attr in descr.attributes.items():
+            if attr.unique:
+                declaring_class = get_declaring_class(descr.cls, name)
+                if declaring_class is descr.cls:
+                    type_id = get_type_id(cls)
+                    yield (type_id, name)
+
     def get_index_entries(self, obj):
         """
         Find all the index locations that contain `obj`.
