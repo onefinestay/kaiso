@@ -458,6 +458,7 @@ class Manager(object):
         for the the object as required and store the object itself.
         """
 
+        type_registry = self.type_registry
         query_args = {}
         invalidates_types = False
 
@@ -466,7 +467,7 @@ class Manager(object):
             return self._update_types(obj)
 
         elif obj is self.type_system:
-            query = 'CREATE (n {props}) RETURN n'
+            query = 'CREATE (n:TypeSystem {props}) RETURN n'
 
         elif isinstance(obj, Relationship):
             # object is a relationship
@@ -474,29 +475,35 @@ class Manager(object):
 
             if obj_type in (IsA, DeclaredOn):
                 invalidates_types = True
-            query = get_create_relationship_query(obj, self.type_registry)
+            query = get_create_relationship_query(obj, type_registry)
 
         else:
             # object is an instance
             obj_type = type(obj)
             type_id = get_type_id(obj_type)
-            if type_id not in self.type_registry._types_in_db:
+            if type_id not in type_registry._types_in_db:
                 raise TypeNotPersistedError(type_id)
+
+            labels = [
+                get_type_id(tpe) for tpe in obj_type.__mro__
+                if type_registry.is_static_type(tpe)
+            ]
+            label_declaration = ':' + ':'.join(labels)
 
             idx_name = get_index_name(PersistableType)
             query = (
                 'START cls=node:%s(id={type_id}) '
-                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'CREATE (n%s {props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
-            ) % idx_name
+            ) % (idx_name, label_declaration)
 
             query_args = {
                 'type_id': get_type_id(obj_type),
-                'rel_props': self.type_registry.object_to_dict(
+                'rel_props': type_registry.object_to_dict(
                     InstanceOf(None, None), for_db=True),
             }
 
-        query_args['props'] = self.type_registry.object_to_dict(
+        query_args['props'] = type_registry.object_to_dict(
             obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
