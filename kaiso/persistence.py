@@ -82,6 +82,12 @@ class Manager(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
+        self.query(
+            """
+            CREATE CONSTRAINT ON (type:PersistableType)
+            ASSERT type.id IS UNIQUE
+            """
+        )
         if not skip_type_loading:
             self.reload_types()
 
