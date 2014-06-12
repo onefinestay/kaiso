@@ -98,7 +98,7 @@ class Manager(object):
         # 2.0 compatibility as we transition
         query = "CYPHER 2.0 {}".format(query)
 
-        log.debug('running query:\n%s', query.format(**params))
+        log.debug('running query:\n%s\n\nwith params %s', query, params)
 
         rows, _ = cypher.execute(self._conn, query, params)
 
