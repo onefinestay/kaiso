@@ -989,8 +989,8 @@ class Manager(object):
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
-        # NB. we assume all indexes are from constraints (only use-case for kaiso)
-        # if any aren't, this will not work
+        # NB. we assume all indexes are from constraints (only use-case for
+        # kaiso) if any aren't, this will not work
         batch = neo4j.WriteBatch(self._conn)
         for label in self._conn.node_labels:
             for key in self._conn.schema.get_indexed_property_keys(label):
