@@ -484,10 +484,7 @@ class Manager(object):
             if type_id not in type_registry._types_in_db:
                 raise TypeNotPersistedError(type_id)
 
-            labels = [
-                get_type_id(tpe) for tpe in obj_type.__mro__
-                if type_registry.is_static_type(tpe)
-            ]
+            labels = type_registry.get_labels_for_type(obj_type)
             label_declaration = ':' + ':'.join(labels)
 
             idx_name = get_index_name(PersistableType)

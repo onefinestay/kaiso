@@ -245,6 +245,14 @@ class TypeRegistry(object):
                 key = name
                 yield (index_name, key, attr)
 
+    def get_labels_for_type(self, cls):
+        """We set labels for the type itself, and all _static_ superclasses"""
+        yield get_type_id(cls)
+        for tpe in cls.__mro__:
+            if self.is_static_type(tpe):
+                yield get_type_id(tpe)
+
+
     def get_constraints_for_type(self, cls):
         if cls is PersistableType:
             raise NotImplementedError()
