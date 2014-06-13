@@ -820,23 +820,41 @@ class Manager(object):
         # get rid of any attributes not supported by the new type
         properties = self.serialize(self.deserialize(properties), for_db=True)
 
-        tpe = type_registry.get_class_by_id(type_id)
+        old_type = type(obj)
+        new_type = type_registry.get_class_by_id(type_id)
 
         rel_props = type_registry.object_to_dict(InstanceOf(), for_db=True)
 
+        old_labels = set(type_registry.get_labels_for_type(old_type))
+        new_labels = set(type_registry.get_labels_for_type(new_type))
+        removed_labels = old_labels - new_labels
+        added_labels = new_labels - old_labels
+
+        if removed_labels:
+            remove_labels_statement = 'REMOVE obj:' + ':'.join(removed_labels)
+        else:
+            remove_labels_statement = ''
+
+        if added_labels:
+            add_labels_statement = 'SET obj :' + ':'.join(added_labels)
+        else:
+            add_labels_statement = ''
+
         start_clauses = (
             get_start_clause(obj, 'obj', type_registry),
-            get_start_clause(tpe, 'tpe', type_registry)
+            get_start_clause(new_type, 'type', type_registry)
         )
 
         # See note at top of page
         query = join_lines(
             'START',
             (start_clauses, ','),
-            'MATCH (obj)-[old_rel:INSTANCEOF]->(dummy1)',
+            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
             'DELETE old_rel',
-            'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(tpe)',
+            'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(type)',
             'SET obj={properties}',
+            remove_labels_statement,
+            add_labels_statement,
             'RETURN obj',
         )
 
