@@ -246,10 +246,19 @@ class TypeRegistry(object):
                 yield (index_name, key, attr)
 
     def get_labels_for_type(self, cls):
-        """We set labels for the type itself, and all _static_ superclasses"""
-        yield get_type_id(cls)
+        """We set labels for all _static_ superclasses (for querying), and any
+        that declare unique attributes (for enforcing constraints)
+        """
+
+        def has_unique_attr(tpe):
+            for _ in self.get_constraints_for_type(tpe):
+                return True
+            return False
+
         for tpe in cls.__mro__:
-            if self.is_static_type(tpe):
+            if tpe is Entity:
+                return  # we're done; don't want Entity or other internal types
+            if self.is_static_type(tpe) or has_unique_attr(tpe):
                 yield get_type_id(tpe)
 
 
