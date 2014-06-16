@@ -485,14 +485,17 @@ class Manager(object):
                 raise TypeNotPersistedError(type_id)
 
             labels = type_registry.get_labels_for_type(obj_type)
-            label_declaration = ':' + ':'.join(labels)
+            if labels:
+                node_declaration = 'n:' + ':'.join(labels)
+            else:
+                node_declaration = 'n'
 
             idx_name = get_index_name(PersistableType)
             query = (
                 'START cls=node:%s(id={type_id}) '
-                'CREATE (n%s {props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'CREATE (%s {props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
-            ) % (idx_name, label_declaration)
+            ) % (idx_name, node_declaration)
 
             query_args = {
                 'type_id': get_type_id(obj_type),
