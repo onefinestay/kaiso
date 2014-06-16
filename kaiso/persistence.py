@@ -82,12 +82,21 @@ class Manager(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
-        self.query(
+
+        batch = neo4j.WriteBatch(self._conn)
+        batch.append_cypher(
+            """
+            CREATE CONSTRAINT ON (typesystem:TypeSystem)
+            ASSERT typesystem.id IS UNIQUE
+            """
+        )
+        batch.append_cypher(
             """
             CREATE CONSTRAINT ON (type:PersistableType)
             ASSERT type.id IS UNIQUE
             """
         )
+        batch.run()
         if not skip_type_loading:
             self.reload_types()
 
