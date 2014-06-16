@@ -249,17 +249,22 @@ class TypeRegistry(object):
         """We set labels for all _static_ superclasses (for querying), and any
         that declare unique attributes (for enforcing constraints)
         """
+        descriptor = self.get_descriptor(cls)
 
         def has_unique_attr(tpe):
             for _ in self.get_constraints_for_type(tpe):
                 return True
             return False
 
-        for tpe in cls.__mro__:
-            if tpe is Entity:
-                return  # we're done; don't want Entity or other internal types
+        labels = set()
+        for tpe in descriptor.cls.__mro__:
+            if get_type_id(tpe) == 'Entity':
+                # we're done; don't want Entity or other internal types
+                return labels
             if self.is_static_type(tpe) or has_unique_attr(tpe):
-                yield get_type_id(tpe)
+                labels.add(get_type_id(tpe))
+
+        return labels
 
 
     def get_constraints_for_type(self, cls):
