@@ -319,7 +319,7 @@ class TypeRegistry(object):
         being the type_id given by the descriptor for the object.
 
         For any other object all the attributes as given by the object's
-        type descriptpr will be added to the dict and encoded as required.
+        type descriptor will be added to the dict and encoded as required.
 
         Args:
             obj: A persistable  object.
