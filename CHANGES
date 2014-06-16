@@ -1,3 +1,10 @@
+Version 0.21.0
+--------------
+
+Start creating labels and constraints for types and unique attributes. This
+begins the migration away from legacy indexes towards using labels.
+
+
 Version 0.20.0
 --------------
 
