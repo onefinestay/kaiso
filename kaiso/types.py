@@ -258,10 +258,11 @@ class TypeRegistry(object):
 
         labels = set()
         for tpe in descriptor.cls.__mro__:
-            if get_type_id(tpe) == 'Entity':
+            type_id = get_type_id(tpe)
+            if type_id == 'Entity':
                 # we're done; don't want Entity or other internal types
                 return labels
-            if self.is_static_type(tpe) or has_unique_attr(tpe):
+            if type_id in self._static_descriptors or has_unique_attr(tpe):
                 labels.add(get_type_id(tpe))
 
         return labels
