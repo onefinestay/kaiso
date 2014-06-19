@@ -335,9 +335,10 @@ class Manager(object):
                         CREATE CONSTRAINT ON (type:{type_id})
                         ASSERT type.{attr_name} IS UNIQUE
                     """.format(
-                    type_id=constraint_type_id,
-                    attr_name=constraint_attr_name,
-                ))
+                        type_id=constraint_type_id,
+                        attr_name=constraint_attr_name,
+                    )
+                )
 
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
