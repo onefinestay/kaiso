@@ -248,9 +248,6 @@ class TypeRegistry(object):
     def get_labels_for_type(self, cls):
         """We set labels for any unique attributes"""
 
-        if cls is PersistableType:
-            raise NotImplementedError()
-
         labels = set()
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
@@ -262,10 +259,6 @@ class TypeRegistry(object):
         return labels
 
     def get_constraints_for_type(self, cls):
-        if cls is PersistableType:
-            raise NotImplementedError()
-            return
-
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
             if attr.unique:
