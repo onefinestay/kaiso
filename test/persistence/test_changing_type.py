@@ -67,7 +67,7 @@ def test_basic(manager, static_types):
     new_obj = manager.change_instance_type(thing_a, 'ThingB')
     retrieved_by_legacy_index = manager.get(ThingB, id=thing_a.id)
     (retrieved_by_label,) = next(manager.query(
-        "MATCH (n:ThingB) WHERE n.id = {id} RETURN n",
+        "MATCH (n:Thing) WHERE n.id = {id} RETURN n",
         id=thing_a.id,
     ))
 

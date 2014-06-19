@@ -177,26 +177,6 @@ def test_amended_indexes(manager):
     }
 
 
-def test_amended_labels(manager):
-    class A(Entity):
-        pass
-
-    with collector() as collected:
-
-        class B(Entity):
-            pass
-
-    manager.save(A)
-    manager.save_collected_classes(collected)
-
-    assert set(manager.type_registry.get_labels_for_type(B)) == set()
-
-    amended_registry = get_type_registry_with_base_change(
-        manager, 'B', ('A',))
-
-    assert set(amended_registry.get_labels_for_type(B)) == set(['A'])
-
-
 def test_amended_indexes_same_attr_name(manager):
     with collector() as collected:
         class A(Entity):

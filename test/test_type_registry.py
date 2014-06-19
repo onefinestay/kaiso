@@ -179,15 +179,7 @@ def test_has_code_defined_attribute(type_registry, static_types):
     assert not type_registry.has_code_defined_attribute(B1Type, "bar")
 
 
-def test_get_labels_for_type_static_only(type_registry, static_types):
-    FooType = static_types['FooType']
-
-    dynamic = type_registry.create_type("BarType", (FooType,), {})
-    labels = set(type_registry.get_labels_for_type(dynamic))
-    assert labels == {'FooType'}
-
-
-def get_labels_for_type_includes_unique(type_registry, static_types):
+def test_get_labels_for_type_includes_unique(type_registry, static_types):
     FooType = type_registry.create_type("FooType", (), {})
     labels = set(type_registry.get_labels_for_type(FooType))
     assert labels == set()
@@ -195,4 +187,8 @@ def get_labels_for_type_includes_unique(type_registry, static_types):
     attrs = {'id': Uuid(unique=True)}
     BarType = type_registry.create_type("BarType", (), attrs)
     labels = set(type_registry.get_labels_for_type(BarType))
-    assert labels == set('BarType')
+    assert labels == set(['BarType'])
+
+    QuuType = type_registry.create_type("QuuType", (BarType,), {})
+    labels = set(type_registry.get_labels_for_type(QuuType))
+    assert labels == set(['BarType'])

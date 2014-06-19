@@ -246,27 +246,20 @@ class TypeRegistry(object):
                 yield (index_name, key, attr)
 
     def get_labels_for_type(self, cls):
-        """We set labels for all _static_ superclasses (for querying), and any
-        that declare unique attributes (for enforcing constraints)
-        """
-        descriptor = self.get_descriptor(cls)
+        """We set labels for any unique attributes"""
 
-        def has_unique_attr(tpe):
-            for _ in self.get_constraints_for_type(tpe):
-                return True
-            return False
+        if cls is PersistableType:
+            raise NotImplementedError()
 
         labels = set()
-        for tpe in descriptor.cls.__mro__:
-            type_id = get_type_id(tpe)
-            if type_id == 'Entity':
-                # we're done; don't want Entity or other internal types
-                return labels
-            if type_id in self._static_descriptors or has_unique_attr(tpe):
-                labels.add(get_type_id(tpe))
+        descr = self.get_descriptor(cls)
+        for name, attr in descr.attributes.items():
+            if attr.unique:
+                declaring_class = get_declaring_class(descr.cls, name)
+                type_id = get_type_id(declaring_class)
+                labels.add(type_id)
 
         return labels
-
 
     def get_constraints_for_type(self, cls):
         if cls is PersistableType:
