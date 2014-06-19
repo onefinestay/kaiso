@@ -4,8 +4,8 @@ python:
 env:
   - NEO4J_VERSION=2.0.0
   - NEO4J_VERSION=2.0.1
-  - NEO4J_VERSION=2.0.0 PY2NEO_VERSION=1.6.4
-  - NEO4J_VERSION=2.0.1 PY2NEO_VERSION=1.6.4
+  - NEO4J_VERSION=2.0.3
+  - NEO4J_VERSION=2.1.2
 
 before_install:
   - wget -O - http://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
