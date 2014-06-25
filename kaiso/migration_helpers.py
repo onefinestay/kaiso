@@ -43,7 +43,8 @@ def get_type_registry_with_base_change(manager, amended_type_id, new_bases):
 
     # capture current attrs of the type being amended
     descriptor = registry.get_descriptor_by_id(amended_type_id)
-    type_attrs = descriptor.declared_attributes
+    type_attrs = descriptor.declared_class_attributes
+    type_attrs.update(descriptor.declared_attributes)
 
     def new_type_hierarchy(manager):
         """
