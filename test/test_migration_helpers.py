@@ -198,3 +198,43 @@ def test_amended_indexes_same_attr_name(manager):
     assert {(ind, key) for ind, key, _ in amended_indexes} == {
         ('a', 'id'),
     }
+
+def test_class_attrs(manager):
+    with collector() as collected:
+        class A(Entity):
+            cls_attr = 'fromA'
+            cls_attr_A = 'A'
+
+        class B(Entity):
+            cls_attr = 'fromB'
+            cls_attr_B = 'B'
+
+        class C(A):
+            cls_attr = 'fromC'
+            cls_attr_C = 'C'
+
+    manager.save_collected_classes(collected)
+
+    def get_cls_attrs(cls):
+        attr_names = ['cls_attr', 'cls_attr_A', 'cls_attr_B', 'cls_attr_C']
+        return {a: getattr(cls, a, None) for a in attr_names}
+
+    # check initial state
+    assert get_cls_attrs(C) == {
+        'cls_attr': 'fromC',
+        'cls_attr_A': 'A',
+        'cls_attr_B': None,
+        'cls_attr_C': 'C'
+    }
+
+    amended_registry = get_type_registry_with_base_change(
+        manager, 'C', ('A', 'B'))
+
+    amended_C = amended_registry.get_class_by_id('C')
+    assert get_cls_attrs(amended_C) == {
+        'cls_attr': 'fromC',
+        'cls_attr_A': 'A',
+        'cls_attr_B': 'B',
+        'cls_attr_C': 'C'
+    }
+
