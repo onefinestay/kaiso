@@ -199,6 +199,7 @@ def test_amended_indexes_same_attr_name(manager):
         ('a', 'id'),
     }
 
+
 def test_class_attrs(manager):
     with collector() as collected:
         class A(Entity):
@@ -237,4 +238,3 @@ def test_class_attrs(manager):
         'cls_attr_B': 'B',
         'cls_attr_C': 'C'
     }
-
