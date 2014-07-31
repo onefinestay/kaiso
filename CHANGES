@@ -5,6 +5,12 @@ Start creating labels and constraints for types with unique attributes. This
 begins the migration away from legacy indexes towards using labels.
 
 
+Version 0.20.1
+--------------
+
+Bugfix: Ensure all class attributes are set correctly in migration helpers.
+
+
 Version 0.20.0
 --------------
 
