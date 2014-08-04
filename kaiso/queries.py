@@ -78,11 +78,12 @@ def get_create_types_query(cls, root, type_registry):
     for cls1, (rel_cls, base_idx), cls2 in type_relationships:
 
         name1 = cls1.__name__
+        type1 = type(cls1).__name__
 
         if name1 in classes:
-            abstr1 = '`%s`' % (name1,)
+            abstr1 = '(`%s`:%s)' % (name1, type1)
         else:
-            abstr1 = '(`%s` {%s_id_props})' % (name1, name1)
+            abstr1 = '(`%s`:%s {%s_id_props})' % (name1, type1, name1)
 
         classes[name1] = cls1
 

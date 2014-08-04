@@ -82,6 +82,21 @@ class Manager(object):
         idx_name = get_index_name(TypeSystem)
         self._conn.get_or_create_index(neo4j.Node, idx_name)
         self.save(self.type_system)
+
+        batch = neo4j.WriteBatch(self._conn)
+        batch.append_cypher(
+            """
+            CREATE CONSTRAINT ON (typesystem:TypeSystem)
+            ASSERT typesystem.id IS UNIQUE
+            """
+        )
+        batch.append_cypher(
+            """
+            CREATE CONSTRAINT ON (type:PersistableType)
+            ASSERT type.id IS UNIQUE
+            """
+        )
+        batch.run()
         if not skip_type_loading:
             self.reload_types()
 
@@ -98,7 +113,7 @@ class Manager(object):
         # 2.0 compatibility as we transition
         query = "CYPHER 2.0 {}".format(query)
 
-        log.debug('running query:\n%s', query.format(**params))
+        log.debug('running query:\n%s\n\nwith params %s', query, params)
 
         rows, _ = cypher.execute(self._conn, query, params)
 
@@ -311,8 +326,19 @@ class Manager(object):
             type_id = get_type_id(obj)
             self.type_registry._types_in_db.add(type_id)
             indexes = self.type_registry.get_indexes_for_type(obj)
-            for index_name, _, _ in indexes:
+            for index_name, attr_name, _ in indexes:
                 self._conn.get_or_create_index(neo4j.Node, index_name)
+            type_constraints = self.type_registry.get_constraints_for_type(obj)
+            for constraint_type_id, constraint_attr_name in type_constraints:
+                self.query(
+                    """
+                        CREATE CONSTRAINT ON (type:{type_id})
+                        ASSERT type.{attr_name} IS UNIQUE
+                    """.format(
+                        type_id=constraint_type_id,
+                        attr_name=constraint_attr_name,
+                    )
+                )
 
         for obj, node_or_rel in zip(objects, nodes_or_rels):
             self._index_object(obj, node_or_rel)
@@ -442,6 +468,7 @@ class Manager(object):
         for the the object as required and store the object itself.
         """
 
+        type_registry = self.type_registry
         query_args = {}
         invalidates_types = False
 
@@ -450,7 +477,7 @@ class Manager(object):
             return self._update_types(obj)
 
         elif obj is self.type_system:
-            query = 'CREATE (n {props}) RETURN n'
+            query = 'CREATE (n:TypeSystem {props}) RETURN n'
 
         elif isinstance(obj, Relationship):
             # object is a relationship
@@ -458,29 +485,35 @@ class Manager(object):
 
             if obj_type in (IsA, DeclaredOn):
                 invalidates_types = True
-            query = get_create_relationship_query(obj, self.type_registry)
+            query = get_create_relationship_query(obj, type_registry)
 
         else:
             # object is an instance
             obj_type = type(obj)
             type_id = get_type_id(obj_type)
-            if type_id not in self.type_registry._types_in_db:
+            if type_id not in type_registry._types_in_db:
                 raise TypeNotPersistedError(type_id)
+
+            labels = type_registry.get_labels_for_type(obj_type)
+            if labels:
+                node_declaration = 'n:' + ':'.join(labels)
+            else:
+                node_declaration = 'n'
 
             idx_name = get_index_name(PersistableType)
             query = (
                 'START cls=node:%s(id={type_id}) '
-                'CREATE (n {props}) -[:INSTANCEOF {rel_props}]-> cls '
+                'CREATE (%s {props}) -[:INSTANCEOF {rel_props}]-> cls '
                 'RETURN n'
-            ) % idx_name
+            ) % (idx_name, node_declaration)
 
             query_args = {
                 'type_id': get_type_id(obj_type),
-                'rel_props': self.type_registry.object_to_dict(
+                'rel_props': type_registry.object_to_dict(
                     InstanceOf(None, None), for_db=True),
             }
 
-        query_args['props'] = self.type_registry.object_to_dict(
+        query_args['props'] = type_registry.object_to_dict(
             obj, for_db=True)
 
         (node_or_rel,) = next(self._execute(query, **query_args))
@@ -800,23 +833,41 @@ class Manager(object):
         # get rid of any attributes not supported by the new type
         properties = self.serialize(self.deserialize(properties), for_db=True)
 
-        tpe = type_registry.get_class_by_id(type_id)
+        old_type = type(obj)
+        new_type = type_registry.get_class_by_id(type_id)
 
         rel_props = type_registry.object_to_dict(InstanceOf(), for_db=True)
 
+        old_labels = set(type_registry.get_labels_for_type(old_type))
+        new_labels = set(type_registry.get_labels_for_type(new_type))
+        removed_labels = old_labels - new_labels
+        added_labels = new_labels - old_labels
+
+        if removed_labels:
+            remove_labels_statement = 'REMOVE obj:' + ':'.join(removed_labels)
+        else:
+            remove_labels_statement = ''
+
+        if added_labels:
+            add_labels_statement = 'SET obj :' + ':'.join(added_labels)
+        else:
+            add_labels_statement = ''
+
         start_clauses = (
             get_start_clause(obj, 'obj', type_registry),
-            get_start_clause(tpe, 'tpe', type_registry)
+            get_start_clause(new_type, 'type', type_registry)
         )
 
         # See note at top of page
         query = join_lines(
             'START',
             (start_clauses, ','),
-            'MATCH (obj)-[old_rel:INSTANCEOF]->(dummy1)',
+            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
             'DELETE old_rel',
-            'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(tpe)',
+            'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(type)',
             'SET obj={properties}',
+            remove_labels_statement,
+            add_labels_statement,
             'RETURN obj',
         )
 
@@ -969,3 +1020,18 @@ class Manager(object):
             self._conn.delete_index(neo4j.Node, index_name)
         for index_name in self._conn.get_indexes(neo4j.Relationship).keys():
             self._conn.delete_index(neo4j.Relationship, index_name)
+        # NB. we assume all indexes are from constraints (only use-case for
+        # kaiso) if any aren't, this will not work
+        batch = neo4j.WriteBatch(self._conn)
+        for label in self._conn.node_labels:
+            for key in self._conn.schema.get_indexed_property_keys(label):
+                batch.append_cypher(
+                    """
+                        DROP CONSTRAINT ON (type:{type_id})
+                        ASSERT type.{attr_name} IS UNIQUE
+                    """.format(
+                        type_id=label,
+                        attr_name=key,
+                    )
+                )
+        batch.run()

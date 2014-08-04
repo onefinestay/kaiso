@@ -65,10 +65,15 @@ def test_basic(manager, static_types):
     manager.save(thing_a)
 
     new_obj = manager.change_instance_type(thing_a, 'ThingB')
-    retrieved = manager.get(ThingB, id=thing_a.id)
+    retrieved_by_legacy_index = manager.get(ThingB, id=thing_a.id)
+    (retrieved_by_label,) = next(manager.query(
+        "MATCH (n:Thing) WHERE n.id = {id} RETURN n",
+        id=thing_a.id,
+    ))
 
     assert type(new_obj) is ThingB
-    assert type(retrieved) is ThingB
+    assert type(retrieved_by_legacy_index) is ThingB
+    assert type(retrieved_by_label) is ThingB
 
     # check new relationship has been created correctly
     instance_of_obj = get_instance_of_relationship(manager, new_obj)
@@ -243,5 +248,22 @@ def test_change_unique_declaration(manager):
 
     manager.change_instance_type(thing, 'ThingB')
 
-    assert next(manager.get_by_unique_attr(ThingA, 'id', [thing.id])) is None
-    assert next(manager.get_by_unique_attr(ThingB, 'id', [thing.id]))
+    def get_by_legacy_index(type_, id_):
+        return next(
+            manager.get_by_unique_attr(type_, 'id', [id_])
+        )
+
+    def get_by_label(type_name, id_):
+        rows = manager.query(
+            "MATCH (n:%s) WHERE n.id = {id} RETURN n" % type_name,
+            id=id_,
+        )
+        for (result,) in rows:
+            return result
+        return None
+
+    assert get_by_legacy_index(ThingA, thing.id) is None
+    assert get_by_legacy_index(ThingB, thing.id)
+
+    assert get_by_label('ThingA', thing.id) is None
+    assert get_by_label('ThingB', thing.id)
