@@ -1,7 +1,8 @@
 from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
+from kaiso.serialize import dict_to_db_values_dict
 from kaiso.types import (
-    AttributedBase, get_index_name, Relationship)
+    AttributedBase, get_index_name, Relationship, get_type_id, PersistableType)
 from kaiso.serialize import get_type_relationships
 
 
@@ -40,6 +41,42 @@ def get_start_clause(obj, name, type_registry):
         index_type = "node"
     query = '{}={}:{}({}="{}")'.format(name, index_type, *index)
     return query
+
+
+def get_match_clause(obj, name, type_registry):
+    """Return params to use to lookup a node using unique attributes
+
+    Args:
+        obj: An object to create an index lookup.
+        name: The name of the object in the query.
+    Returns:
+        A tuple (match, where), where
+            match is a match MATCH clause and where is a WHERE clause, together
+            finding obj, with a name `name`
+    """
+
+    if isinstance(obj, PersistableType):
+        cls = PersistableType
+        attr_name = 'id'
+        value = get_type_id(obj)
+
+    else:
+        unique = next(type_registry.get_unique_attrs(type(obj)), None)
+        if unique is None:
+            raise NoUniqueAttributeError()
+
+        cls, attr_name = unique
+        value = getattr(obj, attr_name)
+
+    type_id = get_type_id(cls)
+
+    match = "(%s:%s)" % (name, type_id)
+    param_name = '%s_%s' % (name, attr_name)
+    where = "%s.%s = {%s}" % (name, attr_name, param_name)
+
+    param = dict_to_db_values_dict({param_name: value})
+
+    return match, where, param
 
 
 def get_create_types_query(cls, root, type_registry):
@@ -157,12 +194,33 @@ def get_create_types_query(cls, root, type_registry):
 
 def get_create_relationship_query(rel, type_registry):
     rel_props = type_registry.object_to_dict(rel, for_db=True)
-    query = 'START %s, %s CREATE n1 -[r:%s {props}]-> n2 RETURN r'
+
+    start_match, start_where, start_param = get_match_clause(
+        rel.start, 'n1', type_registry)
+    end_match, end_where, end_param = get_match_clause(
+        rel.end, 'n2', type_registry)
+
+    query = join_lines(
+        "MATCH",
+        join_lines(
+            start_match,
+            end_match,
+            sep=','
+        ),
+        "WHERE",
+        join_lines(
+            start_where,
+            end_where,
+            sep=' AND '
+        ),
+        "CREATE  n1 -[r:%s {props}]-> n2 RETURN r",
+    )
 
     query = query % (
-        get_start_clause(rel.start, 'n1', type_registry),
-        get_start_clause(rel.end, 'n2', type_registry),
         rel_props['__type__'].upper(),
     )
 
-    return query
+    params = start_param
+    params.update(end_param)
+
+    return query, params
