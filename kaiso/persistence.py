@@ -485,8 +485,7 @@ class Manager(object):
 
             if obj_type in (IsA, DeclaredOn):
                 invalidates_types = True
-            query, query_args = get_create_relationship_query(
-                obj, type_registry)
+            query = get_create_relationship_query(obj, type_registry)
 
         else:
             # object is an instance
