@@ -1,6 +1,9 @@
-from kaiso.types import Entity, Relationship, TypeRegistry
-from kaiso.queries import get_start_clause, get_match_clause
+import pytest
+
 from kaiso.attributes import String
+from kaiso.exceptions import NoUniqueAttributeError
+from kaiso.queries import get_start_clause, get_match_clause
+from kaiso.types import Entity, Relationship, TypeRegistry
 
 
 class IndexableThing(Entity):
@@ -13,6 +16,10 @@ class TwoUniquesThing(IndexableThing):
 
 class Connects(Relationship):
     indexable_attr = String(unique=True)
+
+
+class NotIndexable(Entity):
+    pass
 
 
 type_registry = TypeRegistry()
@@ -56,6 +63,11 @@ def test_get_start_clause_for_relationship_instance():
     assert clause == 'foo=rel:connects(indexable_attr="bar")'
 
 
+def test_get_start_clause_no_uniques():
+    with pytest.raises(NoUniqueAttributeError):
+        get_start_clause(NotIndexable(), 'foo', type_registry)
+
+
 def test_get_match_clause_for_type():
     clause = get_match_clause(IndexableThing, "foo", type_registry)
     assert clause == '(foo:PersistableType {id: "IndexableThing"})'
@@ -77,3 +89,13 @@ def test_get_match_clause_mutiple_uniques():
     clause = get_match_clause(obj, "foo", type_registry)
     assert (clause == '(foo:IndexableThing {indexable_attr: "bar"})' or
             clause == '(foo=IndexableThing {also_unique: "baz"})')
+
+
+def test_get_match_clause_no_uniques():
+    with pytest.raises(NoUniqueAttributeError):
+        get_match_clause(NotIndexable(), 'foo', type_registry)
+
+def test_get_match_clause_bad_type():
+    with pytest.raises(ValueError) as exc:
+        get_match_clause(object(), 'foo', type_registry)
+    assert "only supported for Entities" in str(exc)
