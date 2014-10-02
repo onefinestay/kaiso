@@ -56,8 +56,6 @@ def test_get_start_clause_for_relationship_instance():
     assert clause == 'foo=rel:connects(indexable_attr="bar")'
 
 
-
-
 def test_get_match_clause_for_type():
     clause = get_match_clause(IndexableThing, "foo", type_registry)
     assert clause == '(foo:PersistableType {id: "IndexableThing"})'
