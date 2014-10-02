@@ -1,5 +1,5 @@
 from kaiso.types import Entity, Relationship, TypeRegistry
-from kaiso.queries import get_start_clause
+from kaiso.queries import get_start_clause, get_match_clause
 from kaiso.attributes import String
 
 
@@ -54,3 +54,28 @@ def test_get_start_clause_for_relationship_instance():
 
     clause = get_start_clause(obj, "foo", type_registry)
     assert clause == 'foo=rel:connects(indexable_attr="bar")'
+
+
+
+
+def test_get_match_clause_for_type():
+    clause = get_match_clause(IndexableThing, "foo", type_registry)
+    assert clause == '(foo:PersistableType {id: "IndexableThing"})'
+
+
+def test_get_match_clause_for_instance():
+    obj = IndexableThing(indexable_attr="bar")
+
+    clause = get_match_clause(obj, "foo", type_registry)
+    assert clause == '(foo:IndexableThing {indexable_attr: "bar"})'
+
+
+def test_get_match_clause_mutiple_uniques():
+    obj = TwoUniquesThing(
+        indexable_attr="bar",
+        also_unique="baz"
+    )
+
+    clause = get_match_clause(obj, "foo", type_registry)
+    assert (clause == '(foo:IndexableThing {indexable_attr: "bar"})' or
+            clause == '(foo=IndexableThing {also_unique: "baz"})')

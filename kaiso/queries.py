@@ -1,8 +1,11 @@
+import json
+
 from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.serialize import object_to_db_value
 from kaiso.types import (
-    AttributedBase, get_index_name, Relationship, get_type_id, PersistableType)
+    AttributedBase, get_index_name, Relationship, Entity, get_type_id,
+    PersistableType)
 from kaiso.serialize import get_type_relationships
 
 
@@ -57,6 +60,8 @@ def get_match_clause(obj, name, type_registry):
         cls = PersistableType
         attr_name = 'id'
         value = get_type_id(obj)
+    elif not isinstance(obj, Entity):
+        raise ValueError("Match clauses are only supported for Entities")
 
     else:
         unique = next(type_registry.get_unique_attrs(type(obj)), None)
@@ -68,11 +73,11 @@ def get_match_clause(obj, name, type_registry):
 
     type_id = get_type_id(cls)
 
-    query = '({name}:{label} {{ {attr_name}: {attr_value!r} }})'.format(
+    query = '({name}:{label} {{{attr_name}: {attr_value}}})'.format(
         name=name,
         label=type_id,
         attr_name=attr_name,
-        attr_value=object_to_db_value(value),
+        attr_value=json.dumps(object_to_db_value(value)),
     )
     return query
 
