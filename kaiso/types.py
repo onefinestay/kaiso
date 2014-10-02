@@ -249,10 +249,6 @@ class TypeRegistry(object):
         """Generates tuples (declaring_class, attribute_name) for
         unique attributes"""
 
-        if cls is PersistableType:
-            yield(PersistableType, 'id')
-            return
-
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
             if attr.unique:
