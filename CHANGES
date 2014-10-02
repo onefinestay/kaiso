@@ -1,3 +1,11 @@
+Version 0.22.0-dev
+------------------
+
+Add `get_match_clause` to replace `get_start_clause` using label index lookups
+and switch all node lookups. Relationship lookups left until unique attributes
+on relationships are deprecated
+
+
 Version 0.21.0
 --------------
 
