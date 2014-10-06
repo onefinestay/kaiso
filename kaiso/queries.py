@@ -64,12 +64,12 @@ def get_match_clause(obj, name, type_registry):
         raise ValueError("Match clauses are only supported for Entities")
 
     else:
-        unique = next(type_registry.get_unique_attrs(type(obj)), None)
-        if unique is None:
+        for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
+            value = getattr(obj, attr_name)
+            if value is not None:
+                break
+        else:
             raise NoUniqueAttributeError()
-
-        cls, attr_name = unique
-        value = getattr(obj, attr_name)
 
     type_id = get_type_id(cls)
 
