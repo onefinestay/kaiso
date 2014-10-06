@@ -95,6 +95,7 @@ def test_get_match_clause_no_uniques():
     with pytest.raises(NoUniqueAttributeError):
         get_match_clause(NotIndexable(), 'foo', type_registry)
 
+
 def test_get_match_clause_bad_type():
     with pytest.raises(ValueError) as exc:
         get_match_clause(object(), 'foo', type_registry)

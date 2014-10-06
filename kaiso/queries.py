@@ -81,6 +81,7 @@ def get_match_clause(obj, name, type_registry):
     )
     return query
 
+
 def get_create_types_query(cls, root, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 

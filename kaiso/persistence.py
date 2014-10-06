@@ -525,7 +525,7 @@ class Manager(object):
             match = """
                 p = (
                     (ts:TypeSystem {id: "TypeSystem"})-[:DEFINES]->()<-
-                        [:ISA*]-(opt)<-[:ISA*0..]- (tpe)
+                        [:ISA*]-(opt)<-[:ISA*0..]-(tpe)
                 )
                 WHERE opt.id = {start_id}
                 """
@@ -534,7 +534,7 @@ class Manager(object):
             match = """
                 p=(
                     (ts:TypeSystem {id: "TypeSystem"})-[:DEFINES]->()<-
-                        [:ISA*0..]- (tpe)
+                        [:ISA*0..]-(tpe)
                 )
                 """
             query_args = {}
