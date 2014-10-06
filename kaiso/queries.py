@@ -53,7 +53,7 @@ def get_match_clause(obj, name, type_registry):
         obj: An object to create an index lookup.
         name: The name of the object in the query.
     Returns:
-        A string with an index loopup for a cypher MATCH clause
+        A string with an index lookup for a cypher MATCH clause
     """
 
     if isinstance(obj, PersistableType):
