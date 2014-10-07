@@ -1,3 +1,10 @@
+Version 0.22.0
+--------------
+
+Allow py2neo primitives nested in lists of lists to be converted to python objects
+in query results.
+
+
 Version 0.21.0
 --------------
 
