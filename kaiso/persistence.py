@@ -141,6 +141,10 @@ class Manager(object):
             else:
                 set_store_for_object(obj, self)
             return obj
+
+        elif isinstance(value, list):
+            return [self._convert_value(v) for v in value]
+
         return value
 
     def _convert_row(self, row):

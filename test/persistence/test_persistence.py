@@ -304,6 +304,41 @@ def test_get_with_multi_value_attr_filter(manager, static_types):
     assert isinstance(queried_thing, Thing2)
 
 
+def test_query_list_values(manager, static_types):
+    IndexedRelated = static_types['IndexedRelated']
+
+    class ThingA(Entity):
+        attr_a = Integer(unique=True)
+    manager.save(ThingA)
+
+    thing1 = ThingA(attr_a=1)
+    thing2 = ThingA(attr_a=2)
+
+    rel = IndexedRelated(start=thing1, end=thing2)
+    manager.save(thing1)
+    manager.save(thing2)
+    manager.save(rel)
+
+    query = """
+        MATCH (thing1:ThingA)-[rel]->(thing2:ThingA)
+        RETURN 1, collect(['foo', thing1, 'bar', thing2, rel])
+    """
+
+    rows = list(manager.query(query))
+    assert len(rows) == 1
+    intval, collection = rows[0]
+    assert intval == 1
+    assert len(collection) == 1
+    data = collection[0]
+    assert data[0] == 'foo'
+    assert isinstance(data[1], ThingA)
+    assert data[1].attr_a == 1
+    assert data[2] == 'bar'
+    assert isinstance(data[3], ThingA)
+    assert data[3].attr_a == 2
+    assert isinstance(data[4], IndexedRelated)
+
+
 def test_delete_relationship(manager, static_types):
     Thing = static_types['Thing']
     Related = static_types['Related']
