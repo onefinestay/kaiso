@@ -245,27 +245,32 @@ class TypeRegistry(object):
                 key = name
                 yield (index_name, key, attr)
 
-    def get_labels_for_type(self, cls):
-        """We set labels for any unique attributes"""
+    def get_unique_attrs(self, cls):
+        """Generates tuples (declaring_class, attribute_name) for
+        unique attributes"""
 
-        labels = set()
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
             if attr.unique:
                 declaring_class = get_declaring_class(descr.cls, name)
-                type_id = get_type_id(declaring_class)
-                labels.add(type_id)
+                yield (declaring_class, name)
+
+    def get_labels_for_type(self, cls):
+        """We set labels for any unique attributes"""
+
+        labels = set()
+        for declaring_class, attr_name in self.get_unique_attrs(cls):
+            type_id = get_type_id(declaring_class)
+            labels.add(type_id)
 
         return labels
 
     def get_constraints_for_type(self, cls):
         descr = self.get_descriptor(cls)
-        for name, attr in descr.attributes.items():
-            if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name)
-                if declaring_class is descr.cls:
-                    type_id = get_type_id(cls)
-                    yield (type_id, name)
+        for declaring_class, attr_name in self.get_unique_attrs(cls):
+            if declaring_class is descr.cls:
+                type_id = get_type_id(cls)
+                yield (type_id, attr_name)
 
     def get_index_entries(self, obj):
         """

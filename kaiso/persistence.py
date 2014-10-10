@@ -12,7 +12,7 @@ from kaiso.exceptions import (
     TypeNotPersistedError, NoResultFound)
 from kaiso.queries import (
     get_create_types_query, get_create_relationship_query, get_start_clause,
-    join_lines)
+    get_match_clause, join_lines)
 from kaiso.references import set_store_for_object
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn
 from kaiso.serialize import (
@@ -22,12 +22,6 @@ from kaiso.types import (
     Relationship, TypeRegistry, AttributedBase, get_declaring_class,
     get_index_name, get_type_id, is_indexable)
 from kaiso.utils import dict_difference
-
-
-# Note: some Cypher queries contain dummy names for unused nodes, e.g. (dummy1)
-# instead of (). This is an attempted workaround for an intermittent Cypher
-# bug (https://github.com/neo4j/neo4j/issues/1040) and may be removed when
-# used against later versions of Neo4j.
 
 
 log = getLogger(__name__)
@@ -180,23 +174,16 @@ class Manager(object):
             set_store_for_object(obj, self)
 
     def _type_system_version(self):
-        query = join_lines(
-            'START',
-            get_start_clause(self.type_system, 'ts', self.type_registry),
-            'RETURN ts.version'
-        )
-
+        query = 'MATCH (ts:TypeSystem {id: "TypeSystem"}) RETURN ts.version'
         rows = self._execute(query)
         (version,) = next(rows)
         return version
 
     def invalidate_type_system(self):
-        query = join_lines(
-            'START',
-            get_start_clause(self.type_system, 'ts', self.type_registry),
-            'SET ts.version = {new_version}'
-        )
-
+        query = """
+            MATCH (ts:TypeSystem {id: "TypeSystem"})
+            SET ts.version = {new_version}
+        """
         new_version = uuid.uuid4().hex
         next(self._execute(query, new_version=new_version), None)
 
@@ -421,7 +408,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_start, 'start_node', registry)
                     )
-                    match_start_node = '(dummy1)'  # See note at top of page
+                    match_start_node = '()'
                 else:
                     match_start_node = 'start_node'
 
@@ -429,7 +416,7 @@ class Manager(object):
                     start_clauses.append(
                         get_start_clause(new_end, 'end_node', registry)
                     )
-                    match_end_node = '(dummy2)'  # See note at top of page
+                    match_end_node = '()'
                 else:
                     match_end_node = 'end_node'
 
@@ -539,24 +526,28 @@ class Manager(object):
         """
 
         if start_type_id:
-            # See note at top of page
-            match = ('p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*]- opt '
-                     '<-[:ISA*0..]- tpe)')
-            where = 'WHERE opt.id = {start_id}'
+            match = """
+                p = (
+                    (ts:TypeSystem {id: "TypeSystem"})-[:DEFINES]->()<-
+                        [:ISA*]-(opt)<-[:ISA*0..]-(tpe)
+                )
+                WHERE opt.id = {start_id}
+                """
             query_args = {'start_id': start_type_id}
         else:
-            # See note at top of page
-            match = 'p=(ts -[:DEFINES]-> (dummy1) <-[:ISA*0..]- tpe)'
-            where = ''
+            match = """
+                p=(
+                    (ts:TypeSystem {id: "TypeSystem"})-[:DEFINES]->()<-
+                        [:ISA*0..]-(tpe)
+                )
+                """
             query_args = {}
 
         query = join_lines(
-            'START %s' % get_start_clause(self.type_system, 'ts',
-                                          self.type_registry),
             'MATCH',
             match,
-            where,
-            ''' WITH tpe, max(length(p)) AS level
+            """
+            WITH tpe, max(length(p)) AS level
             OPTIONAL MATCH
                 tpe <-[:DECLAREDON*]- attr
             OPTIONAL MATCH
@@ -572,7 +563,7 @@ class Manager(object):
 
             ORDER BY level
             RETURN type_id, bases, class_attrs, attrs
-            ''')
+            """)
 
         # we can't use self.query since we don't want to convert the
         # class_attrs dict
@@ -652,23 +643,23 @@ class Manager(object):
         if existing_attrs != base_attrs:
             raise CannotUpdateType("Inherited attributes are not identical")
 
-        start_clauses = [get_start_clause(tpe, 'type', self.type_registry)]
+        match_clauses = [get_match_clause(tpe, 'type', self.type_registry)]
         create_clauses = []
         query_args = {}
 
         for index, base in enumerate(bases):
             name = 'base_{}'.format(index)
-            start = get_start_clause(base, name, self.type_registry)
+            match = get_match_clause(base, name, self.type_registry)
             create = "type -[:ISA {%s_props}]-> %s" % (name, name)
 
             query_args["{}_props".format(name)] = {'base_index': index}
-            start_clauses.append(start)
+            match_clauses.append(match)
             create_clauses.append(create)
 
         query = join_lines(
-            "START",
-            (start_clauses, ','),
-            "MATCH type -[r:ISA]-> (dummy1)",  # See note at top of page
+            "MATCH",
+            (match_clauses, ','),
+            ", type -[r:ISA]-> ()",
             "DELETE r",
             "CREATE",
             (create_clauses, ','),
@@ -857,16 +848,15 @@ class Manager(object):
         else:
             add_labels_statement = ''
 
-        start_clauses = (
-            get_start_clause(obj, 'obj', type_registry),
-            get_start_clause(new_type, 'type', type_registry)
+        match_clauses = (
+            get_match_clause(obj, 'obj', type_registry),
+            get_match_clause(new_type, 'type', type_registry)
         )
 
-        # See note at top of page
         query = join_lines(
-            'START',
-            (start_clauses, ','),
-            'MATCH (obj)-[old_rel:INSTANCEOF]->()',
+            'MATCH',
+            (match_clauses, ','),
+            ', (obj)-[old_rel:INSTANCEOF]->()',
             'DELETE old_rel',
             'CREATE (obj)-[new_rel:INSTANCEOF {rel_props}]->(type)',
             'SET obj={properties}',
@@ -909,20 +899,20 @@ class Manager(object):
     def get_related_objects(self, rel_cls, ref_cls, obj):
 
         if ref_cls is Outgoing:
-            rel_query = 'n -[relation:{}]-> related'
+            rel_query = '(n)-[relation:{}]->(related)'
         elif ref_cls is Incoming:
-            rel_query = 'n <-[relation:{}]- related'
+            rel_query = '(n)<-[relation:{}]-(related)'
 
         # TODO: should get the rel name from descriptor?
         rel_query = rel_query.format(rel_cls.__name__.upper())
 
         query = join_lines(
-            'START {idx_lookup} MATCH {rel_query}',
+            'MATCH {idx_lookup}, {rel_query}'
             'RETURN related, relation'
         )
 
         query = query.format(
-            idx_lookup=get_start_clause(obj, 'n', self.type_registry),
+            idx_lookup=get_match_clause(obj, 'n', self.type_registry),
             rel_query=rel_query
         )
 
@@ -949,13 +939,13 @@ class Manager(object):
                 )
             else:
                 query = join_lines(
-                    'START {}, {}',
-                    'MATCH n1 -[rel]-> n2',
+                    'MATCH {}, {},',
+                    'n1 -[rel]-> n2',
                     'DELETE rel',
                     'RETURN 0, count(rel)'
                 ).format(
-                    get_start_clause(obj.start, 'n1', self.type_registry),
-                    get_start_clause(obj.end, 'n2', self.type_registry),
+                    get_match_clause(obj.start, 'n1', self.type_registry),
+                    get_match_clause(obj.end, 'n2', self.type_registry),
                 )
             rel_type = type(obj)
             if rel_type in (IsA, DeclaredOn):
@@ -963,25 +953,25 @@ class Manager(object):
 
         elif isinstance(obj, PersistableType):
             query = join_lines(
-                'START {}',
+                'MATCH {}',
                 'OPTIONAL MATCH attr -[:DECLAREDON]-> obj',
                 'DELETE attr',
                 'WITH obj',
-                'MATCH obj -[rel]- (dummy1)',  # See note at top of page
+                'MATCH obj -[rel]- ()',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
-                get_start_clause(obj, 'obj', self.type_registry)
+                get_match_clause(obj, 'obj', self.type_registry)
             )
             invalidates_types = True
         else:
             query = join_lines(
-                'START {}',
-                'MATCH obj -[rel]- (dummy1)',  # See note at top of page
+                'MATCH {},',
+                'obj -[rel]- ()',
                 'DELETE obj, rel',
                 'RETURN count(obj), count(rel)'
             ).format(
-                get_start_clause(obj, 'obj', self.type_registry)
+                get_match_clause(obj, 'obj', self.type_registry)
             )
 
         # TODO: delete node/rel from indexes
