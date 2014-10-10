@@ -1,4 +1,4 @@
-Version 0.23.0-dev
+Version 0.23.0
 ------------------
 
 Add `get_match_clause` to replace `get_start_clause` using label index lookups
