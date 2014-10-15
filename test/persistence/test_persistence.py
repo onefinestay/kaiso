@@ -582,6 +582,7 @@ def test_destroy(manager, static_types):
     rows = manager.query('START n=node(*) RETURN count(n)')
     assert next(rows) == (0,)
 
+    # TODO: disallow relationship indexes?
     queries = (
         'START n=node:persistableype(name="Thing") RETURN n',
         'START r=relationship:indexedrelated(id="spam") RETURN r',
@@ -632,8 +633,7 @@ def test_relationship(manager, static_types):
     manager.save(rel)
 
     rows = manager.query('''
-        START n1 = node:thing(id={id})
-        MATCH n1 -[r:RELATED]-> n2
+        MATCH (n1:Thing {id: {id}})-[r:RELATED]->(n2)
         RETURN n1, r, n2
     ''', id=thing1.id)
 
@@ -726,17 +726,15 @@ def test_get_type_hierarchy_bases_order(manager, beetroot_diamond):
     is_a_props = manager.type_registry.object_to_dict(IsA())
     is_a_props['base_index'] = 1
 
-    list(manager.query(
-        ''' START
-                Beetroot=node:persistabletype(id="Beetroot"),
-                Flavouring=node:persistabletype(id="Colouring")
-            MATCH
-                Beetroot -[r:ISA]-> Flavouring
-            DELETE r
-            CREATE
-                Beetroot -[nr:ISA {is_a_props}]-> Flavouring
-            RETURN nr
-        ''', is_a_props=is_a_props))
+    list(manager.query("""
+        MATCH
+            (Beetroot:PersistableType {id: "Beetroot"})-[r:ISA]->
+                (Colouring:PersistableType {id: "Colouring"})
+        DELETE r
+        CREATE
+            (Beetroot)-[nr:ISA {is_a_props}]->(Colouring)
+        RETURN nr
+    """, is_a_props=is_a_props))
 
     result = [(nme, bases) for (nme, bases, _)
               in manager.get_type_hierarchy()]
@@ -885,11 +883,13 @@ def test_add_type_creates_index_per_unique_attr(manager, static_types):
 def count(manager, type_):
     type_id = type_.__name__
     query = """
-        START Thing=node:persistabletype(id="{}")
-        MATCH (n)-[:INSTANCEOF]->Thing
-        RETURN count(n);
-        """.format(type_id)
-    rows = manager.query(query)
+        MATCH
+            (Thing:PersistableType {id: {type_id}}),
+            (n)-[:INSTANCEOF]->(Thing)
+        RETURN
+            count(n);
+        """
+    rows = manager.query(query, type_id=type_id)
     (count,) = next(rows)
     return count
 
@@ -965,9 +965,11 @@ def test_persist_attributes(manager):
     manager.save(Thing)
 
     query_str = """
-        START Thing = node:persistabletype(id="Thing")
-        MATCH attr -[DECLAREDON]-> Thing
-        RETURN attr
+        MATCH
+            (Thing:PersistableType {id: "Thing"}),
+            (attr)-[DECLAREDON]->Thing
+        RETURN
+            attr
     """
 
     rows = manager.query(query_str)
@@ -993,9 +995,11 @@ def test_attribute_creation(manager, static_types):
     manager.save(Thing)
 
     query_str = """
-        START Thing = node:persistabletype(id="Thing")
-        MATCH attr -[:DECLAREDON]-> Thing
-        RETURN attr.__type__, attr.name, attr.unique
+        MATCH
+            (Thing:PersistableType {id: "Thing"}),
+            (attr)-[:DECLAREDON]->(Thing)
+        RETURN
+            attr.__type__, attr.name, attr.unique
     """
 
     rows = manager.query(query_str)
@@ -1028,9 +1032,11 @@ def test_attribute_inheritance(manager, beetroot_diamond):
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
     # there are two paths from it to ``Entity``.
     query_str = """
-        START Entity = node:persistabletype(id="Entity")
-        MATCH attr -[:DECLAREDON]-> type -[:ISA*]-> Entity
-        RETURN type.id, attr.name, attr.__type__, attr.default
+        MATCH
+            (Entity:PersistableType {id: "Entity"}),
+            (attr)-[:DECLAREDON]->(type)-[:ISA*]->(Entity)
+        RETURN
+            type.id, attr.name, attr.__type__, attr.default
     """
 
     rows = manager.query(query_str)
@@ -1056,9 +1062,11 @@ def test_attribute_inheritance(manager, beetroot_diamond):
 
     # ``natural`` on ``Beetroot`` should only be defined once
     query_str = """
-        START Beetroot = node:persistabletype(id="Beetroot")
-        MATCH attr -[:DECLAREDON]-> Beetroot
-        RETURN count(attr)
+        MATCH
+            (Beetroot:PersistableType {id: "Beetroot"}),
+            (attr)-[:DECLAREDON]->(Beetroot)
+        RETURN
+            count(attr)
     """
     count = next(manager.query(query_str))[0]
     assert count == 1
