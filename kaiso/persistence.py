@@ -316,7 +316,7 @@ class Manager(object):
         query, objects, query_args = get_create_types_query(
             cls, self.type_system.id, self.type_registry)
 
-        nodes_or_rels = next(self._execute(query, **query_args))
+        nodes = next(self._execute(query, **query_args))
 
         for obj in objects:
             type_id = get_type_id(obj)
@@ -336,8 +336,8 @@ class Manager(object):
                     )
                 )
 
-        for obj, node_or_rel in zip(objects, nodes_or_rels):
-            self._index_object(obj, node_or_rel)
+        for obj, node in zip(objects, nodes):
+            self._index_object(obj, node)
 
         # we can't tell whether the CREATE UNIQUE from get_create_types_query
         # will have any effect, so we must invalidate.
