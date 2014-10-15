@@ -4,8 +4,7 @@ from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.serialize import object_to_db_value
 from kaiso.types import (
-    AttributedBase, get_index_name, Relationship, Entity, get_type_id,
-    PersistableType)
+    AttributedBase, Relationship, Entity, get_type_id, PersistableType)
 from kaiso.serialize import get_type_relationships
 
 
@@ -82,7 +81,7 @@ def get_match_clause(obj, name, type_registry):
     return query
 
 
-def get_create_types_query(cls, root, type_registry):
+def get_create_types_query(cls, type_system_id, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
@@ -99,7 +98,7 @@ def get_create_types_query(cls, root, type_registry):
     classes = {}
 
     query_args = {
-        'root_id': root.id,
+        'type_system_id': type_system_id,
         'Defines_props': type_registry.object_to_dict(Defines()),
         'InstanceOf_props': type_registry.object_to_dict(InstanceOf()),
         'DeclaredOn_props': type_registry.object_to_dict(DeclaredOn()),
@@ -129,7 +128,7 @@ def get_create_types_query(cls, root, type_registry):
 
         if is_first:
             is_first = False
-            ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
+            ln = 'ts -[:DEFINES {Defines_props}]-> %s' % abstr1
         else:
             name2 = cls2.__name__
             classes[name2] = cls2
@@ -185,7 +184,7 @@ def get_create_types_query(cls, root, type_registry):
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
-        'START root=node:%s(id={root_id})' % get_index_name(type(root)),
+        'MATCH (ts:TypeSystem) WHERE ts.id = {type_system_id}'
         'CREATE UNIQUE',
         (hierarchy_lines, ','),
         (set_lines, ''),

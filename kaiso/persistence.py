@@ -314,7 +314,7 @@ class Manager(object):
 
     def _update_types(self, cls):
         query, objects, query_args = get_create_types_query(
-            cls, self.type_system, self.type_registry)
+            cls, self.type_system.id, self.type_registry)
 
         nodes_or_rels = next(self._execute(query, **query_args))
 
