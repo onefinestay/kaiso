@@ -242,11 +242,16 @@ class Manager(object):
                 'type_id': type_id
             }
 
-            query = join_lines(
-                'START cls=node:%s(id={type_id})' % idx_name,
-                'MATCH attr -[:DECLAREDON*0..]-> cls',
-                'RETURN cls, collect(attr.name)'
-            )
+            query = """
+                MATCH
+                    (cls:PersistableType)
+                WHERE
+                    cls.id = {type_id}
+                OPTIONAL MATCH
+                    (attr)-[:DECLAREDON]->(cls)
+                RETURN
+                    cls, collect(attr.name)
+            """
 
             # don't use self.query since we don't want to convert the py2neo
             # node into an object
@@ -378,10 +383,9 @@ class Manager(object):
             else:
                 where = ''
 
-            index_name = get_index_name(PersistableType)
-
             query = join_lines(
-                'START n=node:%s(id={type_id})' % index_name,
+                'MATCH (n:PersistableType)',
+                'WHERE n.id = {type_id}',
                 set_clauses,
                 'WITH n',
                 'MATCH attr -[r:DECLAREDON]-> n',
@@ -491,12 +495,12 @@ class Manager(object):
             else:
                 node_declaration = 'n'
 
-            idx_name = get_index_name(PersistableType)
-            query = (
-                'START cls=node:%s(id={type_id}) '
-                'CREATE (%s {props}) -[:INSTANCEOF {rel_props}]-> cls '
-                'RETURN n'
-            ) % (idx_name, node_declaration)
+            query = """
+                MATCH (cls:PersistableType)
+                WHERE cls.id = {type_id}
+                CREATE (%s {props})-[:INSTANCEOF {rel_props}]->(cls)
+                RETURN n
+            """ % node_declaration
 
             query_args = {
                 'type_id': get_type_id(obj_type),
@@ -712,12 +716,10 @@ class Manager(object):
                 found.append(node_or_rel)
 
         if cls is TypeSystem:
-            idx_name = get_index_name(TypeSystem)
-            query = join_lines(
-                'START ts=node:%s(id={idx_value})' % idx_name,
-                'RETURN ts'
-            )
-            append_results(query, idx_value=self.type_system.id)
+            query = """
+                MATCH (ts:TypeSystem {id: {ts_id}}) RETURN ts
+            """
+            append_results(query, ts_id=self.type_system.id)
 
         else:
             attr_filter = dict_to_db_values_dict(attr_filter)
