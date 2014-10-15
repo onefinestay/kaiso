@@ -50,8 +50,7 @@ class TestReplace(object):
         obj2 = UniqueThing(id=2, code='B', extra='snacks')
         manager.save(obj2)
 
-        rows = manager.query('''START n = node:uniquething("id:*")
-                                   RETURN n''')
+        rows = manager.query("MATCH (n:UniqueThing) RETURN n")
         rows = list(rows)
 
         assert len(rows) == 2
@@ -69,8 +68,7 @@ class TestReplace(object):
         obj2 = UniqueThing(id=1, code='A', extra='lunch')
         manager.save(obj2)
 
-        rows = manager.query('''START n = node:uniquething("id:*")
-                                   RETURN n''')
+        rows = manager.query("MATCH (n:UniqueThing) RETURN n")
         rows = list(rows)
         assert len(rows) == 1
 
@@ -96,8 +94,7 @@ class TestReplace(object):
 
         obj2 = UniqueThing(id=1, code='A', extra='ice cream')
         manager.save(obj2)
-        rows = manager.query('''START n = node:uniquething("id:*")
-                                   RETURN n''')
+        rows = manager.query("MATCH (n:UniqueThing) RETURN n")
         rows = list(rows)
         assert len(rows) == 1
         assert rows[0][0].extra == 'ice cream'
@@ -110,8 +107,7 @@ class TestReplace(object):
 
         obj2 = UniqueThing(id=1, code='A')
         manager.save(obj2)
-        rows = manager.query('''START n = node:uniquething("id:*")
-                                   RETURN n''')
+        rows = manager.query("MATCH (n:UniqueThing) RETURN n")
         rows = list(rows)
         assert len(rows) == 1
         assert rows[0][0].extra is None
@@ -147,10 +143,13 @@ class TestReplace(object):
         follow_rel2 = Follows(obj1, obj2, id=1)
         manager.save(follow_rel2)
 
-        result = manager.query('''
-            START n = node:uniquething(id="1")
-            MATCH n-[r:FOLLOWS]->()
-            RETURN r''')
+        result = manager.query("""
+            MATCH
+                (n:UniqueThing {id: 1}),
+                (n)-[r:FOLLOWS]->()
+            RETURN
+                r
+        """)
 
         result = list(result)
         assert len(result) == 1
