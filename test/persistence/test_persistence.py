@@ -97,7 +97,7 @@ def test_add_persistable_only_adds_single_node(manager):
     manager.save(Entity)
 
     result = list(manager.query(
-        'START n=node:persistabletype("id:*") RETURN n')
+        'MATCH (n:PersistableType) RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -107,7 +107,7 @@ def test_only_adds_entity_once(manager):
     manager.save(Entity)
 
     result = list(manager.query(
-        'START n=node:persistabletype("id:*") RETURN n')
+        'MATCH (n:PersistableType) RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -121,9 +121,10 @@ def test_only_adds_types_once(manager, static_types):
     manager.save(thing1)
     manager.save(thing2)
 
-    (count,) = next(manager.query(
-        'START n=node:persistabletype(id="Thing") '
-        'RETURN count(n)'))
+    (count,) = next(manager.query("""
+        MATCH (n:PersistableType {id: "Thing"})
+        RETURN count(n)
+    """))
 
     assert count == 1
 
@@ -510,9 +511,10 @@ def test_delete_instance_types_remain(manager):
 
     # we are expecting the type to stay in place
     rows = manager.query("""
-        START n=node:persistabletype("id:*")
-        MATCH n-[:ISA|INSTANCEOF]->m
-        RETURN n""")
+        MATCH (n:PersistableType)
+        MATCH (n)-[:ISA|INSTANCEOF]->(m)
+        RETURN n
+    """)
     result = set(item for (item,) in rows)
     assert result == {Thing}
 
