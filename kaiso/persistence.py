@@ -20,6 +20,7 @@ from kaiso.serialize import (
 from kaiso.types import (
     INTERNAL_CLASS_ATTRS, Descriptor, Persistable, PersistableType,
     Relationship, TypeRegistry, AttributedBase, get_type_id,
+    get_relationship_id,
 )
 from kaiso.utils import dict_difference
 
@@ -110,7 +111,14 @@ class Manager(object):
         """
 
         if isinstance(value, (neo4j.Node, neo4j.Relationship)):
-            properties = value._properties
+            properties = value._properties.copy()
+
+            if isinstance(value, neo4j.Relationship):
+                # inject __type__ based on the relationship type in case it's
+                # missing. makes it easier to add relationship with cypher
+                rel_type = value.type
+                type_id = self.type_registry.get_relationship_type_id(rel_type)
+                properties['__type__'] = type_id
 
             obj = self.type_registry.dict_to_object(properties)
 
@@ -765,7 +773,7 @@ class Manager(object):
             rel_query = '(n)<-[relation:{}]-(related)'
 
         # TODO: should get the rel name from descriptor?
-        rel_query = rel_query.format(rel_cls.__name__.upper())
+        rel_query = rel_query.format(get_relationship_id(rel_cls))
 
         query = join_lines(
             'MATCH {idx_lookup}, {rel_query}'

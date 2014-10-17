@@ -32,26 +32,48 @@ class StaticClassCollector(object):
             raise TypeAlreadyCollected(
                 "Type `{}` already defined.".format(name)
             )
+        try:
+            rel_cls = Relationship
+        except NameError:
+            # Relationship may not be defined yet.
+            pass
+        else:
+            if issubclass(cls, rel_cls):
+                rel_name = get_relationship_id(cls)
+                if rel_name in self.relationships:
+                    raise TypeAlreadyCollected(
+                        "Relationship for `{}` already defined.".format(
+                            rel_name)
+                        )
+                self.relationships[rel_name] = name
+
         self.classes[name] = cls
         self.descriptors[name] = Descriptor(cls)
 
     def dump_state(self):
-        return self.classes.copy(), self.descriptors.copy()
+        return (
+            self.classes.copy(),
+            self.descriptors.copy(),
+            self.relationships.copy(),
+        )
 
     def load_state(self, state):
-        self.classes, self.descriptors = state
+        self.classes, self.descriptors, self.relationships = state
         # make sure we reset all descriptor caches
         for descriptor in self.descriptors.values():
             descriptor._clear_cache()
 
     def reset_state(self):
-        self.load_state(({}, {}))
+        self.load_state(({}, {}, {}))
 
     def get_descriptors(self):
         return self.descriptors
 
     def get_classes(self):
         return self.classes
+
+    def get_relationships(self):
+        return self.relationships
 
 
 collected_static_classes = StaticClassCollector()
@@ -120,6 +142,10 @@ class TypeRegistry(object):
     @property
     def _static_descriptors(self):
         return collected_static_classes.get_descriptors()
+
+    @property
+    def _relationships(self):
+        return collected_static_classes.get_relationships()
 
     def is_static_type(self, cls):
         class_id = get_type_id(cls)
@@ -204,6 +230,9 @@ class TypeRegistry(object):
     def refresh_type(self, cls):
         descriptor = self.get_descriptor(cls)
         descriptor._clear_cache()
+
+    def get_relationship_type_id(self, relationship_type):
+        return self._relationships[relationship_type]
 
     def get_descriptor(self, cls):
         name = get_type_id(cls)
@@ -435,6 +464,10 @@ def get_type_id(cls):
         return PersistableType.__name__
 
     return cls.__name__
+
+
+def get_relationship_id(cls):
+    return cls.__name__.upper()
 
 
 def cache_result(func):

@@ -4,7 +4,8 @@ from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.serialize import object_to_db_value
 from kaiso.types import (
-    AttributedBase, Relationship, get_type_id, PersistableType)
+    AttributedBase, Relationship, get_type_id, get_relationship_id,
+    PersistableType)
 from kaiso.serialize import get_type_relationships
 
 
@@ -59,7 +60,7 @@ def get_match_clause(obj, name, type_registry):
             raise NoUniqueAttributeError(
                 "{} is missing a start or end node".format(obj)
             )
-        rel_type = get_type_id(type(obj)).upper()
+        rel_type = get_relationship_id(type(obj))
         start_name = '{}__start'.format(name)
         end_name = '{}__end'.format(name)
         return """
@@ -145,7 +146,7 @@ def get_create_types_query(cls, type_system_id, type_registry):
             name2 = cls2.__name__
             classes[name2] = cls2
 
-            rel_name = rel_cls.__name__
+            rel_name = get_type_id(rel_cls)
             rel_type = rel_name.upper()
 
             prop_name = "%s_props" % rel_name
