@@ -3,7 +3,7 @@ import pytest
 from kaiso.attributes import Uuid, String
 from kaiso.exceptions import (
     NoResultFound, NoUniqueAttributeError, TypeNotPersistedError)
-from kaiso.queries import get_start_clause, join_lines
+from kaiso.queries import get_match_clause
 from kaiso.relationships import InstanceOf
 from kaiso.types import Entity
 
@@ -32,28 +32,25 @@ def static_types(manager):
 
 
 def has_property(manager, obj, prop):
-    query_str = join_lines(
-        "START",
-        get_start_clause(obj, 'node', manager.type_registry),
-        """
-            return node.{}
-        """.format(prop)
+    query = "MATCH {} RETURN node.{}".format(
+        get_match_clause(obj, 'node', manager.type_registry),
+        prop,
     )
 
-    properties = list(manager.query(query_str))
+    properties = list(manager.query(query))
     return not (properties == [(None,)])
 
 
 def get_instance_of_relationship(manager, obj):
-    query_str = join_lines(
-        "START",
-        get_start_clause(obj, 'node', manager.type_registry),
-        """
-            match node -[instance_of:INSTANCEOF]-> ()
-            return instance_of
-        """
+    query = """
+        MATCH
+        {},
+        (node)-[instance_of:INSTANCEOF]->()
+        RETURN instance_of
+    """.format(
+        get_match_clause(obj, 'node', manager.type_registry),
     )
-    instance_of, = next(manager.query(query_str))
+    instance_of = manager.query_single(query)
     return instance_of
 
 

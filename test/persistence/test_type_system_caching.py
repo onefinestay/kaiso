@@ -5,7 +5,7 @@ from py2neo import cypher
 import pytest
 
 from kaiso.attributes import Uuid, String
-from kaiso.queries import get_start_clause, join_lines
+from kaiso.queries import get_match_clause, join_lines
 from kaiso.relationships import Relationship, IsA
 from kaiso.types import Entity, collector, get_type_id
 
@@ -44,7 +44,7 @@ def test_type_system_version(manager):
 def test_type_system_reload(manager_factory, static_types):
     Thing = static_types['Thing']
 
-    manager_factory(skip_type_loading=True).destroy()
+    manager_factory(skip_setup=True).destroy()
     manager1 = manager_factory()
     manager2 = manager_factory()
 
@@ -70,13 +70,13 @@ def test_reload_external_changes(manager, connection, static_types):
 
     # update the graph as an external manager would
     # (change a value and bump the typesystem version)
-    start_clauses = (
-        get_start_clause(Thing, 'Thing', manager.type_registry),
-        get_start_clause(manager.type_system, 'ts', manager.type_registry),
+    match_clauses = (
+        get_match_clause(Thing, 'Thing', manager.type_registry),
+        get_match_clause(manager.type_system, 'ts', manager.type_registry),
     )
     query = join_lines(
-        'START',
-        (start_clauses, ','),
+        'MATCH',
+        (match_clauses, ','),
         'SET ts.version = {version}',
         'SET Thing.cls_attr = {cls_attr}',
         'RETURN Thing'
@@ -201,7 +201,7 @@ def test_invalidate_type_system(manager, static_types):
 
 def test_cached_type_system_keeps_types_in_db(manager_factory):
     # regression test
-    manager = manager_factory(skip_type_loading=True)
+    manager = manager_factory(skip_setup=True)
     manager.destroy()
 
     manager1 = manager_factory()

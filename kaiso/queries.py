@@ -4,7 +4,7 @@ from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.serialize import object_to_db_value
 from kaiso.types import (
-    AttributedBase, Relationship, Entity, get_type_id, PersistableType)
+    AttributedBase, Relationship, get_type_id, PersistableType)
 from kaiso.serialize import get_type_relationships
 
 
@@ -23,26 +23,18 @@ def join_lines(*lines, **kwargs):
     return sep.join(rows)
 
 
-def get_start_clause(obj, name, type_registry):
-    """ Returns a node lookup by index as used by the START clause.
+def parameter_map(data, name):
+    """Convert a dict of paramters into a "parameter map", as parameter dicts
+    cannot be used in e.g. MATCH patterns
 
-    Args:
-        obj: An object to create an index lookup.
-        name: The name of the object in the query.
-    Returns:
-        A string with index lookup of a cypher START clause.
+    Example:
+        >>> parameter_map({'foo': 'bar'}, "params")
+        {foo: {params}.foo}")
     """
-
-    index = next(type_registry.get_index_entries(obj), None)
-    if index is None:
-        raise NoUniqueAttributeError()
-
-    if isinstance(obj, Relationship):
-        index_type = "rel"
-    else:
-        index_type = "node"
-    query = '{}={}:{}({}="{}")'.format(name, index_type, *index)
-    return query
+    return "{%s}" % (
+        ', '.join("%s: {%s}.%s" % (key, name, key)
+        for key in data
+    ))
 
 
 def get_match_clause(obj, name, type_registry):
@@ -56,29 +48,49 @@ def get_match_clause(obj, name, type_registry):
     """
 
     if isinstance(obj, PersistableType):
-        cls = PersistableType
-        attr_name = 'id'
         value = get_type_id(obj)
-    elif not isinstance(obj, Entity):
-        raise ValueError("Match clauses are only supported for Entities")
+        return '({name}:PersistableType {{id: {value}}})'.format(
+            name=name,
+            value=json.dumps(object_to_db_value(value)),
+        )
 
+    if isinstance(obj, Relationship):
+        if obj.start is None or obj.end is None:
+            raise NoUniqueAttributeError(
+                "{} is missing a start or end node".format(obj)
+            )
+        rel_type = get_type_id(type(obj)).upper()
+        start_name = '{}__start'.format(name)
+        end_name = '{}__end'.format(name)
+        return """
+            {start_clause},
+            {end_clause},
+            ({start_name})-[{name}:{rel_type}]->({end_name})
+        """.format(
+            name=name,
+            start_clause=get_match_clause(obj.start, start_name, type_registry),
+            end_clause=get_match_clause(obj.end, end_name, type_registry),
+            start_name=start_name,
+            end_name=end_name,
+            rel_type=rel_type,
+        )
+
+    for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
+        value = getattr(obj, attr_name)
+        if value is not None:
+            break
     else:
-        for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
-            value = getattr(obj, attr_name)
-            if value is not None:
-                break
-        else:
-            raise NoUniqueAttributeError()
-
+        raise NoUniqueAttributeError(
+            "{} doesn't have any unique attributes".format(obj)
+        )
     type_id = get_type_id(cls)
 
-    query = '({name}:{label} {{{attr_name}: {attr_value}}})'.format(
+    return '({name}:{label} {{{attr_name}: {attr_value}}})'.format(
         name=name,
         label=type_id,
         attr_name=attr_name,
         attr_value=json.dumps(object_to_db_value(value)),
     )
-    return query
 
 
 def get_create_types_query(cls, type_system_id, type_registry):

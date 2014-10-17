@@ -7,11 +7,6 @@ class ConnectionError(Exception):
     """
 
 
-class UniqueConstraintError(Exception):
-    """Raised when attempting to create more than one object with the same
-       value on an attribute declared to be unique"""
-
-
 class MultipleObjectsFound(Exception):
     """ Raised when a caller of a RelationshipManager
     expected a single object, but multiple were returned.

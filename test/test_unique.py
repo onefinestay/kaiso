@@ -1,11 +1,6 @@
-import random
-import string
-
-import py2neo
 import pytest
 
 from kaiso.attributes import Integer, String
-from kaiso.exceptions import UniqueConstraintError
 from kaiso.types import Entity, Relationship
 
 
@@ -24,22 +19,6 @@ def static_types(manager):
 
 
 class TestReplace(object):
-    def test_unique_enforced_on_add(self, manager, static_types):
-        """ Currently we can't change unique attributes
-            (need to figure out how to retain db integrity during such
-            changes)
-        """
-        UniqueThing = static_types['UniqueThing']
-
-        obj1 = UniqueThing(id=1, code='A', extra='lunch')
-        manager.save(obj1)
-
-        # This is interpreted as find object with id:1 and change
-        # obj.code to 'B' (not "try to create a new object (1, 'B') )
-        obj2 = UniqueThing(id=1, code='B', extra='snacks')
-        with pytest.raises(NotImplementedError):
-            manager.save(obj2)
-
     def test_replace_no_conflict(self, manager, static_types):
         UniqueThing = static_types['UniqueThing']
 
@@ -72,20 +51,6 @@ class TestReplace(object):
         rows = list(rows)
         assert len(rows) == 1
 
-    def test_unique_fail(self, manager, static_types):
-        UniqueThing = static_types['UniqueThing']
-
-        obj1 = UniqueThing(id=1, code='A')
-        manager.save(obj1)
-
-        obj2 = UniqueThing(id=2, code='C')
-        manager.save(obj2)
-
-        # no way to add this thing without breaking a unique constraint
-        with pytest.raises(UniqueConstraintError):
-            obj3 = UniqueThing(id=1, code='C')
-            manager.save(obj3)
-
     def test_change_non_unique_field(self, manager, static_types):
         UniqueThing = static_types['UniqueThing']
 
@@ -112,19 +77,6 @@ class TestReplace(object):
         assert len(rows) == 1
         assert rows[0][0].extra is None
 
-    def test_no_existing_index(self, manager):
-        name = ''.join(random.choice(string.ascii_letters) for _ in range(20))
-
-        # we have no way of removing indexes from the db, so create a new
-        # type that we haven't seen before to test the case where
-        # the index does not exist
-        RandomThing = type(
-            name, (Entity,), {'code': String(unique=True)})
-
-        manager.save(RandomThing)
-        indexes = manager._conn.get_indexes(py2neo.neo4j.Node)
-        assert name.lower() in indexes
-
     def test_rel_uniqueness(
             self, manager, static_types):
         UniqueThing = static_types['UniqueThing']
@@ -135,12 +87,12 @@ class TestReplace(object):
         manager.save(obj2)
 
         class Follows(Relationship):
-            id = Integer(unique=True)
+            value = Integer()
 
-        follow_rel1 = Follows(obj1, obj2, id=1)
+        follow_rel1 = Follows(obj1, obj2, value=1)
         manager.save(follow_rel1)
 
-        follow_rel2 = Follows(obj1, obj2, id=1)
+        follow_rel2 = Follows(obj1, obj2, value=1)
         manager.save(follow_rel2)
 
         result = manager.query("""
