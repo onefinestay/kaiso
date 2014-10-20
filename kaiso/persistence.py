@@ -317,11 +317,6 @@ class Manager(object):
 
         registry = self.type_registry
 
-        for _, unique_attr in registry.get_unique_attrs(type(existing)):
-            if unique_attr in changes:
-                raise NotImplementedError(
-                    "We currently don't support changing unique attributes")
-
         set_clauses = ', '.join([
             'n.%s={%s}' % (key, key) for key, value in changes.items()
             if not isinstance(value, dict)
