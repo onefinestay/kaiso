@@ -1,5 +1,7 @@
 import pytest
 
+from py2neo.exceptions import CypherError
+
 from kaiso.attributes import Integer, String
 from kaiso.types import Entity, Relationship
 
@@ -19,6 +21,20 @@ def static_types(manager):
 
 
 class TestReplace(object):
+    def test_conflicting_uniqies(self, manager, static_types):
+        UniqueThing = static_types['UniqueThing']
+        obj1 = UniqueThing(id=1, code='A', extra='lunch')
+        manager.save(obj1)
+
+        obj2 = UniqueThing(id=1, code='B', extra='snacks')
+
+        # this will not find obj1 (code differs), so will try to create
+        # a new object, raising an integrity error in the db
+        with pytest.raises(CypherError) as exc:
+            manager.save(obj2)
+        msg = 'already exists with label UniqueThing and property "id"=[1]'
+        assert msg in str(exc)
+
     def test_replace_no_conflict(self, manager, static_types):
         UniqueThing = static_types['UniqueThing']
 
