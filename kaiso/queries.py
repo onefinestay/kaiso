@@ -1,8 +1,9 @@
 import json
+from textwrap import dedent
 
 from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
-from kaiso.serialize import object_to_db_value
+from kaiso.serialize import object_to_db_value, dict_to_db_values_dict
 from kaiso.types import (
     AttributedBase, Relationship, get_type_id, get_relationship_id,
     PersistableType)
@@ -30,11 +31,26 @@ def parameter_map(data, name):
 
     Example:
         >>> parameter_map({'foo': 'bar'}, "params")
-        {foo: {params}.foo}")
+        {foo: {params}.foo}
     """
     return "{%s}" % (
         ', '.join("%s: {%s}.%s" % (key, name, key)
         for key in data
+    ))
+
+
+def inline_parameter_map(data):
+    """Convert a dict of paramters into a "parameter map" to be used in line
+    (not using parameter substitution) in e.g. a match clause. Unline e.g.
+    json, they keys are not quoted
+
+    Example:
+        >>> inline_parameter_map({'foo': 'bar'})
+        {foo: "bar"}
+    """
+    return "{%s}" % (
+        ', '.join("%s: %s" % (key, json.dumps(value))
+        for key, value in data.items()
     ))
 
 
@@ -63,7 +79,7 @@ def get_match_clause(obj, name, type_registry):
         rel_type = get_relationship_id(type(obj))
         start_name = '{}__start'.format(name)
         end_name = '{}__end'.format(name)
-        return """
+        query = """
             {start_clause},
             {end_clause},
             ({start_name})-[{name}:{rel_type}]->({end_name})
@@ -75,22 +91,29 @@ def get_match_clause(obj, name, type_registry):
             end_name=end_name,
             rel_type=rel_type,
         )
+        return dedent(query)
 
+    match_params = {}
+    label_classes = set()
     for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
         value = getattr(obj, attr_name)
         if value is not None:
-            break
-    else:
+            label_classes.add(cls)
+            match_params[attr_name] = value
+    if not match_params:
         raise NoUniqueAttributeError(
             "{} doesn't have any unique attributes".format(obj)
         )
-    type_id = get_type_id(cls)
+    match_params_string = inline_parameter_map(
+        dict_to_db_values_dict(match_params)
+    )
+    labels = ':'.join(get_type_id(cls) for cls in label_classes)
 
-    return '({name}:{label} {{{attr_name}: {attr_value}}})'.format(
+    return '({name}:{labels} {match_params_string})'.format(
         name=name,
-        label=type_id,
+        labels=labels,
         attr_name=attr_name,
-        attr_value=json.dumps(object_to_db_value(value)),
+        match_params_string=match_params_string,
     )
 
 
