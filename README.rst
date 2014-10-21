@@ -86,19 +86,12 @@ herbivores who know a carnivore
 .. code:: cypher
 
     MATCH
-        (Herbivore:PersistableType),
-        (Carnivore:PersistableType),
+        (Herbivore:PersistableType {id: "Herbivore"}),
+        (Carnivore:PersistableType {id: "Carnivore"}),
         Carnivore <-[:ISA*]-()<-[:INSTANCEOF]-(carnivore),
         Herbivore <-[:ISA*]-()<-[:INSTANCEOF]-(herbivore),
 
         (herbivore)-[:KNOWS]->(carnivore)
-
-    WHERE
-        Herbivore.id = "Herbivore"
-        AND
-        Carnivore.id = "Carnivore"
-
-    MATCH
 
     RETURN
         "The herbivore",
