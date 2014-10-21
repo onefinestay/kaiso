@@ -359,9 +359,6 @@ class Manager(object):
             )
             self._update_types(persistable)
         else:
-            # if isinstance(persistable, Relationship):
-                # raise Exception('relationships cannot be updated: we should not get here')
-
             match_clause = get_match_clause(existing, 'n', registry)
             query = join_lines(
                 'MATCH %s' % match_clause,

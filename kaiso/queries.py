@@ -34,9 +34,11 @@ def parameter_map(data, name):
         {foo: {params}.foo}
     """
     return "{%s}" % (
-        ', '.join("%s: {%s}.%s" % (key, name, key)
-        for key in data
-    ))
+        ', '.join(
+            "%s: {%s}.%s" % (key, name, key)
+            for key in data
+        )
+    )
 
 
 def inline_parameter_map(data):
@@ -49,9 +51,11 @@ def inline_parameter_map(data):
         {foo: "bar"}
     """
     return "{%s}" % (
-        ', '.join("%s: %s" % (key, json.dumps(value))
-        for key, value in data.items()
-    ))
+        ', '.join(
+            "%s: %s" % (key, json.dumps(value))
+            for key, value in data.items()
+        )
+    )
 
 
 def get_match_clause(obj, name, type_registry):
@@ -85,8 +89,12 @@ def get_match_clause(obj, name, type_registry):
             ({start_name})-[{name}:{rel_type}]->({end_name})
         """.format(
             name=name,
-            start_clause=get_match_clause(obj.start, start_name, type_registry),
-            end_clause=get_match_clause(obj.end, end_name, type_registry),
+            start_clause=get_match_clause(
+                obj.start, start_name, type_registry,
+            ),
+            end_clause=get_match_clause(
+                obj.end, end_name, type_registry,
+            ),
             start_name=start_name,
             end_name=end_name,
             rel_type=rel_type,

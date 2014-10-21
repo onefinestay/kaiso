@@ -44,7 +44,7 @@ class StaticClassCollector(object):
                     raise TypeAlreadyCollected(
                         "Relationship for `{}` already defined.".format(
                             rel_name)
-                        )
+                    )
                 self.relationships[rel_name] = name
 
         self.classes[name] = cls

@@ -75,6 +75,7 @@ def test_get_match_clause_mutiple_uniques():
 
     assert match_clause in possible_clauses
 
+
 def test_get_match_clause_no_uniques():
     with pytest.raises(NoUniqueAttributeError):
         get_match_clause(NotIndexable(), 'foo', type_registry)
