@@ -34,18 +34,22 @@ def test_get_declaring_class():
     class Y(X):
         foo = String()
         bar = String()
+        baz = False
 
     class Z(Y):
         bar = String()
+        baz = False
 
     # prefer subclass
     assert get_declaring_class(X, "foo") == X
     assert get_declaring_class(X, "bar") is None
     assert get_declaring_class(Z, "foo") == Y
     assert get_declaring_class(Z, "bar") == Z
+    assert get_declaring_class(Z, "baz") == Z
 
     # prefer parent
     assert get_declaring_class(X, "foo", prefer_subclass=False) == X
     assert get_declaring_class(X, "bar", prefer_subclass=False) is None
     assert get_declaring_class(Z, "foo", prefer_subclass=False) == X
     assert get_declaring_class(Z, "bar", prefer_subclass=False) == Y
+    assert get_declaring_class(Z, "baz", prefer_subclass=False) == Y
