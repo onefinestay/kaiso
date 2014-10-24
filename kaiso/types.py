@@ -39,13 +39,13 @@ class StaticClassCollector(object):
             pass
         else:
             if issubclass(cls, rel_cls):
-                rel_name = get_relationship_id(cls)
-                if rel_name in self.relationships:
+                neo4j_rel_name = get_neo4j_relationship_name(cls)
+                if neo4j_rel_name in self.relationships:
                     raise TypeAlreadyCollected(
                         "Relationship for `{}` already defined.".format(
-                            rel_name)
+                            neo4j_rel_name)
                     )
-                self.relationships[rel_name] = name
+                self.relationships[neo4j_rel_name] = name
 
         self.classes[name] = cls
         self.descriptors[name] = Descriptor(cls)
@@ -231,8 +231,8 @@ class TypeRegistry(object):
         descriptor = self.get_descriptor(cls)
         descriptor._clear_cache()
 
-    def get_relationship_type_id(self, relationship_type):
-        return self._relationships[relationship_type]
+    def get_relationship_type_id(self, neo4j_rel_name):
+        return self._relationships[neo4j_rel_name]
 
     def get_descriptor(self, cls):
         name = get_type_id(cls)
@@ -466,7 +466,7 @@ def get_type_id(cls):
     return cls.__name__
 
 
-def get_relationship_id(cls):
+def get_neo4j_relationship_name(cls):
     return cls.__name__.upper()
 
 

@@ -5,7 +5,7 @@ from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.serialize import object_to_db_value, dict_to_db_values_dict
 from kaiso.types import (
-    AttributedBase, Relationship, get_type_id, get_relationship_id,
+    AttributedBase, Relationship, get_type_id, get_neo4j_relationship_name,
     PersistableType)
 from kaiso.serialize import get_type_relationships
 
@@ -80,13 +80,13 @@ def get_match_clause(obj, name, type_registry):
             raise NoUniqueAttributeError(
                 "{} is missing a start or end node".format(obj)
             )
-        rel_type = get_relationship_id(type(obj))
+        neo4j_rel_name = get_neo4j_relationship_name(type(obj))
         start_name = '{}__start'.format(name)
         end_name = '{}__end'.format(name)
         query = """
             {start_clause},
             {end_clause},
-            ({start_name})-[{name}:{rel_type}]->({end_name})
+            ({start_name})-[{name}:{neo4j_rel_name}]->({end_name})
         """.format(
             name=name,
             start_clause=get_match_clause(
@@ -97,7 +97,7 @@ def get_match_clause(obj, name, type_registry):
             ),
             start_name=start_name,
             end_name=end_name,
-            rel_type=rel_type,
+            neo4j_rel_name=neo4j_rel_name,
         )
         return dedent(query)
 
