@@ -293,7 +293,6 @@ class Manager(object):
         self._execute(query, **query_args)
 
         for obj in objects:
-            set_store_for_object(obj, self)  # do we need this?
             type_id = get_type_id(obj)
             self.type_registry._types_in_db.add(type_id)
             type_constraints = self.type_registry.get_constraints_for_type(obj)
