@@ -85,11 +85,9 @@ herbivores who know a carnivore
 
 .. code:: cypher
 
-    START
-        Herbivore=node:persistabletype(id="Herbivore"),
-        Carnivore=node:persistabletype(id="Carnivore")
-
     MATCH
+        (Herbivore:PersistableType {id: "Herbivore"}),
+        (Carnivore:PersistableType {id: "Carnivore"}),
         Carnivore <-[:ISA*]-()<-[:INSTANCEOF]-(carnivore),
         Herbivore <-[:ISA*]-()<-[:INSTANCEOF]-(herbivore),
 

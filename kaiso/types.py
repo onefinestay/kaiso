@@ -32,26 +32,48 @@ class StaticClassCollector(object):
             raise TypeAlreadyCollected(
                 "Type `{}` already defined.".format(name)
             )
+        try:
+            rel_cls = Relationship
+        except NameError:
+            # Relationship may not be defined yet.
+            pass
+        else:
+            if issubclass(cls, rel_cls):
+                neo4j_rel_name = get_neo4j_relationship_name(cls)
+                if neo4j_rel_name in self.relationships:
+                    raise TypeAlreadyCollected(
+                        "Relationship for `{}` already defined.".format(
+                            neo4j_rel_name)
+                    )
+                self.relationships[neo4j_rel_name] = name
+
         self.classes[name] = cls
         self.descriptors[name] = Descriptor(cls)
 
     def dump_state(self):
-        return self.classes.copy(), self.descriptors.copy()
+        return (
+            self.classes.copy(),
+            self.descriptors.copy(),
+            self.relationships.copy(),
+        )
 
     def load_state(self, state):
-        self.classes, self.descriptors = state
+        self.classes, self.descriptors, self.relationships = state
         # make sure we reset all descriptor caches
         for descriptor in self.descriptors.values():
             descriptor._clear_cache()
 
     def reset_state(self):
-        self.load_state(({}, {}))
+        self.load_state(({}, {}, {}))
 
     def get_descriptors(self):
         return self.descriptors
 
     def get_classes(self):
         return self.classes
+
+    def get_relationships(self):
+        return self.relationships
 
 
 collected_static_classes = StaticClassCollector()
@@ -95,6 +117,16 @@ class PersistableType(type, Persistable):
 
         cls = super(PersistableType, mcs).__new__(mcs, name, bases, dct)
         collected_static_classes.add_class(cls)
+
+        try:
+            if issubclass(cls, Relationship):
+                for key, value in dct.items():
+                    if isinstance(value, Attribute) and value.unique:
+                        raise TypeError(
+                            "Relationships may not have unique attributes")
+        except NameError:
+            pass  # Relationship (or Attribute) isn't defined yet
+
         return cls
 
 
@@ -110,6 +142,10 @@ class TypeRegistry(object):
     @property
     def _static_descriptors(self):
         return collected_static_classes.get_descriptors()
+
+    @property
+    def _relationships(self):
+        return collected_static_classes.get_relationships()
 
     def is_static_type(self, cls):
         class_id = get_type_id(cls)
@@ -195,6 +231,9 @@ class TypeRegistry(object):
         descriptor = self.get_descriptor(cls)
         descriptor._clear_cache()
 
+    def get_relationship_type_id(self, neo4j_rel_name):
+        return self._relationships[neo4j_rel_name]
+
     def get_descriptor(self, cls):
         name = get_type_id(cls)
         return self.get_descriptor_by_id(name)
@@ -222,32 +261,13 @@ class TypeRegistry(object):
         else:
             raise UnknownType('Unknown type "{}"'.format(cls_id))
 
-    def get_indexes_for_type(self, cls):
-        """
-        Find indexes that are used to store instances of the given `cls`.
-
-        Returns:
-            A generator of (index_name, key, attr) tuples, where
-                `index_name` is the name of the index
-                `key` is the index key
-                'attr' is the unique attribute object that is the source of
-                    values for the index.
-        """
-        if cls is PersistableType:
-            yield(get_index_name(PersistableType), 'id', None)
-            return
-
-        descr = self.get_descriptor(cls)
-        for name, attr in descr.attributes.items():
-            if attr.unique:
-                declaring_class = get_declaring_class(descr.cls, name)
-                index_name = get_index_name(declaring_class)
-                key = name
-                yield (index_name, key, attr)
-
     def get_unique_attrs(self, cls):
         """Generates tuples (declaring_class, attribute_name) for
         unique attributes"""
+
+        if cls is PersistableType:
+            yield(PersistableType, 'id')
+            return
 
         descr = self.get_descriptor(cls)
         for name, attr in descr.attributes.items():
@@ -271,35 +291,6 @@ class TypeRegistry(object):
             if declaring_class is descr.cls:
                 type_id = get_type_id(cls)
                 yield (type_id, attr_name)
-
-    def get_index_entries(self, obj):
-        """
-        Find all the index locations that contain `obj`.
-
-        Returns:
-            A generator of (index_name, key, value) tuples, each tuple giving
-            the indexed location of `obj`.
-                `index_name` is the name of the index
-                `key` and `value` then represent the location within the index
-                    given by `index_name`
-
-                E.g. a response of:
-                    ('thing', 'id', 1234),
-                    ('another', 'code', 'E108')
-                would mean that obj could be found via the following two
-                cypher queries:
-                    `START n=node:thing("id:1234") RETURN n`
-                    `START n=node:another("code:E108") RETURN n`
-        """
-        if isinstance(obj, PersistableType):
-            yield (get_index_name(PersistableType), 'id', obj.__name__)
-            return
-
-        obj_type = type(obj)
-        for index_name, key, attr in self.get_indexes_for_type(obj_type):
-            value = attr.to_primitive(getattr(obj, key), for_db=True)
-            if value is not None:
-                yield (index_name, key, value)
 
     def object_to_dict(self, obj, for_db=False):
         """ Converts a persistable object to a dict.
@@ -466,40 +457,17 @@ def get_declaring_class(cls, attr_name, prefer_subclass=True):
     return declaring_class
 
 
-def get_index_name(cls):
-    """ Returns a cypher index name for a class.
-
-    Args:
-        cls: The class to generate an index for.
-
-    Returns:
-        An index name.
-    """
-    if issubclass(cls, PersistableType):
-        return PersistableType.__name__.lower()
-    else:
-        return cls.__name__.lower()
-
-
 def get_type_id(cls):
     """ Returns the type_id for a class.
     """
     if issubclass(cls, PersistableType):
         return PersistableType.__name__
-    else:
-        return cls.__name__
+
+    return cls.__name__
 
 
-def is_indexable(cls):
-    """ Returns True if the class ``cls`` has any indexable attributes.
-    """
-
-    descr = Descriptor(cls)
-    for _, attr in descr.attributes.items():
-        if attr.unique:
-            return True
-
-    return False
+def get_neo4j_relationship_name(cls):
+    return cls.__name__.upper()
 
 
 def cache_result(func):

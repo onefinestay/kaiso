@@ -1,7 +1,7 @@
 import pytest
 
 from kaiso.attributes import String, Uuid
-from kaiso.queries import get_start_clause, join_lines
+from kaiso.queries import get_match_clause
 from kaiso.types import Entity, collector
 
 
@@ -90,13 +90,13 @@ def test_class_att_overriding(manager):
     manager.save(b)
     manager.save(c)
 
-    query_str = join_lines(
-        "START",
-        get_start_clause(A, 'A', manager.type_registry),
-        """
-            MATCH node -[:INSTANCEOF]-> () -[:ISA*0..]-> A
-            return node
-        """
+    query_str = """
+        MATCH
+        {},
+        (node)-[:INSTANCEOF]->()-[:ISA*0..]->A
+        RETURN node
+    """.format(
+        get_match_clause(A, 'A', manager.type_registry),
     )
 
     results = list(manager.query(query_str))
@@ -155,12 +155,8 @@ def test_class_attr_class_serialization(manager):
     }
 
     # we don't want inherited attributes in the db
-    query_str = join_lines(
-        "START",
-        get_start_clause(C, 'C', manager.type_registry),
-        """
-            RETURN C
-        """
+    query_str = "MATCH {} RETURN C".format(
+        get_match_clause(C, 'C', manager.type_registry),
     )
 
     (db_attrs,) = next(manager._execute(query_str))

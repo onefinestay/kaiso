@@ -2,7 +2,7 @@ import pytest
 
 from kaiso.exceptions import UnknownType
 from kaiso.migration_helpers import get_type_registry_with_base_change
-from kaiso.types import collector, Entity
+from kaiso.types import collector, Entity, get_type_id
 from kaiso.attributes import Integer, String
 
 
@@ -171,9 +171,9 @@ def test_amended_indexes(manager):
         manager, 'B', ('A',))
 
     # confirm that the "amended" indexes of B are now using both id and code
-    amended_indexes = amended_registry.get_indexes_for_type(B)
-    assert {(ind, key) for ind, key, _ in amended_indexes} == {
-        ('a', 'id'), ('b', 'code')
+    amended_indexes = amended_registry.get_unique_attrs(B)
+    assert {(get_type_id(cls), attr) for cls, attr in amended_indexes} == {
+        ('A', 'id'), ('B', 'code')
     }
 
 
@@ -194,9 +194,9 @@ def test_amended_indexes_same_attr_name(manager):
         manager, 'C', ('A', 'B'))
 
     # confirm that the "amended" indexes of C are still just A.id
-    amended_indexes = amended_registry.get_indexes_for_type(C)
-    assert {(ind, key) for ind, key, _ in amended_indexes} == {
-        ('a', 'id'),
+    amended_indexes = amended_registry.get_unique_attrs(C)
+    assert {(get_type_id(cls), attr) for cls, attr in amended_indexes} == {
+        ('A', 'id'),
     }
 
 

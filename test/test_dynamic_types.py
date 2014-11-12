@@ -14,9 +14,11 @@ def test_static_types_can_be_augmented(manager):
     entity1 = Entity(foo="foo")
     manager.save(entity1)
     rows = manager.query("""
-        START n=node:persistabletype(id="Entity")
-        MATCH n <-[:INSTANCEOF]- entity
-        RETURN entity
+        MATCH
+            (Entity:PersistableType {id: "Entity"}),
+            (entity)-[:INSTANCEOF]->(Entity)
+        RETURN
+            entity
     """)
     (loaded1, ) = next(rows)
     assert not hasattr(loaded1, 'foo')
@@ -33,10 +35,13 @@ def test_static_types_can_be_augmented(manager):
     entity2 = Entity(foo="foo")
     manager.save(entity2)
     rows = manager.query("""
-    START n=node:persistabletype(id="Entity")
-        MATCH n <-[:INSTANCEOF]- entity
-        WHERE entity.foo = "foo"
-        RETURN entity
+        MATCH
+            (Entity:PersistableType {id: "Entity"}),
+            (entity)-[:INSTANCEOF]->(Entity)
+        WHERE
+            entity.foo = "foo"
+        RETURN
+            entity
     """)
     rows = list(rows)
     assert len(rows) == 1
@@ -51,7 +56,7 @@ def test_save_dynamic_type(manager):
 
     manager.save(Foobar)
 
-    rows = manager.query('START n=node:persistabletype(id="Foobar") RETURN n')
+    rows = manager.query('MATCH (n:PersistableType {id: "Foobar"}) RETURN n')
     (result,) = next(rows)
 
     assert result is Foobar
@@ -66,7 +71,7 @@ def test_save_dynamic_typed_obj(manager):
     foo = Foobar(id='spam')
     manager.save(foo)
 
-    rows = manager.query('START n=node:foobar(id="spam") RETURN n')
+    rows = manager.query('MATCH (n:Foobar) WHERE n.id = "spam" RETURN n')
     (result,) = next(rows)
 
     assert result.id == foo.id
@@ -79,10 +84,13 @@ def test_add_attr_to_type(manager):
     Foobar.ham = String(default='eggs')
     manager.save(Foobar)
 
-    rows = manager.query(
-        'START n=node:persistabletype(id="Foobar") '
-        'MATCH n <-[:DECLAREDON]- attr '
-        'RETURN count(attr)')
+    rows = manager.query("""
+        MATCH
+            (n:PersistableType {id: "Foobar"}),
+            (attr)-[:DECLAREDON]-(n)
+        RETURN
+            count(attr)
+    """)
     (count,) = next(rows)
     assert count == 1
 
@@ -96,10 +104,13 @@ def test_remove_attr_from_type(manager):
 
     manager.save(Foobar)
 
-    rows = manager.query(
-        'START n=node:persistabletype(id="Foobar") '
-        'MATCH n <-[:DECLAREDON]- attr '
-        'RETURN count(attr)')
+    rows = manager.query("""
+        MATCH
+            (n:PersistableType {id: "Foobar"}),
+            (attr)-[:DECLAREDON]-(n)
+        RETURN
+            count(attr)
+    """)
     (count,) = next(rows)
     assert count == 0
 
@@ -125,10 +136,13 @@ def test_removing_attr_from_declared_type_does_not_remove_it(manager):
     del Ham.egg
     manager.save(Ham)
 
-    rows = manager.query(
-        'START n=node:persistabletype(id="Ham") '
-        'MATCH n <-[:DECLAREDON]- attr '
-        'RETURN count(attr)')
+    rows = manager.query("""
+        MATCH
+            (n:PersistableType {id: "Ham"}),
+            (attr)-[:DECLAREDON]-(n)
+        RETURN
+            count(attr)
+    """)
     (count,) = next(rows)
     assert count == 2
 
@@ -147,17 +161,23 @@ def test_load_dynamic_types(manager):
     # this is the same as creating a new manager
     manager.reload_types()
 
-    rows = manager.query(
-        '''
-        START ts=node:typesystem(id="TypeSystem")
-        MATCH p = (ts -[:DEFINES]-> () <-[:ISA*0..]- tpe),
-            tpe <-[:DECLAREDON*0..]- attr,
-            tpe -[:ISA*0..1]-> base
-        RETURN tpe.id,  length(p) AS level,
-            filter(b_id in collect(distinct base.id) WHERE b_id <> tpe.id),
+    rows = manager.query("""
+        MATCH
+            (ts:TypeSystem),
+            p = (
+                (ts)-[:DEFINES]->()<-[:ISA*0..]-(type)
+            ),
+                (type)-[:ISA*0..1]->(base)
+        OPTIONAL MATCH
+            (attr)-[:DECLAREDON]->(type)
+        RETURN
+            type.id,
+            length(p) as level,
+            filter(b_id in collect(distinct base.id) WHERE b_id <> type.id),
             collect(distinct attr.name)
-        ORDER BY level, tpe.id
-        ''')
+        ORDER BY
+            level, type.id
+    """)
     result = list(rows)
 
     assert result == [
@@ -182,13 +202,13 @@ def test_add_attr_to_type_via_2nd_manager(manager):
     manager.reload_types()
 
     (Shrub,) = next(manager.query(
-        'START cls=node:persistabletype(id="Shrub") RETURN cls'))
+        'MATCH (cls:PersistableType {id: "Shrub"}) RETURN cls'))
     Shrub.newattr = String(default='eggs')
     manager.save(Shrub)
 
     # we want to query from an independent manager
     manager.reload_types()
-    rows = manager.query('START n=node:shrub(id="spam") RETURN n')
+    rows = manager.query('MATCH (n:Shrub {id: "spam"}) RETURN n')
     (result,) = next(rows)
 
     assert result.newattr is None

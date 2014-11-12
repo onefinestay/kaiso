@@ -1,3 +1,13 @@
+Version 0.30.0
+------------------
+
+Stop using legacy indexes in favour of label indexes. Relationship indexes are
+no longer supported.
+
+Manager kwarg `skip_type_loading` has been renamed `skip_setup` to
+reflect more processing being bypassed.
+
+
 Version 0.23.0
 ------------------
 

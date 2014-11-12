@@ -3,7 +3,6 @@ from uuid import uuid4
 
 import iso8601
 import pytest
-from py2neo import cypher
 
 from kaiso.attributes import (
     Uuid, Bool, Integer, Float, String, Decimal, DateTime, Choice)
@@ -64,12 +63,8 @@ def static_types(manager, beetroot_diamond):
     class Related(Relationship):
         str_attr = String()
 
-    class IndexedRelated(Relationship):
-        id = Uuid(unique=True)
-
     result = {
         'Related': Related,
-        'IndexedRelated': IndexedRelated,
     }
     result.update(beetroot_diamond)
     return result
@@ -97,7 +92,7 @@ def test_add_persistable_only_adds_single_node(manager):
     manager.save(Entity)
 
     result = list(manager.query(
-        'START n=node:persistabletype("id:*") RETURN n')
+        'MATCH (n:PersistableType) RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -107,7 +102,7 @@ def test_only_adds_entity_once(manager):
     manager.save(Entity)
 
     result = list(manager.query(
-        'START n=node:persistabletype("id:*") RETURN n')
+        'MATCH (n:PersistableType) RETURN n')
     )
     assert result == [(Entity,)]
 
@@ -121,9 +116,10 @@ def test_only_adds_types_once(manager, static_types):
     manager.save(thing1)
     manager.save(thing2)
 
-    (count,) = next(manager.query(
-        'START n=node:persistabletype(id="Thing") '
-        'RETURN count(n)'))
+    (count,) = next(manager.query("""
+        MATCH (n:PersistableType {id: "Thing"})
+        RETURN count(n)
+    """))
 
     assert count == 1
 
@@ -259,26 +255,7 @@ def test_simple_add_and_get_instance_with_None_value(manager, static_types):
 
     with pytest.raises(ValueError) as exc:
         manager.get(Thing, id=None)
-    assert 'Cannot `get` using id=None' in str(exc)
-
-
-def test_simple_add_and_get_relationship(manager, static_types):
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-    rel = IndexedRelated(start=thing1, end=thing2)
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(rel)
-
-    queried_rel = manager.get(IndexedRelated, id=rel.id)
-
-    assert type(queried_rel) == IndexedRelated
-    assert queried_rel.id == rel.id
-    assert queried_rel.start.id == thing1.id
-    assert queried_rel.end.id == thing2.id
+    assert 'No relevant indexes found' in str(exc)
 
 
 def test_get_with_multi_value_attr_filter(manager, static_types):
@@ -305,7 +282,7 @@ def test_get_with_multi_value_attr_filter(manager, static_types):
 
 
 def test_query_list_values(manager, static_types):
-    IndexedRelated = static_types['IndexedRelated']
+    Related = static_types['Related']
 
     class ThingA(Entity):
         attr_a = Integer(unique=True)
@@ -314,7 +291,7 @@ def test_query_list_values(manager, static_types):
     thing1 = ThingA(attr_a=1)
     thing2 = ThingA(attr_a=2)
 
-    rel = IndexedRelated(start=thing1, end=thing2)
+    rel = Related(start=thing1, end=thing2)
     manager.save(thing1)
     manager.save(thing2)
     manager.save(rel)
@@ -336,7 +313,7 @@ def test_query_list_values(manager, static_types):
     assert data[2] == 'bar'
     assert isinstance(data[3], ThingA)
     assert data[3].attr_a == 2
-    assert isinstance(data[4], IndexedRelated)
+    assert isinstance(data[4], Related)
 
 
 def test_delete_relationship(manager, static_types):
@@ -373,130 +350,6 @@ def test_delete_relationship(manager, static_types):
     assert 'Related' not in rels
 
 
-def test_delete_indexed_relationship(manager, static_types):
-    """ Verify that indexed relationships can be deleted from the database
-    without needing references to the start and end nodes.
-    """
-
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-    rel = IndexedRelated(thing1, thing2)
-
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(rel)
-
-    # serialize and deserialize to remove references
-    rel = manager.deserialize(manager.serialize(rel))
-    assert not hasattr(rel, "start")
-
-    manager.delete(rel)
-
-    rows = manager.query("""
-        START n1 = node(*)
-        MATCH n1 -[r]-> n2
-        RETURN n1.id, r.__type__
-    """)
-
-    result = list(rows)
-    ids = [item[0] for item in result]
-    rels = [item[1] for item in result]
-
-    assert str(thing1.id) in ids
-    assert str(thing2.id) in ids
-
-    assert 'IndexedRelated' not in rels
-
-
-def test_update_relationship_end_points(manager, static_types):
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-    thing3 = Thing()
-
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(thing3)
-
-    rel = IndexedRelated(start=thing1, end=thing2)
-    manager.save(rel)
-
-    rel.end = thing3
-    manager.save(rel)
-    queried_rel = manager.get(IndexedRelated, id=rel.id)
-    assert queried_rel.start.id == thing1.id
-    assert queried_rel.end.id == thing3.id
-
-    rel.start = thing2
-    manager.save(rel)
-    queried_rel = manager.get(IndexedRelated, id=rel.id)
-    assert queried_rel.start.id == thing2.id
-    assert queried_rel.end.id == thing3.id
-
-
-def test_update_relationship_missing_endpoints(manager, static_types):
-    # same as test_update_relationship_end_points, with the difference
-    # that the relationship is passed through deserialize(serialize())
-    # which strips the start/end references
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-    thing3 = Thing()
-
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(thing3)
-
-    rel = IndexedRelated(start=thing1, end=thing2)
-    manager.save(rel)
-
-    rel.end = thing3
-    manager.save(rel)
-    reserialized_rel = manager.deserialize(manager.serialize(rel))
-    reserialized_rel.start = thing2
-    manager.save(reserialized_rel)
-
-    queried_rel = manager.get(IndexedRelated, id=rel.id)
-    assert queried_rel.start.id == thing2.id
-    assert queried_rel.end.id == thing3.id
-
-
-def test_update_relationship_missing_startpoints(manager, static_types):
-    # same as test_update_relationship_end_points, with the difference
-    # that the relationship is passed through deserialize(serialize())
-    # which strips the start/end references
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-    thing3 = Thing()
-
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(thing3)
-
-    rel = IndexedRelated(start=thing1, end=thing2)
-    manager.save(rel)
-
-    rel.start = thing3
-    manager.save(rel)
-    reserialized_rel = manager.deserialize(manager.serialize(rel))
-    reserialized_rel.end = thing1
-    manager.save(reserialized_rel)
-
-    queried_rel = manager.get(IndexedRelated, id=rel.id)
-    assert queried_rel.start.id == thing3.id
-    assert queried_rel.end.id == thing1.id
-
-
 def test_delete_instance_types_remain(manager):
     class Thing(Entity):
         id = Uuid(unique=True)
@@ -510,9 +363,10 @@ def test_delete_instance_types_remain(manager):
 
     # we are expecting the type to stay in place
     rows = manager.query("""
-        START n=node:persistabletype("id:*")
-        MATCH n-[:ISA|INSTANCEOF]->m
-        RETURN n""")
+        MATCH (n:PersistableType)
+        MATCH (n)-[:ISA|INSTANCEOF]->(m)
+        RETURN n
+    """)
     result = set(item for (item,) in rows)
     assert result == {Thing}
 
@@ -566,30 +420,20 @@ def test_delete_class_without_attributes(manager):
 
 def test_destroy(manager, static_types):
     Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
 
     thing1 = Thing()
-    thing2 = Thing()
 
     manager.save(thing1)
-    manager.save(thing2)
-    manager.save(IndexedRelated(thing1, thing2))
+
+    # validate test
+    assert manager._conn.schema.get_indexed_property_keys('Thing') == ['id']
 
     manager.destroy()
 
-    rows = manager.query('START n=node(*) RETURN count(n)')
-    assert next(rows) == (0,)
+    count = manager.query_single('MATCH (n) RETURN count(n)')
+    assert count == 0
 
-    queries = (
-        'START n=node:persistableype(name="Thing") RETURN n',
-        'START r=relationship:indexedrelated(id="spam") RETURN r',
-    )
-
-    for query in queries:
-        with pytest.raises(cypher.CypherError) as excinfo:
-            rows = manager.query(query)
-
-        assert excinfo.value.exception == 'MissingIndexException'
+    assert manager._conn.schema.get_indexed_property_keys('Thing') == []
 
 
 def test_attributes(manager, static_types):
@@ -630,8 +474,7 @@ def test_relationship(manager, static_types):
     manager.save(rel)
 
     rows = manager.query('''
-        START n1 = node:thing(id={id})
-        MATCH n1 -[r:RELATED]-> n2
+        MATCH (n1:Thing {id: {id}})-[r:RELATED]->(n2)
         RETURN n1, r, n2
     ''', id=thing1.id)
 
@@ -646,32 +489,6 @@ def test_relationship(manager, static_types):
     assert queried_rel.str_attr == rel.str_attr
     assert queried_rel.start.id == thing1.id
     assert queried_rel.end.id == thing2.id
-
-
-def test_indexed_relationship(manager, static_types):
-    Thing = static_types['Thing']
-    IndexedRelated = static_types['IndexedRelated']
-
-    thing1 = Thing()
-    thing2 = Thing()
-
-    rel = IndexedRelated(thing1, thing2)
-
-    manager.save(thing1)
-    manager.save(thing2)
-    manager.save(rel)
-
-    rows = manager.query('''
-        START r = relationship:indexedrelated(id={rel_id})
-        MATCH n1 -[r]-> n2
-        RETURN n1.id, n2.id
-    ''', rel_id=rel.id)
-
-    result = set(rows)
-
-    assert result == {
-        (str(thing1.id), str(thing2.id))
-    }
 
 
 def test_get_type_hierarchy(manager):
@@ -724,17 +541,15 @@ def test_get_type_hierarchy_bases_order(manager, beetroot_diamond):
     is_a_props = manager.type_registry.object_to_dict(IsA())
     is_a_props['base_index'] = 1
 
-    list(manager.query(
-        ''' START
-                Beetroot=node:persistabletype(id="Beetroot"),
-                Flavouring=node:persistabletype(id="Colouring")
-            MATCH
-                Beetroot -[r:ISA]-> Flavouring
-            DELETE r
-            CREATE
-                Beetroot -[nr:ISA {is_a_props}]-> Flavouring
-            RETURN nr
-        ''', is_a_props=is_a_props))
+    list(manager.query("""
+        MATCH
+            (Beetroot:PersistableType {id: "Beetroot"})-[r:ISA]->
+                (Colouring:PersistableType {id: "Colouring"})
+        DELETE r
+        CREATE
+            (Beetroot)-[nr:ISA {is_a_props}]->(Colouring)
+        RETURN nr
+    """, is_a_props=is_a_props))
 
     result = [(nme, bases) for (nme, bases, _)
               in manager.get_type_hierarchy()]
@@ -812,10 +627,7 @@ def test_add_type_creates_index(manager, static_types):
 
     # Thing has a unique attr so should create an index
     manager.save(Thing)
-    # this should not raise a MissingIndex error
-    result = list(manager.query('START n=node:thing("id:*") RETURN n'))
-
-    assert result == []
+    assert manager._conn.schema.get_indexed_property_keys('Thing') == ['id']
 
 
 def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
@@ -824,70 +636,33 @@ def test_add_type_only_creates_indexes_for_unique_attrs(manager, static_types):
     manager.save(Flavouring)
 
     # superclass Thing has a unique attr so should create an index
-    result = list(manager.query('START n=node:thing("id:*") RETURN n'))
-    assert result == []
+    assert manager._conn.schema.get_indexed_property_keys('Thing') == ['id']
 
     # but Flavouring has no unique attr so should not create an index
-    with pytest.raises(cypher.CypherError) as exc:
-        manager.query('START n=node:flavouring("id:*") RETURN n')
-    assert 'Index `flavouring` does not exist' in str(exc)
+    assert manager.query_single('MATCH (n:Flavouring) RETURN n') is None
 
 
 def test_add_type_with_no_unique_attrs(manager, static_types):
     AnotherThing = static_types['AnotherThing']
 
     manager.save(AnotherThing)
-    # AnotherThing has no unique attrs at all, so should create no indexes.
-    with pytest.raises(cypher.CypherError) as exc:
-        manager.query('START n=node:anotherthing("id:*") RETURN n')
-    assert 'Index `anotherthing` does not exist' in str(exc)
-
-    # check get_indexes_for_type
-    assert list(manager.type_registry.get_indexes_for_type(AnotherThing)) == []
+    assert manager._conn.schema.get_indexed_property_keys('AnotherThing') == []
 
     # create an instance
-    instance = AnotherThing(name='Foo')
-    # check get_index_entries
-    assert list(manager.type_registry.get_index_entries(instance)) == []
-
-
-def test_add_type_creates_index_per_unique_attr(manager, static_types):
-    Preservative = static_types['Preservative']
-
-    # Thing has a unique attr so should create an index
-    manager.save(Preservative)
-    instance = Preservative(id=uuid4(), e_number="E108")
-    manager.save(instance)
-
-    # instance should be in the thing index under `id`
-    results = list(manager.query('START n=node:thing("id:*") RETURN n'))
-    assert len(results) == 1
-    retrieved, = results[0]
-    assert retrieved.id == instance.id
-
-    # and also in the preservative index under `e_number`
-    results = list(manager.query(
-        'START n=node:preservative("e_number:*") RETURN n'))
-    assert len(results) == 1
-    retrieved, = results[0]
-    assert retrieved.id == instance.id
-
-    # check get_index_entries
-    index_entries = set(manager.type_registry.get_index_entries(instance))
-    assert index_entries == {
-        ('preservative', 'e_number', instance.e_number),
-        ('thing', 'id', str(instance.id)),
-    }
+    AnotherThing(name='Foo')
+    assert manager.query_single('MATCH (n:AnotherThing) RETURN n') is None
 
 
 def count(manager, type_):
     type_id = type_.__name__
     query = """
-        START Thing=node:persistabletype(id="{}")
-        MATCH (n)-[:INSTANCEOF]->Thing
-        RETURN count(n);
-        """.format(type_id)
-    rows = manager.query(query)
+        MATCH
+            (Thing:PersistableType {id: {type_id}}),
+            (n)-[:INSTANCEOF]->(Thing)
+        RETURN
+            count(n);
+        """
+    rows = manager.query(query, type_id=type_id)
     (count,) = next(rows)
     return count
 
@@ -963,9 +738,11 @@ def test_persist_attributes(manager):
     manager.save(Thing)
 
     query_str = """
-        START Thing = node:persistabletype(id="Thing")
-        MATCH attr -[DECLAREDON]-> Thing
-        RETURN attr
+        MATCH
+            (Thing:PersistableType {id: "Thing"}),
+            (attr)-[DECLAREDON]->Thing
+        RETURN
+            attr
     """
 
     rows = manager.query(query_str)
@@ -991,9 +768,11 @@ def test_attribute_creation(manager, static_types):
     manager.save(Thing)
 
     query_str = """
-        START Thing = node:persistabletype(id="Thing")
-        MATCH attr -[:DECLAREDON]-> Thing
-        RETURN attr.__type__, attr.name, attr.unique
+        MATCH
+            (Thing:PersistableType {id: "Thing"}),
+            (attr)-[:DECLAREDON]->(Thing)
+        RETURN
+            attr.__type__, attr.name, attr.unique
     """
 
     rows = manager.query(query_str)
@@ -1026,9 +805,11 @@ def test_attribute_inheritance(manager, beetroot_diamond):
     # ``natural`` on ``Beetroot`` will be found twice by this query, because
     # there are two paths from it to ``Entity``.
     query_str = """
-        START Entity = node:persistabletype(id="Entity")
-        MATCH attr -[:DECLAREDON]-> type -[:ISA*]-> Entity
-        RETURN type.id, attr.name, attr.__type__, attr.default
+        MATCH
+            (Entity:PersistableType {id: "Entity"}),
+            (attr)-[:DECLAREDON]->(type)-[:ISA*]->(Entity)
+        RETURN
+            type.id, attr.name, attr.__type__, attr.default
     """
 
     rows = manager.query(query_str)
@@ -1054,9 +835,11 @@ def test_attribute_inheritance(manager, beetroot_diamond):
 
     # ``natural`` on ``Beetroot`` should only be defined once
     query_str = """
-        START Beetroot = node:persistabletype(id="Beetroot")
-        MATCH attr -[:DECLAREDON]-> Beetroot
-        RETURN count(attr)
+        MATCH
+            (Beetroot:PersistableType {id: "Beetroot"}),
+            (attr)-[:DECLAREDON]->(Beetroot)
+        RETURN
+            count(attr)
     """
     count = next(manager.query(query_str))[0]
     assert count == 1

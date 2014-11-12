@@ -1,10 +1,11 @@
 import json
+from textwrap import dedent
 
 from kaiso.exceptions import NoUniqueAttributeError
 from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
-from kaiso.serialize import object_to_db_value
+from kaiso.serialize import object_to_db_value, dict_to_db_values_dict
 from kaiso.types import (
-    AttributedBase, get_index_name, Relationship, Entity, get_type_id,
+    AttributedBase, Relationship, get_type_id, get_neo4j_relationship_name,
     PersistableType)
 from kaiso.serialize import get_type_relationships
 
@@ -24,26 +25,37 @@ def join_lines(*lines, **kwargs):
     return sep.join(rows)
 
 
-def get_start_clause(obj, name, type_registry):
-    """ Returns a node lookup by index as used by the START clause.
+def parameter_map(data, name):
+    """Convert a dict of paramters into a "parameter map", as parameter dicts
+    cannot be used in e.g. MATCH patterns
 
-    Args:
-        obj: An object to create an index lookup.
-        name: The name of the object in the query.
-    Returns:
-        A string with index lookup of a cypher START clause.
+    Example:
+        >>> parameter_map({'foo': 'bar'}, "params")
+        {foo: {params}.foo}
     """
+    return "{%s}" % (
+        ', '.join(
+            "%s: {%s}.%s" % (key, name, key)
+            for key in data
+        )
+    )
 
-    index = next(type_registry.get_index_entries(obj), None)
-    if index is None:
-        raise NoUniqueAttributeError()
 
-    if isinstance(obj, Relationship):
-        index_type = "rel"
-    else:
-        index_type = "node"
-    query = '{}={}:{}({}="{}")'.format(name, index_type, *index)
-    return query
+def inline_parameter_map(data):
+    """Convert a dict of paramters into a "parameter map" to be used in line
+    (not using parameter substitution) in e.g. a match clause. Unline e.g.
+    json, they keys are not quoted
+
+    Example:
+        >>> inline_parameter_map({'foo': 'bar'})
+        {foo: "bar"}
+    """
+    return "{%s}" % (
+        ', '.join(
+            "%s: %s" % (key, json.dumps(value))
+            for key, value in data.items()
+        )
+    )
 
 
 def get_match_clause(obj, name, type_registry):
@@ -57,32 +69,63 @@ def get_match_clause(obj, name, type_registry):
     """
 
     if isinstance(obj, PersistableType):
-        cls = PersistableType
-        attr_name = 'id'
         value = get_type_id(obj)
-    elif not isinstance(obj, Entity):
-        raise ValueError("Match clauses are only supported for Entities")
+        return '({name}:PersistableType {{id: {value}}})'.format(
+            name=name,
+            value=json.dumps(object_to_db_value(value)),
+        )
 
-    else:
-        for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
-            value = getattr(obj, attr_name)
-            if value is not None:
-                break
-        else:
-            raise NoUniqueAttributeError()
+    if isinstance(obj, Relationship):
+        if obj.start is None or obj.end is None:
+            raise NoUniqueAttributeError(
+                "{} is missing a start or end node".format(obj)
+            )
+        neo4j_rel_name = get_neo4j_relationship_name(type(obj))
+        start_name = '{}__start'.format(name)
+        end_name = '{}__end'.format(name)
+        query = """
+            {start_clause},
+            {end_clause},
+            ({start_name})-[{name}:{neo4j_rel_name}]->({end_name})
+        """.format(
+            name=name,
+            start_clause=get_match_clause(
+                obj.start, start_name, type_registry,
+            ),
+            end_clause=get_match_clause(
+                obj.end, end_name, type_registry,
+            ),
+            start_name=start_name,
+            end_name=end_name,
+            neo4j_rel_name=neo4j_rel_name,
+        )
+        return dedent(query)
 
-    type_id = get_type_id(cls)
-
-    query = '({name}:{label} {{{attr_name}: {attr_value}}})'.format(
-        name=name,
-        label=type_id,
-        attr_name=attr_name,
-        attr_value=json.dumps(object_to_db_value(value)),
+    match_params = {}
+    label_classes = set()
+    for cls, attr_name in type_registry.get_unique_attrs(type(obj)):
+        value = getattr(obj, attr_name)
+        if value is not None:
+            label_classes.add(cls)
+            match_params[attr_name] = value
+    if not match_params:
+        raise NoUniqueAttributeError(
+            "{} doesn't have any unique attributes".format(obj)
+        )
+    match_params_string = inline_parameter_map(
+        dict_to_db_values_dict(match_params)
     )
-    return query
+    labels = ':'.join(get_type_id(cls) for cls in label_classes)
+
+    return '({name}:{labels} {match_params_string})'.format(
+        name=name,
+        labels=labels,
+        attr_name=attr_name,
+        match_params_string=match_params_string,
+    )
 
 
-def get_create_types_query(cls, root, type_registry):
+def get_create_types_query(cls, type_system_id, type_registry):
     """ Returns a CREATE UNIQUE query for an entire type hierarchy.
 
     Includes statements that create each type's attributes.
@@ -99,7 +142,7 @@ def get_create_types_query(cls, root, type_registry):
     classes = {}
 
     query_args = {
-        'root_id': root.id,
+        'type_system_id': type_system_id,
         'Defines_props': type_registry.object_to_dict(Defines()),
         'InstanceOf_props': type_registry.object_to_dict(InstanceOf()),
         'DeclaredOn_props': type_registry.object_to_dict(DeclaredOn()),
@@ -129,12 +172,12 @@ def get_create_types_query(cls, root, type_registry):
 
         if is_first:
             is_first = False
-            ln = 'root -[:DEFINES {Defines_props}]-> %s' % abstr1
+            ln = 'ts -[:DEFINES {Defines_props}]-> %s' % abstr1
         else:
             name2 = cls2.__name__
             classes[name2] = cls2
 
-            rel_name = rel_cls.__name__
+            rel_name = get_type_id(rel_cls)
             rel_type = rel_name.upper()
 
             prop_name = "%s_props" % rel_name
@@ -185,7 +228,7 @@ def get_create_types_query(cls, root, type_registry):
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
-        'START root=node:%s(id={root_id})' % get_index_name(type(root)),
+        'MATCH (ts:TypeSystem) WHERE ts.id = {type_system_id}'
         'CREATE UNIQUE',
         (hierarchy_lines, ','),
         (set_lines, ''),
