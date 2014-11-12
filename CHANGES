@@ -1,4 +1,4 @@
-Version 0.30.0-dev
+Version 0.30.0
 ------------------
 
 Stop using legacy indexes in favour of label indexes. Relationship indexes are
