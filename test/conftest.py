@@ -46,7 +46,7 @@ def manager_factory(request):
 
 @pytest.fixture
 def manager(request, manager_factory):
-    manager_factory(skip_type_loading=True).destroy()
+    manager_factory(skip_setup=True).destroy()
     _manager = manager_factory()
     return _manager
 

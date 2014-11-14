@@ -2,7 +2,7 @@ import pytest
 
 from kaiso.attributes import String
 from kaiso.exceptions import TypeAlreadyRegistered, TypeAlreadyCollected
-from kaiso.types import Entity, TypeRegistry, get_declaring_class
+from kaiso.types import Entity, Relationship, TypeRegistry, get_declaring_class
 
 
 def test_register_duplicate():
@@ -53,3 +53,19 @@ def test_get_declaring_class():
     assert get_declaring_class(Z, "foo", prefer_subclass=False) == X
     assert get_declaring_class(Z, "bar", prefer_subclass=False) == Y
     assert get_declaring_class(Z, "baz", prefer_subclass=False) == Y
+
+
+def test_relationship_case_sensitive_collection():
+    class Foo(Relationship):
+        pass
+
+    with pytest.raises(TypeAlreadyCollected):
+        class FoO(Relationship):
+            pass
+
+
+def test_relationship_cannot_have_unique_attrs():
+    with pytest.raises(TypeError) as exc:
+        class Foo(Relationship):
+            id = String(unique=True)
+    assert "may not have unique attributes" in str(exc)

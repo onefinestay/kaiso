@@ -9,7 +9,7 @@ from kaiso.types import Entity
 @pytest.fixture
 def static_types(manager):
     class Contains(Relationship):
-        id = Uuid(unique=True)
+        attr = Uuid()
 
     class Box(Entity):
         id = Uuid(unique=True)
@@ -122,4 +122,4 @@ def test_reference_relationship_itself(manager, static_types):
     fetched = manager.get(Box, id=str(child.id))
     fetched_rel = next(fetched.contained_within.relationships)
 
-    assert fetched_rel.id == contains.id
+    assert fetched_rel.attr == contains.attr
