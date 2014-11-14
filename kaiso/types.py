@@ -619,6 +619,8 @@ class AttributedBase(Persistable):
 
         for name, attr in descriptor.attributes.items():
             setattr(obj, name, attr.default)
+        for rel_name, rel_reference in descriptor.relationships.items():
+            setattr(obj, rel_name, rel_reference.get_manager(obj))
 
         return obj
 
@@ -630,15 +632,7 @@ class AttributedBase(Persistable):
 
 
 class Entity(AttributedBase):
-    def __getattribute__(self, name):
-        cls = type(self)
-        descriptor = Descriptor(cls)
-        try:
-            rel_reference = descriptor.relationships[name]
-        except KeyError:
-            return object.__getattribute__(self, name)
-        else:
-            return rel_reference.get_manager(self)
+    pass
 
 
 class Relationship(AttributedBase):
