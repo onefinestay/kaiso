@@ -439,18 +439,14 @@ def get_declaring_class(cls, attr_name, prefer_subclass=True):
         If ``prefer_subclass`` is false, return the last class in the MRO
         that defined an attribute with the given name.
     """
-    declared_attr = None
     declaring_class = None
 
     # Start at the top of the hierarchy and determine which of the MRO have
     # the attribute. Return the lowest class that defines (or overloads) the
     # attribute, unless prefer_subclass is False.
     for base in reversed(getmro(cls)):
-        sentinel = object()
-        attr = getattr(base, attr_name, sentinel)
-        if attr is not sentinel and declared_attr is not attr:
+        if attr_name in base.__dict__:
             declaring_class = base
-            declared_attr = attr
             if not prefer_subclass:
                 break
 

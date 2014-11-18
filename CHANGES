@@ -1,3 +1,9 @@
+Version 0.30.2
+------------------
+
+Bugfix in `get_declared_attrs`
+
+
 Version 0.30.1
 ------------------
 
