@@ -172,7 +172,7 @@ def get_create_types_query(cls, type_system_id, type_registry):
         }
         create_statement = 'MERGE %s' % node_for_create
 
-        node_for_ref = '(`%s`:%s)' % (name1, type1)
+        node_for_ref = '(`%s`)' % name1
 
         if name1 not in classes:
             classes[name1] = cls1
