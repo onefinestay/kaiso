@@ -2,10 +2,8 @@ language: python
 python:
   - "2.7"
 env:
-  - NEO4J_VERSION=2.0.0
-  - NEO4J_VERSION=2.0.1
-  - NEO4J_VERSION=2.0.3
-  - NEO4J_VERSION=2.1.2
+  - NEO4J_VERSION=2.0.4
+  - NEO4J_VERSION=2.1.6
 
 before_install:
   - wget -O - http://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
