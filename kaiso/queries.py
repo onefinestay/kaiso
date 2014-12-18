@@ -2,7 +2,6 @@ import json
 from textwrap import dedent
 
 from kaiso.exceptions import NoUniqueAttributeError
-# from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
 from kaiso.relationships import IsA
 from kaiso.serialize import object_to_db_value, dict_to_db_values_dict
 from kaiso.types import (
@@ -218,8 +217,6 @@ def get_create_types_query(cls, type_system_id, type_registry):
             ln = 'MERGE ({%s}) -[:DECLAREDON]-> (`%s`)' % (
                 ', '.join(node_contents), name)
             hierarchy_lines.append(ln)
-
-            # query_args[key] = attr_dict
 
     # processing class attributes
     for key, cls in classes.iteritems():
