@@ -1,13 +1,12 @@
-import os
-import pytest
-
 import logging
+import os
+
+import pytest
 
 
 def pytest_addoption(parser):
     parser.addoption(
         "--neo4j_uri", action="store",
-        default="temp://",
         help=("URI for establishing a connection to neo4j."
         "See the docs for valid URIs"))
 
@@ -53,7 +52,7 @@ def manager(request, manager_factory):
 
 @pytest.fixture
 def connection(request):
-    from kaiso.connection import get_connection
+    from kaiso.persistence import get_connection
 
     neo4j_uri = request.config.getoption('neo4j_uri')
     return get_connection(neo4j_uri)
