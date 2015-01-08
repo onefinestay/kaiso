@@ -16,7 +16,6 @@ before_install:
 install:
   - python setup.py -q install
   - pip install -r test_requirements.txt
-  - [ -z "$PY2NEO_VERSION" ] || pip install py2neo==$PY2NEO_VERSION
 
 script:
   - make test
