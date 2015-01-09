@@ -11,14 +11,12 @@ before_install:
   - sudo apt-get update -qq
   - sudo apt-get install neo4j=$NEO4J_VERSION --force-yes
 
-# use sudo to work around neo4j bug: https://github.com/neo4j/neo4j/issues/984
 install:
-  - sudo python setup.py -q install
-  - sudo pip install -r test_requirements.txt
-  - sudo [ -z "$PY2NEO_VERSION" ] || pip install py2neo==$PY2NEO_VERSION
+  - python setup.py -q install
+  - pip install -r test_requirements.txt
 
 script:
-  - sudo make test
+  - make test
 
 notifications:
   email: false
