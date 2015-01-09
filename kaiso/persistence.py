@@ -6,7 +6,6 @@ import uuid
 from py2neo import cypher, neo4j
 
 from kaiso.attributes import Outgoing, Incoming, String
-from kaiso.connection import get_connection
 from kaiso.exceptions import (
     UnknownType, CannotUpdateType, UnsupportedTypeError,
     TypeNotPersistedError, NoResultFound, NoUniqueAttributeError)
@@ -26,6 +25,10 @@ from kaiso.utils import dict_difference
 
 
 log = getLogger(__name__)
+
+
+def get_connection(uri):
+    return neo4j.GraphDatabaseService(uri)
 
 
 class TypeSystem(AttributedBase):

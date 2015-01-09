@@ -2,7 +2,7 @@ import json
 from textwrap import dedent
 
 from kaiso.exceptions import NoUniqueAttributeError
-from kaiso.relationships import InstanceOf, IsA, DeclaredOn, Defines
+from kaiso.relationships import IsA
 from kaiso.serialize import object_to_db_value, dict_to_db_values_dict
 from kaiso.types import (
     AttributedBase, Relationship, get_type_id, get_neo4j_relationship_name,
@@ -143,9 +143,6 @@ def get_create_types_query(cls, type_system_id, type_registry):
 
     query_args = {
         'type_system_id': type_system_id,
-        'Defines_props': type_registry.object_to_dict(Defines()),
-        'InstanceOf_props': type_registry.object_to_dict(InstanceOf()),
-        'DeclaredOn_props': type_registry.object_to_dict(DeclaredOn()),
     }
 
     # filter type relationships that we want to persist
@@ -163,16 +160,26 @@ def get_create_types_query(cls, type_system_id, type_registry):
         name1 = cls1.__name__
         type1 = type(cls1).__name__
 
-        if name1 in classes:
-            abstr1 = '(`%s`:%s)' % (name1, type1)
-        else:
-            abstr1 = '(`%s`:%s {%s_id_props})' % (name1, type1, name1)
+        node_for_create = (
+            '(`%(name)s`:%(type)s {'
+            '__type__: {%(name)s__type}, '
+            'id: {%(name)s__id}'
+            '})'
+        ) % {
+            'name': name1,
+            'type': type1,
+        }
+        create_statement = 'MERGE %s' % node_for_create
 
-        classes[name1] = cls1
+        node_for_ref = '(`%s`)' % name1
+
+        if name1 not in classes:
+            classes[name1] = cls1
+            hierarchy_lines.append(create_statement)
 
         if is_first:
             is_first = False
-            ln = 'ts -[:DEFINES {Defines_props}]-> %s' % abstr1
+            ln = 'MERGE (ts) -[:DEFINES]-> %s' % node_for_ref
         else:
             name2 = cls2.__name__
             classes[name2] = cls2
@@ -180,17 +187,16 @@ def get_create_types_query(cls, type_system_id, type_registry):
             rel_name = get_type_id(rel_cls)
             rel_type = rel_name.upper()
 
-            prop_name = "%s_props" % rel_name
+            prop_name = '%s_%d' % (rel_name, isa_props_counter)
+            isa_props_counter += 1
 
-            if rel_cls is IsA:
-                prop_name = '%s_%d' % (rel_name, isa_props_counter)
-                isa_props_counter += 1
+            props = type_registry.object_to_dict(IsA(base_index=base_idx))
+            query_args[prop_name] = props
 
-                props = type_registry.object_to_dict(IsA(base_index=base_idx))
-                query_args[prop_name] = props
-
-            ln = '%s -[%s:%s]-> `%s`' % (abstr1, prop_name, rel_type, name2)
+            ln = 'MERGE %s -[%s:%s]-> (`%s`)' % (
+                node_for_ref, prop_name, rel_type, name2)
             set_lines.append('SET `%s` = {%s}' % (prop_name, prop_name))
+
         hierarchy_lines.append(ln)
 
     # process attributes
@@ -199,17 +205,18 @@ def get_create_types_query(cls, type_system_id, type_registry):
         descriptor = type_registry.get_descriptor(cls)
         attributes = descriptor.declared_attributes
         for attr_name, attr in attributes.iteritems():
-            key = "%s_%s" % (name, attr_name)
-
-            ln = '({%s}) -[:DECLAREDON {DeclaredOn_props}]-> `%s`' % (
-                key, name)
-            hierarchy_lines.append(ln)
-
             attr_dict = type_registry.object_to_dict(
                 attr, for_db=True)
-
             attr_dict['name'] = attr_name
-            query_args[key] = attr_dict
+            node_contents = []
+            for entry, value in attr_dict.iteritems():
+                key = "%s_%s__%s" % (name, attr_name, entry)
+                node_contents.append('%s: {%s}' % (entry, key))
+                query_args[key] = value
+
+            ln = 'MERGE ({%s}) -[:DECLAREDON]-> (`%s`)' % (
+                ', '.join(node_contents), name)
+            hierarchy_lines.append(ln)
 
     # processing class attributes
     for key, cls in classes.iteritems():
@@ -220,17 +227,13 @@ def get_create_types_query(cls, type_system_id, type_registry):
 
         # attributes which uniquely identify the class itself
         # these are used in the CREATE UNIQUE part of the query
-        cls_id_props = {
-            '__type__': cls_props['__type__'],
-            'id': cls_props['id']
-        }
-        query_args['%s_id_props' % key] = cls_id_props
+        query_args['%s__id' % key] = cls_props['id']
+        query_args['%s__type' % key] = cls_props['__type__']
 
     quoted_names = ('`{}`'.format(cls) for cls in classes.keys())
     query = join_lines(
-        'MATCH (ts:TypeSystem) WHERE ts.id = {type_system_id}'
-        'CREATE UNIQUE',
-        (hierarchy_lines, ','),
+        'MATCH (ts:TypeSystem) WHERE ts.id = {type_system_id}',
+        (hierarchy_lines, ''),
         (set_lines, ''),
         'RETURN %s' % ', '.join(quoted_names)
     )

@@ -1,3 +1,10 @@
+Version 0.40.0
+--------------
+
+Create types with MERGE instead of CREATE UNIQUE (to work around neo4j bug)
+Drop support for the temp:// db
+
+
 Version 0.30.2
 ------------------
 
