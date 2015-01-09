@@ -1,3 +1,9 @@
+Version 0.30.3
+--------------
+
+Create types with MERGE instead of CREATE UNIQUE (to work around neo4j bug)
+
+
 Version 0.30.2
 ------------------
 
